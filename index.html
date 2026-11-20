@@ -62,6 +62,64 @@
       return result;
     }
 
+    function stableNoise(x, y, salt) {
+      const value = Math.sin((x + salt * 17.17) * 127.1 + (y - salt * 9.31) * 311.7) * 43758.5453123;
+      return value - Math.floor(value);
+    }
+
+    function createExpandedWorld(sourceLayers, worldTiles, mapOffset) {
+      const layers = sourceLayers.filter((layer) => layer.type === 'tilelayer');
+      if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
+      const sw = layers[0].width || 30;
+      const sh = layers[0].height || 30;
+      const ground = expandTileLayer(layers[0].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 114);
+      const structures = expandTileLayer(layers[1].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 0);
+      const upperObjects = expandTileLayer(layers[2].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 0);
+
+      // River and bridge tiles in the original 30x30 map are replaced by grass.
+      const waterIds = new Set([272, 274, 298, 326, 328, 354]);
+      const bridgeIds = new Set([85, 86, 88]);
+      const grassVariants = [1, 2, 3, 28, 29, 30, 55, 56, 57];
+      for (let y = 0; y < worldTiles; y += 1) {
+        for (let x = 0; x < worldTiles; x += 1) {
+          const inOriginal = x >= mapOffset && x < mapOffset + sw && y >= mapOffset && y < mapOffset + sh;
+          if (!inOriginal && stableNoise(x, y, 3) < 0.11) {
+            ground[y][x] = grassVariants[Math.floor(stableNoise(x, y, 7) * grassVariants.length)];
+          }
+          if (waterIds.has(ground[y][x]) || bridgeIds.has(ground[y][x])) ground[y][x] = 114;
+          if (bridgeIds.has(structures[y][x])) structures[y][x] = 0;
+          if (bridgeIds.has(upperObjects[y][x])) upperObjects[y][x] = 0;
+        }
+      }
+
+      // Spread recognizable tree tiles through the eight new surrounding sectors.
+      // The original center region remains unchanged apart from the removed river.
+      const treeIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165]);
+      const sourceTrees = [];
+      for (let y = 0; y < sh; y += 1) {
+        for (let x = 0; x < sw; x += 1) {
+          const tileId = layers[0].data[y * sw + x];
+          if (treeIds.has(tileId)) sourceTrees.push({ x, y, tileId });
+        }
+      }
+      for (let sectorY = 0; sectorY < 3; sectorY += 1) {
+        for (let sectorX = 0; sectorX < 3; sectorX += 1) {
+          if (sectorX === 1 && sectorY === 1) continue;
+          for (let i = 0; i < sourceTrees.length; i += 1) {
+            const tree = sourceTrees[i];
+            if (stableNoise(sectorX * 41 + tree.x, sectorY * 37 + tree.y, i + 11) > 0.16) continue;
+            const localX = sectorX % 2 ? sw - 1 - tree.x : tree.x;
+            const localY = sectorY % 2 ? sh - 1 - tree.y : tree.y;
+            const x = sectorX * sw + localX;
+            const y = sectorY * sh + localY;
+            if (x < 2 || y < 2 || x >= worldTiles - 2 || y >= worldTiles - 2) continue;
+            ground[y][x] = tree.tileId;
+          }
+        }
+      }
+      return { ground, structures, upperObjects };
+    }
+
     function toPhaserTileLayer(tiledGids) {
       return tiledGids.map((row) => row.map((gid) => (Number.isFinite(gid) && gid > 0 ? gid - 1 : -1)));
     }
@@ -70,86 +128,10 @@
       return blocked.map((row) => row.map((cell) => (cell ? 1 : -1)));
     }
 
-    function stableNoise(x, y, salt) {
-      const value = Math.sin((x + salt * 17.17) * 127.1 + (y - salt * 9.31) * 311.7) * 43758.5453123;
-      return value - Math.floor(value);
-    }
-
-    function createExpandedWorld(sourceLayers, worldTiles, mapOffset, playerStart) {
-      const tileLayers = sourceLayers.filter((layer) => layer.type === 'tilelayer');
-      if (tileLayers.length < 3) throw new Error('O mapa precisa ter três camadas de tiles.');
-      const sourceWidth = tileLayers[0].width || 30;
-      const sourceHeight = tileLayers[0].height || 30;
-      const grassTile = 114;
-      const ground = expandTileLayer(tileLayers[0].data, sourceWidth, sourceHeight, worldTiles, worldTiles, mapOffset, mapOffset, grassTile);
-      const structures = expandTileLayer(tileLayers[1].data, sourceWidth, sourceHeight, worldTiles, worldTiles, mapOffset, mapOffset, 0);
-      const upperObjects = expandTileLayer(tileLayers[2].data, sourceWidth, sourceHeight, worldTiles, worldTiles, mapOffset, mapOffset, 0);
-      const waterIds = new Set([272, 274, 298, 326, 328, 354]);
-      const bridgeIds = new Set([85, 86, 88]);
-      const treeIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165]);
-      const grassVariants = [1, 2, 3, 28, 29, 30, 55, 56, 57];
-      let removedWaterTiles = 0;
-      let removedBridgeTiles = 0;
-
-      // The original 30x30 area is placed in the middle of a 90x90 world.
-      // The surrounding land is grass with subtle tile variation, not a single image.
-      for (let y = 0; y < worldTiles; y += 1) {
-        for (let x = 0; x < worldTiles; x += 1) {
-          const inOriginalArea = x >= mapOffset && x < mapOffset + sourceWidth && y >= mapOffset && y < mapOffset + sourceHeight;
-          if (!inOriginalArea && stableNoise(x, y, 3) < 0.13) {
-            ground[y][x] = grassVariants[Math.floor(stableNoise(x, y, 7) * grassVariants.length)];
-          }
-          if (waterIds.has(ground[y][x])) {
-            ground[y][x] = grassTile;
-            removedWaterTiles += 1;
-          }
-          if (bridgeIds.has(ground[y][x])) {
-            ground[y][x] = grassTile;
-            removedBridgeTiles += 1;
-          }
-          if (bridgeIds.has(structures[y][x])) {
-            structures[y][x] = 0;
-            removedBridgeTiles += 1;
-          }
-          if (bridgeIds.has(upperObjects[y][x])) {
-            upperObjects[y][x] = 0;
-            removedBridgeTiles += 1;
-          }
-        }
-      }
-
-      // Extend the woodland around the original clearing using actual tree tiles
-      // from the source map. Each outer region gets a different sparse selection.
-      const treePlacements = [];
-      for (let sy = 0; sy < sourceHeight; sy += 1) {
-        for (let sx = 0; sx < sourceWidth; sx += 1) {
-          const tileId = tileLayers[0].data[sy * sourceWidth + sx];
-          if (treeIds.has(tileId)) treePlacements.push({ x: sx, y: sy, tileId });
-        }
-      }
-      for (let chunkY = 0; chunkY < 3; chunkY += 1) {
-        for (let chunkX = 0; chunkX < 3; chunkX += 1) {
-          if (chunkX === 1 && chunkY === 1) continue;
-          for (let i = 0; i < treePlacements.length; i += 1) {
-            const placement = treePlacements[i];
-            if (stableNoise(chunkX * 41 + placement.x, chunkY * 37 + placement.y, i + 11) > 0.22) continue;
-            const localX = chunkX % 2 ? sourceWidth - 1 - placement.x : placement.x;
-            const localY = chunkY % 2 ? sourceHeight - 1 - placement.y : placement.y;
-            const x = chunkX * sourceWidth + localX;
-            const y = chunkY * sourceHeight + localY;
-            // Keep a wide, clear route through the expanded land and around the start.
-            if (Math.abs(x - playerStart.x) <= 2 || Math.abs(y - playerStart.y) <= 2) continue;
-            if (x < 2 || y < 2 || x >= worldTiles - 2 || y >= worldTiles - 2) continue;
-            ground[y][x] = placement.tileId;
-          }
-        }
-      }
-
-      return { ground, structures, upperObjects, removedWaterTiles, removedBridgeTiles, treePlacements: treePlacements.length };
-    }
-
     function findPath(blocked, start, goal) {
       if (!Array.isArray(blocked) || !blocked.length || !blocked[0].length) return [];
+      const width = blocked[0].length;
+      const height = blocked.length;
       if (!inBounds(blocked, start.x, start.y) || !inBounds(blocked, goal.x, goal.y)) return [];
       if (blocked[start.y][start.x] || blocked[goal.y][goal.x]) return [];
       if (start.x === goal.x && start.y === goal.y) return [];
@@ -164,47 +146,19 @@
         const dy = Math.abs(goal.y - y);
         return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
       };
-      const less = (a, b) => a.f < b.f || (a.f === b.f && a.g > b.g);
-      const open = [];
-      const push = (node) => {
-        let index = open.length;
-        open.push(node);
-        while (index > 0) {
-          const parent = Math.floor((index - 1) / 2);
-          if (!less(open[index], open[parent])) break;
-          [open[index], open[parent]] = [open[parent], open[index]];
-          index = parent;
-        }
-      };
-      const pop = () => {
-        const first = open[0];
-        const last = open.pop();
-        if (open.length) {
-          open[0] = last;
-          let index = 0;
-          while (true) {
-            const left = index * 2 + 1;
-            const right = left + 1;
-            let best = index;
-            if (left < open.length && less(open[left], open[best])) best = left;
-            if (right < open.length && less(open[right], open[best])) best = right;
-            if (best === index) break;
-            [open[index], open[best]] = [open[best], open[index]];
-            index = best;
-          }
-        }
-        return first;
-      };
-
       const startKey = key(start.x, start.y);
       const goalKey = key(goal.x, goal.y);
-      push({ x: start.x, y: start.y, g: 0, f: heuristic(start.x, start.y) });
+      const open = [{ x: start.x, y: start.y, g: 0, f: heuristic(start.x, start.y) }];
       const gScore = new Map([[startKey, 0]]);
       const cameFrom = new Map();
       const closed = new Set();
 
       while (open.length) {
-        const current = pop();
+        let bestIndex = 0;
+        for (let i = 1; i < open.length; i += 1) {
+          if (open[i].f < open[bestIndex].f) bestIndex = i;
+        }
+        const current = open.splice(bestIndex, 1)[0];
         const currentKey = key(current.x, current.y);
         if (closed.has(currentKey)) continue;
         if (currentKey === goalKey) {
@@ -225,6 +179,7 @@
           const nx = current.x + dx;
           const ny = current.y + dy;
           if (!inBounds(blocked, nx, ny) || blocked[ny][nx]) continue;
+          // Prevent diagonal movement from squeezing through two touching blockers.
           if (dx && dy && (blocked[current.y][nx] || blocked[ny][current.x])) continue;
           const nextKey = key(nx, ny);
           if (closed.has(nextKey)) continue;
@@ -232,7 +187,7 @@
           if (tentative >= (gScore.has(nextKey) ? gScore.get(nextKey) : Infinity)) continue;
           cameFrom.set(nextKey, currentKey);
           gScore.set(nextKey, tentative);
-          push({ x: nx, y: ny, g: tentative, f: tentative + heuristic(nx, ny) });
+          open.push({ x: nx, y: ny, g: tentative, f: tentative + heuristic(nx, ny) });
         }
       }
       return [];
@@ -264,6 +219,15 @@
       errorPanel.style.display = 'grid';
       if (message) errorDetail.textContent = message;
     }
+
+    window.addEventListener('error', (event) => {
+      console.error('Erro global do CONQUISTADOR:', event.error || event.message);
+      if (loading.style.display !== 'none') showError(event.message || 'Erro inesperado no navegador.');
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Falha assíncrona do CONQUISTADOR:', event.reason);
+      if (loading.style.display !== 'none') showError('Falha ao iniciar o jogo. Recarregue a página e tente novamente.');
+    });
 
     if (!window.Phaser || !core) {
       showError('O motor do jogo não foi carregado. Confira sua conexão e atualize a página.');
@@ -300,19 +264,23 @@
           return;
         }
 
-        this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
-        this.buildWorld(sample.layers);
-        this.createPlayerAnimations();
-        this.createPlayer();
-        this.setupCamera();
-        this.input.mouse.disableContextMenu();
-        this.input.on('pointerdown', this.onMapTap, this);
-        loading.style.display = 'none';
+        try {
+          this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+          this.buildWorld(sample.layers);
+          this.createPlayerAnimations();
+          this.createPlayer();
+          this.setupCamera();
+          this.input.mouse.disableContextMenu();
+          this.input.on('pointerdown', this.onMapTap, this);
+          loading.style.display = 'none';
+        } catch (error) {
+          console.error('Falha ao montar o mundo do CONQUISTADOR:', error);
+          showError(error && error.message ? `Erro ao montar o mundo: ${error.message}` : 'Erro inesperado ao montar o mundo.');
+        }
       }
 
       buildWorld(sourceLayers) {
-        const sourceLayersFlat = sourceLayers.filter((layer) => layer.type === 'tilelayer');
-        const expanded = core.createExpandedWorld(sourceLayersFlat, WORLD_TILES, MAP_OFFSET, PLAYER_START);
+        const expanded = core.createExpandedWorld(sourceLayers, WORLD_TILES, MAP_OFFSET);
         const ground = expanded.ground;
         const structures = expanded.structures;
         const upperObjects = expanded.upperObjects;
@@ -320,14 +288,13 @@
 
         const treeTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165]);
         const treeTrunkIds = new Set([163, 164, 165]);
-        // Only sizeable building/object tiles block movement. Small decor stays walkable.
+        // Only solid buildings/large structures block the walking grid.
         const solidStructureTileIds = new Set([
           703, 705, 706, 707, 731, 732, 733,
           785, 798, 812, 849, 896, 897, 898, 899,
           904, 905, 923, 924, 926, 931, 932,
           952, 953, 954, 1004, 1006, 1007, 1008, 1009
         ]);
-        const bridgeTileIds = new Set([85, 86, 88]);
         const texture = this.textures.get('tiles');
         const addTileFrame = (tileId) => {
           const frameName = `tile-${tileId}`;
@@ -338,12 +305,11 @@
           return frameName;
         };
 
-        // Tree segments are removed from the ground grid and drawn separately so
-        // their upper parts can occlude the player correctly.
+        // Trees are drawn as separate pieces for correct depth and trunk collision.
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = ground[y][x];
-            if (!tileId || !treeTileIds.has(tileId)) continue;
+            if (!treeTileIds.has(tileId)) continue;
             this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
               .setDepth(y * TILE_SIZE + TILE_SIZE);
             ground[y][x] = 0;
@@ -352,40 +318,25 @@
         }
         this.createTileLayer(ground, 2);
 
-        // Remove the wooden bridge overlays with the river. Other small objects
-        // remain visible, while only the established building/object set blocks movement.
+        // Keep the buildings visible, but decorative pieces do not become walls.
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = structures[y][x];
             if (!tileId) continue;
-            if (bridgeTileIds.has(tileId)) {
-              structures[y][x] = 0;
-              continue;
-            }
             this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
               .setDepth(y * TILE_SIZE + TILE_SIZE);
             if (solidStructureTileIds.has(tileId)) this.blocked[y][x] = true;
-            structures[y][x] = 0;
           }
         }
-
-        // Upper-layer decoration is drawn above the player when appropriate,
-        // but it is not a collision surface (its footprint is handled below).
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = upperObjects[y][x];
             if (!tileId) continue;
             this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
               .setDepth(y * TILE_SIZE + TILE_SIZE);
-            upperObjects[y][x] = 0;
           }
         }
 
-        // The river and bridge were removed from the tile data before rendering,
-        // so there are no water barriers left in this region.
-
-        // Invisible tile layer is the physical collision boundary; pathfinding uses
-        // the same grid so invalid destinations are rejected before the body moves.
         const collisionData = core.toCollisionLayer(this.blocked);
         const collisionMap = this.make.tilemap({ data: collisionData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
         const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
@@ -394,7 +345,6 @@
         collisionLayer.setDepth(10000);
         collisionMap.setCollision(1, true, true, collisionLayer, true);
         this.collisionLayer = collisionLayer;
-        this.collisionMap = collisionMap;
       }
 
       createTileLayer(data, depth) {
