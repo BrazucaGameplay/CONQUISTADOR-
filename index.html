@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V16 Ataque Automático</title>
+  <title>CONQUISTADOR — V18 Respawn por Chunk</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -516,8 +516,19 @@
         this.monsters = new Map();
         this.drops = new Map();
         this.now = 0;
-        this.spawnedProofSlime = false;
-        this.nextSpawnRetryAt = 0;
+        this.chunkGrid = Object.freeze({
+          chunkSize: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.chunkSize || 30)),
+          columns: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.columns || 1)),
+          rows: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.rows || 1)),
+          width: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.width || 30)),
+          height: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.height || 30))
+        });
+        this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 5));
+        this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 30000));
+        this.spawnRetryDelayMs = 5000;
+        this.nextMonsterSequence = 1;
+        this.chunkRespawns = new Map();
+        this.chunkPopulation = new Map();
         this.lastPlayerAttackAt = -Infinity;
         this.playerAttackCooldownMs = Number.isFinite(options.playerAttackCooldownMs)
           ? Math.max(0, options.playerAttackCooldownMs) : 420;
@@ -547,7 +558,7 @@
         this.boundDestroy = () => this.destroy();
         this.scene.events.on('update', this.boundUpdate);
         this.scene.events.once('shutdown', this.boundDestroy);
-        this.spawnProofSlime();
+        this.populateAllChunks();
         this.refreshUI();
       }
 
@@ -629,44 +640,114 @@
         this.autoAttackBadge = autoAttackBadge;
       }
 
-      findSpawnTile() {
-        const playerTile = this.world.getPlayerBodyTile();
-        if (!playerTile || !this.world.isWalkable(playerTile.x, playerTile.y, 'player')) return null;
-        // Search outward in deterministic rings. The A* query uses the same
-        // centre-tile navigation snapshot used by the world, not a new grid.
-        for (let radius = 4; radius <= 10; radius += 1) {
-          for (let dy = -radius; dy <= radius; dy += 1) {
-            for (let dx = -radius; dx <= radius; dx += 1) {
-              if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-              const candidate = { x: playerTile.x + dx, y: playerTile.y + dy };
-              if (!this.world.isWalkable(candidate.x, candidate.y, 'player')) continue;
-              const route = this.world.findPath(playerTile, candidate, { profile: 'player' });
-              if (route && route.length >= 3 && route.length <= 18) return candidate;
-            }
-          }
-        }
-        return null;
+      getChunkId(chunkX, chunkY) {
+        return `${chunkX}:${chunkY}`;
       }
 
-      spawnProofSlime() {
-        if (this.monsters.size || this.spawnedProofSlime) return false;
+      getChunkForTile(tile) {
+        if (!tile || !Number.isInteger(tile.x) || !Number.isInteger(tile.y) ||
+            tile.x < 0 || tile.y < 0 ||
+            tile.x >= this.chunkGrid.width || tile.y >= this.chunkGrid.height) return null;
+        const chunkX = Math.floor(tile.x / this.chunkGrid.chunkSize);
+        const chunkY = Math.floor(tile.y / this.chunkGrid.chunkSize);
+        if (chunkX >= this.chunkGrid.columns || chunkY >= this.chunkGrid.rows) return null;
+        return {
+          chunkX,
+          chunkY,
+          id: this.getChunkId(chunkX, chunkY)
+        };
+      }
+
+      getChunkPopulationState(chunkId) {
+        let state = this.chunkPopulation.get(chunkId);
+        if (!state) {
+          state = {
+            initialSpawnAttempted: false,
+            initialFillPending: false,
+            initialRetryAt: 0,
+            totalSpawned: 0
+          };
+          this.chunkPopulation.set(chunkId, state);
+        }
+        return state;
+      }
+
+      getAliveCountForChunk(chunkId) {
+        let count = 0;
+        for (const record of this.monsters.values()) {
+          if (record.alive && record.originChunkId === chunkId) count += 1;
+        }
+        return count;
+      }
+
+      getSpawnCandidates(chunkX, chunkY) {
+        const startX = chunkX * this.chunkGrid.chunkSize;
+        const startY = chunkY * this.chunkGrid.chunkSize;
+        const endX = Math.min(startX + this.chunkGrid.chunkSize, this.chunkGrid.width);
+        const endY = Math.min(startY + this.chunkGrid.chunkSize, this.chunkGrid.height);
+        const playerTile = this.world.getPlayerBodyTile();
+        const candidates = [];
+
+        // Keep a one-tile margin inside chunk/world borders; the player-footprint
+        // walkability API remains authoritative for every candidate.
+        for (let y = startY + 1; y < endY - 1; y += 1) {
+          for (let x = startX + 1; x < endX - 1; x += 1) {
+            if (!this.world.isWalkable(x, y, 'player')) continue;
+            if (playerTile && Math.max(Math.abs(playerTile.x - x), Math.abs(playerTile.y - y)) < 4) continue;
+
+            // Avoid overlapping newly spawned groups and existing monsters,
+            // including monsters that have wandered in from another chunk.
+            const tooClose = Array.from(this.monsters.values()).some(record =>
+              record.alive && Math.max(
+                Math.abs(record.tile.x - x),
+                Math.abs(record.tile.y - y)
+              ) < 3
+            );
+            if (!tooClose) candidates.push({ x, y });
+          }
+        }
+
+        // Deterministic per-chunk shuffle: repeatable placement without
+        // Math.random(), making bugs and spawn patterns reproducible.
+        let seed = (((chunkX + 1) * 73856093) ^ ((chunkY + 1) * 19349663) ^ 0x5f3759df) >>> 0;
+        const random = () => {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          return seed / 4294967296;
+        };
+        for (let i = candidates.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(random() * (i + 1));
+          [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        return candidates;
+      }
+
+      spawnOneSlimeForChunk(chunkX, chunkY) {
+        const chunkId = this.getChunkId(chunkX, chunkY);
+        if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
+
         const definition = this.data.MONSTERS.slime;
         if (!definition) throw new Error('GameData.MONSTERS.slime não foi definido.');
-        const tile = this.findSpawnTile();
-        if (!tile) {
-          this.nextSpawnRetryAt = this.now + 2000;
-          this.setMessage('Aguardando uma posição segura para o slime.', 3000);
-          return false;
-        }
-        const id = 'monster-slime-proof-001';
+
+        const candidates = this.getSpawnCandidates(chunkX, chunkY);
+        const tile = candidates[0];
+        if (!tile) return false;
+
+        const sequence = this.nextMonsterSequence++;
+        const id = `monster-slime-${chunkX}-${chunkY}-${String(sequence).padStart(4, '0')}`;
         const x = (tile.x + 0.5) * this.tileSize;
         const y = (tile.y + 0.5) * this.tileSize;
+
         this.entities.create({
           id,
           kind: 'monster',
           tile,
           statusId: id,
-          data: { monsterId: 'slime', proof: true }
+          data: {
+            monsterId: 'slime',
+            originChunkId: chunkId,
+            originChunkX: chunkX,
+            originChunkY: chunkY
+          }
         });
         this.status.register(id, {
           hp: definition.hp,
@@ -677,20 +758,148 @@
           defense: 0,
           speed: definition.speed
         });
-        // Monsters are visual entities moved along the protected body-safe A*
-        // grid. They do not register new Arcade colliders or mutate chunk data.
+
         const sprite = this.scene.add.image(x, y, this.slimeTextureKey);
         sprite.setDisplaySize(27, 23);
         sprite.setDepth(y + 10);
         const record = {
-          id, definition, tile: { x: tile.x, y: tile.y }, sprite,
-          path: [], targetKey: null, nextPathAt: 0, nextAttackAt: 0,
-          alive: true, lastEntityTileKey: `${tile.x},${tile.y}`
+          id,
+          definition,
+          tile: { x: tile.x, y: tile.y },
+          sprite,
+          path: [],
+          targetKey: null,
+          nextPathAt: 0,
+          nextAttackAt: 0,
+          alive: true,
+          lastEntityTileKey: `${tile.x},${tile.y}`,
+          // Immutable ownership: never recompute this from the monster's
+          // current tile, even after it crosses a chunk boundary.
+          originChunkId: chunkId,
+          originChunkX: chunkX,
+          originChunkY: chunkY
         };
         this.monsters.set(id, record);
-        this.spawnedProofSlime = true;
-        this.events.emit('monster:spawned', { entityId: id, monsterId: 'slime', tile });
+        const population = this.getChunkPopulationState(chunkId);
+        population.totalSpawned += 1;
+        this.events.emit('monster:spawned', {
+          entityId: id,
+          monsterId: 'slime',
+          tile,
+          originChunkId: chunkId,
+          originChunkX: chunkX,
+          originChunkY: chunkY
+        });
         return true;
+      }
+
+      populateAllChunks() {
+        for (let chunkY = 0; chunkY < this.chunkGrid.rows; chunkY += 1) {
+          for (let chunkX = 0; chunkX < this.chunkGrid.columns; chunkX += 1) {
+            const chunkId = this.getChunkId(chunkX, chunkY);
+            const population = this.getChunkPopulationState(chunkId);
+            if (population.initialSpawnAttempted) continue;
+            population.initialSpawnAttempted = true;
+            for (let count = 0; count < this.maxMonstersPerChunk; count += 1) {
+              if (!this.spawnOneSlimeForChunk(chunkX, chunkY)) break;
+            }
+            if (this.getAliveCountForChunk(chunkId) < this.maxMonstersPerChunk) {
+              population.initialFillPending = true;
+              population.initialRetryAt = this.now + this.spawnRetryDelayMs;
+            }
+          }
+        }
+      }
+
+      updateInitialChunkFill() {
+        for (const [chunkId, population] of this.chunkPopulation.entries()) {
+          if (!population.initialFillPending || this.now < population.initialRetryAt) continue;
+          const [chunkX, chunkY] = chunkId.split(':').map(Number);
+          const queue = this.chunkRespawns.get(chunkId);
+          const queuedRespawns = queue ? queue.pending : 0;
+          let availableSlots = this.maxMonstersPerChunk -
+            this.getAliveCountForChunk(chunkId) - queuedRespawns;
+
+          while (availableSlots > 0) {
+            if (!this.spawnOneSlimeForChunk(chunkX, chunkY)) break;
+            availableSlots -= 1;
+          }
+
+          const remainingSlots = this.maxMonstersPerChunk -
+            this.getAliveCountForChunk(chunkId) - queuedRespawns;
+          if (remainingSlots <= 0) {
+            population.initialFillPending = false;
+          } else {
+            // Retry only underfilled chunks; a queued death-respawn always
+            // reserves its slot and cannot be bypassed by initial population.
+            population.initialRetryAt = this.now + this.spawnRetryDelayMs;
+          }
+        }
+      }
+
+      scheduleChunkRespawn(record) {
+        if (!record || !record.originChunkId) return false;
+        const chunkId = record.originChunkId;
+        const currentAlive = this.getAliveCountForChunk(chunkId);
+        if (currentAlive >= this.maxMonstersPerChunk) return false;
+
+        let queue = this.chunkRespawns.get(chunkId);
+        if (!queue) {
+          queue = {
+            chunkX: record.originChunkX,
+            chunkY: record.originChunkY,
+            pending: 0,
+            nextAt: this.now + this.respawnDelayMs
+          };
+          this.chunkRespawns.set(chunkId, queue);
+        }
+        queue.pending = Math.min(
+          this.maxMonstersPerChunk - currentAlive,
+          queue.pending + 1
+        );
+        // The first death starts the 30-second clock. Further deaths in this
+        // chunk join the queue and do not reset or accelerate that timer.
+        this.events.emit('monster:respawn-queued', {
+          originChunkId: chunkId,
+          pending: queue.pending,
+          respawnAt: queue.nextAt
+        });
+        return true;
+      }
+
+      updateChunkRespawns() {
+        for (const [chunkId, queue] of Array.from(this.chunkRespawns.entries())) {
+          if (!queue || queue.pending <= 0) {
+            this.chunkRespawns.delete(chunkId);
+            continue;
+          }
+          if (this.now < queue.nextAt) continue;
+
+          if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) {
+            queue.pending = 0;
+            this.chunkRespawns.delete(chunkId);
+            continue;
+          }
+
+          const spawned = this.spawnOneSlimeForChunk(queue.chunkX, queue.chunkY);
+          if (!spawned) {
+            // Do not lose a queued respawn if a chunk temporarily has no
+            // safe candidate (e.g. blocked by terrain or nearby entities).
+            queue.nextAt = this.now + this.spawnRetryDelayMs;
+            continue;
+          }
+
+          queue.pending -= 1;
+          if (queue.pending <= 0) {
+            this.chunkRespawns.delete(chunkId);
+          } else {
+            queue.nextAt = this.now + this.respawnDelayMs;
+          }
+          this.events.emit('monster:respawned', {
+            originChunkId: chunkId,
+            pending: queue.pending
+          });
+        }
       }
 
       getPlayerPoint() {
@@ -759,6 +968,7 @@
         if (!record || !record.alive) return false;
         record.alive = false;
         const tile = { x: record.tile.x, y: record.tile.y };
+        this.scheduleChunkRespawn(record);
         // LevelSystem is the only entity:die subscriber that awards XP.
         this.events.emit('entity:die', {
           entityId: record.id,
@@ -843,15 +1053,16 @@
         const maxHp = this.status.getStat('player', 'maxHp') ?? 0;
         const level = this.api.levels.snapshot('player');
         this.playerLine.textContent = `HP ${Math.ceil(hp)}/${Math.ceil(maxHp)}  •  Nv ${level.level}  •  XP ${level.xp}/${level.xpToNext}`;
-        const monster = this.getLivingMonster();
-        if (monster) {
-          const monsterHp = this.status.getStat(monster.id, 'hp') ?? 0;
-          this.monsterLine.textContent = `SLIME  ${Math.ceil(monsterHp)}/${monster.definition.hp} HP`;
+        const livingMonsters = Array.from(this.monsters.values()).filter(record => record.alive);
+        if (livingMonsters.length) {
+          const target = livingMonsters[0];
+          const targetHp = this.status.getStat(target.id, 'hp') ?? 0;
+          this.monsterLine.textContent = `SLIMES ${livingMonsters.length}  •  ALVO ${Math.ceil(targetHp)}/${target.definition.hp} HP`;
         } else {
           const pendingDrop = Array.from(this.drops.values()).some(drop => drop.pendingCommit);
           this.monsterLine.textContent = pendingDrop
-            ? 'SLIME derrotado  •  salvando drop…'
-            : 'SLIME derrotado  •  drop processado';
+            ? 'SEM SLIMES  •  salvando drops…'
+            : 'SEM SLIMES  •  aguardando respawn';
         }
         this.messageLine.textContent = this.now <= this.messageUntil ? this.message : '';
       }
@@ -929,7 +1140,8 @@
       update(time, delta) {
         if (!this.active) return;
         this.now = Number.isFinite(time) ? time : this.now + (Number(delta) || 0);
-        if (!this.spawnedProofSlime && this.now >= this.nextSpawnRetryAt) this.spawnProofSlime();
+        this.updateInitialChunkFill();
+        this.updateChunkRespawns();
         const playerPoint = this.getPlayerPoint();
         if (playerPoint) {
           for (const record of Array.from(this.monsters.values())) {
@@ -2704,7 +2916,16 @@
           // MonsterSystem owns only its entity, visuals, combat loop and drops.
           this.monsterSystem = new systems.MonsterSystem(this.extensionAPI, {
             scene: this,
-            tileSize: TILE_SIZE
+            tileSize: TILE_SIZE,
+            chunkGrid: {
+              chunkSize: this.chunkGrid.chunkSize,
+              columns: this.chunkGrid.columns,
+              rows: this.chunkGrid.rows,
+              width: this.chunkGrid.width,
+              height: this.chunkGrid.height
+            },
+            maxMonstersPerChunk: 5,
+            respawnDelayMs: 30000
           });
           this.inventorySystem = new window.CONQUISTADOR_V15_SYSTEMS.InventorySystem(this.extensionAPI, {
             document: window.document
@@ -4024,6 +4245,18 @@
           const scene = game.scene && game.scene.getScene ? game.scene.getScene('WorldScene') : null;
           return scene && scene.monsterSystem ? scene.monsterSystem : null;
         }
+      });
+      window.CONQUISTADOR_V17 = Object.freeze({
+        version: 17,
+        game,
+        maxSlimes: 4
+      });
+      window.CONQUISTADOR_V18 = Object.freeze({
+        version: 18,
+        game,
+        maxMonstersPerChunk: 5,
+        respawnDelayMs: 30000,
+        chunkGrid: { width: 90, height: 120, chunkSize: 30, columns: 3, rows: 4 }
       });
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
