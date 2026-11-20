@@ -760,7 +760,16 @@
     const PLAYER_START = { x: 45, y: 65 };
     // A posição é salva no armazenamento local deste navegador/aparelho.
     const PLAYER_POSITION_STORAGE_KEY = 'conquistador.player-position.v1';
+    const PLAYER_POSITION_BACKUP_KEY = 'conquistador.player-position.backup.v1';
     const PLAYER_POSITION_WORLD_ID = 'overworld-90x120-v1';
+    const PLAYER_FRAME_SIZE = 32;
+    const PLAYER_BODY_WIDTH = 13;
+    const PLAYER_BODY_HEIGHT = 9;
+    const PLAYER_BODY_OFFSET_X = 9.5;
+    const PLAYER_BODY_OFFSET_Y = 22;
+    const PLAYER_ORIGIN_X = 0.5;
+    const PLAYER_ORIGIN_Y = 0.86;
+    const PLAYER_BODY_CENTER_OFFSET_Y = PLAYER_BODY_OFFSET_Y + PLAYER_BODY_HEIGHT / 2 - PLAYER_FRAME_SIZE * PLAYER_ORIGIN_Y;
     const TILESET_URL = 'https://cdn.jsdelivr.net/gh/TheBogdichHD/procedural-generation-godot@0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png';
     const PLAYER_URL = 'https://cdn.jsdelivr.net/gh/ASH-CHA/Capstonr_Project_2D_RPG@d682c4c8cc051fd0d7c50c3049d5db8469f5354e/assets/npcs/Warrior-Red.png';
     const SAMPLE_MAP_URL = 'https://raw.githubusercontent.com/series-ai/jam-ready-assets/196b654e3baacbd29d2b1c7903692000ce52113b/shade-puny-world/2D/top-down-rpg/Tiled/samplemap2.tmj';
@@ -884,16 +893,29 @@
           }
         }
 
-        // Load the spawn's 3x3 neighbourhood (clipped by rectangular world boundaries).
+        // Resolve and validate the saved position before the first chunk stream.
+        // This prevents loading the spawn area and immediately replacing it with
+        // the saved area's chunks on every game start.
+        const savedPosition = this.getSavedPlayerPosition();
+        this.initialPlayerPosition = savedPosition || this.getSafeSpawnPosition();
+        if (this.preserveInvalidSave) {
+          this.invalidSaveFallbackPosition = { x: this.initialPlayerPosition.x, y: this.initialPlayerPosition.y };
+        }
+
+        // Load the neighbourhood around the actual initial position.
         this.updateChunkStreaming(true);
       }
 
       releaseChunkData(chunk) {
-        if (!chunk || chunk.state === 'loaded') return;
+        if (!chunk) return false;
+        if (chunk.state === 'loaded') {
+          throw new Error(`O chunk ${chunk.id} precisa ser descarregado antes de liberar seus dados visuais.`);
+        }
         chunk.ground = null;
         chunk.structures = null;
         chunk.upperObjects = null;
-        if (chunk.state !== 'loaded') chunk.state = 'unloaded';
+        chunk.state = 'unloaded';
+        return true;
       }
 
       rebuildMissingChunkData(chunks) {
@@ -1071,7 +1093,9 @@
       updateChunkStreaming(force = false) {
         const playerTile = this.player
           ? core.worldToTile(this.player.x, this.player.y, TILE_SIZE)
-          : PLAYER_START;
+          : (this.initialPlayerPosition
+              ? core.worldToTile(this.initialPlayerPosition.x, this.initialPlayerPosition.y, TILE_SIZE)
+              : PLAYER_START);
         const center = core.getChunkAtTile(
           playerTile.x,
           playerTile.y,
@@ -1110,51 +1134,194 @@
         return { map, layer };
       }
 
-      getSavedPlayerTile() {
+      getPlayerBodyBoundsAt(spriteX, spriteY) {
+        const displayOriginX = PLAYER_FRAME_SIZE * PLAYER_ORIGIN_X;
+        const displayOriginY = PLAYER_FRAME_SIZE * PLAYER_ORIGIN_Y;
+        const left = spriteX - displayOriginX + PLAYER_BODY_OFFSET_X;
+        const top = spriteY - displayOriginY + PLAYER_BODY_OFFSET_Y;
+        return {
+          left,
+          top,
+          right: left + PLAYER_BODY_WIDTH,
+          bottom: top + PLAYER_BODY_HEIGHT,
+          centerX: left + PLAYER_BODY_WIDTH / 2,
+          centerY: top + PLAYER_BODY_HEIGHT / 2
+        };
+      }
+
+      isPlayerBodyPositionWalkable(spriteX, spriteY) {
+        if (!Number.isFinite(spriteX) || !Number.isFinite(spriteY) ||
+            spriteX < 0 || spriteY < 0 || spriteX >= WORLD_WIDTH_PIXELS || spriteY >= WORLD_HEIGHT_PIXELS) return false;
+        if (!this.blocked) return false;
+        const bounds = this.getPlayerBodyBoundsAt(spriteX, spriteY);
+        const epsilon = 0.01;
+        const minX = Math.floor((bounds.left + epsilon) / TILE_SIZE);
+        const maxX = Math.floor((bounds.right - epsilon) / TILE_SIZE);
+        const minY = Math.floor((bounds.top + epsilon) / TILE_SIZE);
+        const maxY = Math.floor((bounds.bottom - epsilon) / TILE_SIZE);
+        for (let tileY = minY; tileY <= maxY; tileY += 1) {
+          for (let tileX = minX; tileX <= maxX; tileX += 1) {
+            if (tileX < 0 || tileY < 0 || tileX >= WORLD_WIDTH_TILES || tileY >= WORLD_HEIGHT_TILES ||
+                !this.blocked[tileY] || this.blocked[tileY][tileX]) return false;
+          }
+        }
+        return true;
+      }
+
+      getPlayerBodyTile() {
+        if (!this.player || !this.player.body) return null;
+        const body = this.player.body;
+        const centerX = body.x + body.width / 2;
+        const centerY = body.y + body.height / 2;
+        return core.worldToTile(centerX, centerY, TILE_SIZE);
+      }
+
+      getSafeSpawnPosition() {
+        const start = PLAYER_START;
+        const candidates = [];
+        const maxRadius = Math.max(WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES);
+        for (let radius = 0; radius <= maxRadius; radius += 1) {
+          for (let y = Math.max(0, start.y - radius); y <= Math.min(WORLD_HEIGHT_TILES - 1, start.y + radius); y += 1) {
+            for (let x = Math.max(0, start.x - radius); x <= Math.min(WORLD_WIDTH_TILES - 1, start.x + radius); x += 1) {
+              if (Math.max(Math.abs(x - start.x), Math.abs(y - start.y)) !== radius) continue;
+              candidates.push({ x, y });
+            }
+          }
+          for (const tile of candidates) {
+            const spriteX = (tile.x + 0.5) * TILE_SIZE;
+            const spriteY = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+            if (this.isPlayerBodyPositionWalkable(spriteX, spriteY)) return { x: spriteX, y: spriteY };
+          }
+          candidates.length = 0;
+        }
+        throw new Error('Não foi encontrado um ponto seguro para iniciar o jogador.');
+      }
+
+      getSavedPlayerPosition() {
+        this.preserveInvalidSave = false;
+        this.invalidSavedPlayerRaw = null;
         try {
           const raw = window.localStorage.getItem(PLAYER_POSITION_STORAGE_KEY);
           if (!raw) return null;
+          this.preserveInvalidSave = true;
+          this.invalidSavedPlayerRaw = raw;
           const saved = JSON.parse(raw);
-          if (!saved || saved.version !== 1 || saved.world !== PLAYER_POSITION_WORLD_ID) return null;
+          if (!saved || ![1, 2].includes(saved.version) || saved.world !== PLAYER_POSITION_WORLD_ID) {
+            this.backupInvalidPlayerSave(raw);
+            return null;
+          }
 
-          const x = Number(saved.x);
-          const y = Number(saved.y);
-          if (!Number.isInteger(x) || !Number.isInteger(y) ||
-              x < 0 || y < 0 || x >= WORLD_WIDTH_TILES || y >= WORLD_HEIGHT_TILES) return null;
-          if (!this.blocked || !this.blocked[y] || this.blocked[y][x]) return null;
-          return { x, y };
+          let x;
+          let y;
+          if (saved.version === 1) {
+            if (!Number.isInteger(saved.x) || !Number.isInteger(saved.y)) {
+              this.backupInvalidPlayerSave(raw);
+              return null;
+            }
+            x = (saved.x + 0.5) * TILE_SIZE;
+            y = (saved.y + 0.5) * TILE_SIZE;
+          } else {
+            x = Number(saved.x);
+            y = Number(saved.y);
+          }
+
+          if (this.isPlayerBodyPositionWalkable(x, y)) {
+            this.preserveInvalidSave = false;
+            return { x, y };
+          }
+
+          // Recover a near-edge save by moving the body to the centre of its saved tile.
+          if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 &&
+              x < WORLD_WIDTH_PIXELS && y < WORLD_HEIGHT_PIXELS) {
+            const body = this.getPlayerBodyBoundsAt(x, y);
+            const tile = core.worldToTile(body.centerX, body.centerY, TILE_SIZE);
+            if (tile.x >= 0 && tile.y >= 0 && tile.x < WORLD_WIDTH_TILES && tile.y < WORLD_HEIGHT_TILES) {
+              const centredX = (tile.x + 0.5) * TILE_SIZE;
+              const centredY = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+              if (this.isPlayerBodyPositionWalkable(centredX, centredY)) {
+                this.preserveInvalidSave = false;
+                return { x: centredX, y: centredY };
+              }
+            }
+          }
+
+          this.backupInvalidPlayerSave(raw);
+          return null;
         } catch (error) {
-          // O jogo continua normalmente mesmo se o navegador bloquear o armazenamento.
-          console.warn('Não foi possível ler a posição salva:', error);
+          // Preserve malformed/unreadable data; never replace it with the default spawn.
+          this.preserveInvalidSave = true;
+          console.warn('Não foi possível validar a posição salva; o registro original será preservado:', error);
+          if (this.invalidSavedPlayerRaw) this.backupInvalidPlayerSave(this.invalidSavedPlayerRaw);
           return null;
         }
       }
 
+      backupInvalidPlayerSave(raw) {
+        if (!raw) return;
+        try {
+          if (!window.localStorage.getItem(PLAYER_POSITION_BACKUP_KEY)) {
+            window.localStorage.setItem(PLAYER_POSITION_BACKUP_KEY, raw);
+          }
+        } catch (error) {
+          console.warn('Não foi possível criar uma cópia de segurança da posição inválida:', error);
+        }
+      }
+
       savePlayerPosition(force = false) {
-        if (!this.player || !this.blocked) return;
-        const tile = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
-        if (tile.x < 0 || tile.y < 0 || tile.x >= WORLD_WIDTH_TILES ||
-            tile.y >= WORLD_HEIGHT_TILES || !this.blocked[tile.y] || this.blocked[tile.y][tile.x]) return;
+        if (!this.player || !this.blocked) return false;
+        // Do not overwrite an invalid old save while the player is merely at fallback spawn.
+        if (this.preserveInvalidSave) return false;
+        const x = this.player.x;
+        const y = this.player.y;
+        if (!this.isPlayerBodyPositionWalkable(x, y)) return false;
 
+        const tile = this.getPlayerBodyTile();
+        if (!tile) return false;
         const tileKey = `${tile.x},${tile.y}`;
-        const now = Date.now();
-        if (!force && tileKey === this.lastSavedPlayerTileKey) return;
-        // Limita gravações durante a caminhada, mas salva imediatamente ao parar/fechar.
-        if (!force && now - (this.lastPlayerSaveAt || 0) < 500) return;
+        if (!force && tileKey === this.lastSavedPlayerTileKey) return true;
 
+        const now = Date.now();
         const data = {
-          version: 1,
+          version: 2,
           world: PLAYER_POSITION_WORLD_ID,
-          x: tile.x,
-          y: tile.y,
+          x,
+          y,
           savedAt: now
         };
         try {
           window.localStorage.setItem(PLAYER_POSITION_STORAGE_KEY, JSON.stringify(data));
           this.lastSavedPlayerTileKey = tileKey;
           this.lastPlayerSaveAt = now;
+          this.positionSaveAvailable = true;
+          return true;
         } catch (error) {
-          console.warn('Não foi possível salvar a posição do jogador:', error);
+          this.positionSaveAvailable = false;
+          if (!this.positionSaveWarningShown) {
+            console.warn('Não foi possível salvar a posição do jogador. O armazenamento local pode estar bloqueado:', error);
+            this.positionSaveWarningShown = true;
+          }
+          return false;
+        }
+      }
+
+      savePlayerPositionWhenTileChanges() {
+        if (!this.player) return;
+        const tile = this.getPlayerBodyTile();
+        if (!tile) return;
+        const tileKey = `${tile.x},${tile.y}`;
+        if (tileKey === this.lastObservedPlayerTileKey) return;
+        this.lastObservedPlayerTileKey = tileKey;
+        this.savePlayerPosition();
+      }
+
+      cancelPlayerDestination() {
+        this.path = [];
+        if (this.player && this.player.body) this.player.body.setVelocity(0, 0);
+        this.updateDestinationMarker(null);
+        this.savePlayerPosition(true);
+        if (this.player) {
+          const tile = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
+          this.lastObservedPlayerTileKey = `${tile.x},${tile.y}`;
         }
       }
 
@@ -1169,56 +1336,72 @@
         const x = (tile.x + 0.5) * TILE_SIZE;
         const y = (tile.y + 0.5) * TILE_SIZE;
         this.destinationMarker.setPosition(x, y);
-        this.destinationMarker.setDepth(y + 7);
+        // Keep the destination indicator above tall trees and the player sprite.
+        this.destinationMarker.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 1000);
         this.destinationMarker.setVisible(true);
       }
 
       createDestinationMarker() {
         this.destinationMarker = this.add.graphics();
-        this.destinationMarker.fillStyle(0x17251b, 0.72);
-        this.destinationMarker.fillCircle(0, 0, 5.5);
-        this.destinationMarker.lineStyle(1.5, 0xffd66b, 1);
-        this.destinationMarker.strokeCircle(0, 0, 5.5);
-        this.destinationMarker.fillStyle(0xfff2bf, 1);
-        this.destinationMarker.fillCircle(0, 0, 1.7);
+        this.destinationMarker.fillStyle(0x17251b, 0.88);
+        this.destinationMarker.fillCircle(0, 0, 8);
+        this.destinationMarker.lineStyle(2.5, 0xffd34f, 1);
+        this.destinationMarker.strokeCircle(0, 0, 8);
+        this.destinationMarker.fillStyle(0xffe36a, 1);
+        this.destinationMarker.fillCircle(0, 0, 4.2);
+        this.destinationMarker.fillStyle(0xffffff, 1);
+        this.destinationMarker.fillCircle(0, 0, 1.8);
         this.destinationMarker.setVisible(false);
+        this.destinationMarkerTween = this.tweens.add({
+          targets: this.destinationMarker,
+          scaleX: { from: 0.88, to: 1.15 },
+          scaleY: { from: 0.88, to: 1.15 },
+          alpha: { from: 0.78, to: 1 },
+          duration: 560,
+          yoyo: true,
+          repeat: -1
+        });
       }
 
       registerPositionSaveHooks() {
         this.savePositionOnPageHide = () => this.savePlayerPosition(true);
+        this.savePositionBeforeUnload = () => this.savePlayerPosition(true);
         this.savePositionOnVisibilityChange = () => {
           if (document.visibilityState === 'hidden') this.savePlayerPosition(true);
         };
         window.addEventListener('pagehide', this.savePositionOnPageHide);
+        window.addEventListener('beforeunload', this.savePositionBeforeUnload);
         document.addEventListener('visibilitychange', this.savePositionOnVisibilityChange);
         this.events.once('shutdown', () => {
           this.savePlayerPosition(true);
           window.removeEventListener('pagehide', this.savePositionOnPageHide);
+          window.removeEventListener('beforeunload', this.savePositionBeforeUnload);
           document.removeEventListener('visibilitychange', this.savePositionOnVisibilityChange);
         });
       }
 
       createPlayer() {
-        const savedTile = this.getSavedPlayerTile();
-        const startTile = savedTile || PLAYER_START;
-        const x = (startTile.x + 0.5) * TILE_SIZE;
-        const y = (startTile.y + 0.5) * TILE_SIZE;
+        const spawn = this.initialPlayerPosition || this.getSafeSpawnPosition();
+        const x = spawn.x;
+        const y = spawn.y;
         this.player = this.physics.add.sprite(x, y, 'hero', 0);
-        this.player.setOrigin(0.5, 0.86);
-        this.player.body.setSize(13, 9);
-        this.player.body.setOffset(9.5, 22);
+        this.player.setOrigin(PLAYER_ORIGIN_X, PLAYER_ORIGIN_Y);
+        this.player.body.setSize(PLAYER_BODY_WIDTH, PLAYER_BODY_HEIGHT);
+        this.player.body.setOffset(PLAYER_BODY_OFFSET_X, PLAYER_BODY_OFFSET_Y);
         this.player.setCollideWorldBounds(true);
         this.player.setDepth(y + 12);
 
-        // Marcador do destino: aparece na célula escolhida pelo toque no mapa.
         this.createDestinationMarker();
-
-        // Reposiciona os chunks ativos em torno da posição restaurada, se houver.
-        this.updateChunkStreaming(true);
         for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
         this.player.anims.play('idle-0');
+        const initialTile = this.getPlayerBodyTile();
+        this.lastObservedPlayerTileKey = initialTile ? `${initialTile.x},${initialTile.y}` : null;
+        this.lastSavedPlayerTileKey = this.lastObservedPlayerTileKey;
+        this.lastProgressPosition = { x: this.player.x, y: this.player.y };
+        this.stuckElapsed = 0;
+        this.stuckRepathCount = 0;
         this.registerPositionSaveHooks();
-        this.savePlayerPosition(true);
+        if (!this.preserveInvalidSave) this.savePlayerPosition(true);
       }
 
       createPlayerAnimations() {
@@ -1241,6 +1424,8 @@
       setupCamera() {
         const camera = this.cameras.main;
         camera.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
+        // Snap to the saved/fallback spawn before enabling smooth follow.
+        camera.centerOn(this.player.x, this.player.y);
         camera.setLerp(0.12, 0.12);
         camera.startFollow(this.player, true, 0.12, 0.12);
       }
@@ -1249,24 +1434,31 @@
         if (pointer.rightButtonDown()) return;
         pointer.updateWorldPoint(this.cameras.main);
         const destination = core.worldToTile(pointer.worldX, pointer.worldY, TILE_SIZE);
-        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
-        if (this.blocked[destination.y][destination.x]) return;
+        // Invalid taps are ignored: they must not cancel a valid route already in progress.
+        if (destination.x < 0 || destination.y < 0 ||
+            destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
+        if (!this.blocked[destination.y] || this.blocked[destination.y][destination.x]) return;
 
-        const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
-        const route = core.findPath(this.blocked, start, destination);
-        if (!route.length) {
-          // Tocar na própria célula do jogador cancela o deslocamento atual.
-          if (destination.x === start.x && destination.y === start.y) {
-            this.path = [];
-            this.player.body.setVelocity(0, 0);
-            this.updateDestinationMarker(null);
-          }
+        const start = this.getPlayerBodyTile();
+        if (!start) return;
+        if (destination.x === start.x && destination.y === start.y) {
+          this.cancelPlayerDestination();
+          this.stuckElapsed = 0;
+          this.stuckRepathCount = 0;
           return;
         }
+
+        const route = core.findPath(this.blocked, start, destination);
+        // A valid but unreachable destination is ignored; preserve the current path.
+        if (!route.length) return;
         this.path = route.map((tile) => ({
           x: (tile.x + 0.5) * TILE_SIZE,
           y: (tile.y + 0.5) * TILE_SIZE
         }));
+        this.stuckElapsed = 0;
+        this.stuckRepathCount = 0;
+        this.lastProgressPosition = { x: this.player.x, y: this.player.y };
+        this.lastProgressDistance = null;
         this.updateDestinationMarker(destination);
       }
 
@@ -1278,33 +1470,94 @@
           this.player.setDepth(this.player.y + 12);
           this.player.anims.play(`idle-${this.facingRow}`, true);
           this.updateDestinationMarker(null);
-          this.savePlayerPosition();
           return;
         }
 
-        const target = this.path[0];
-        const dx = target.x - this.player.x;
-        const dy = target.y - this.player.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance <= Math.max(2, 78 * (delta / 1000))) {
-          this.player.body.reset(target.x, target.y);
+        const elapsed = Math.max(0, Math.min(Number(delta) || 0, 100));
+        let target = this.path[0];
+        let dx = target.x - this.player.x;
+        let dy = target.y - this.player.y;
+        let distance = Math.hypot(dx, dy);
+        const movedFromFallback = this.invalidSaveFallbackPosition
+          ? Math.hypot(this.player.x - this.invalidSaveFallbackPosition.x,
+                       this.player.y - this.invalidSaveFallbackPosition.y)
+          : 0;
+        if (this.preserveInvalidSave && movedFromFallback > 2) this.preserveInvalidSave = false;
+
+        // Measure actual progress toward the waypoint, not merely any sprite jitter.
+        if (this.lastProgressDistance === null || this.lastProgressDistance === undefined ||
+            distance < this.lastProgressDistance - 0.25) {
+          this.lastProgressDistance = distance;
+          this.stuckElapsed = 0;
+          this.stuckRepathCount = 0;
+        } else {
+          this.stuckElapsed = (this.stuckElapsed || 0) + elapsed;
+        }
+
+        if (this.stuckElapsed >= 500) {
+          if ((this.stuckRepathCount || 0) < 2) {
+            const finalTarget = this.path[this.path.length - 1];
+            const destination = core.worldToTile(finalTarget.x, finalTarget.y, TILE_SIZE);
+            const start = this.getPlayerBodyTile();
+            const route = start ? core.findPath(this.blocked, start, destination) : [];
+            this.stuckRepathCount = (this.stuckRepathCount || 0) + 1;
+            this.stuckElapsed = 0;
+            if (route.length) {
+              this.path = route.map(tile => ({
+                x: (tile.x + 0.5) * TILE_SIZE,
+                y: (tile.y + 0.5) * TILE_SIZE
+              }));
+              target = this.path[0];
+              dx = target.x - this.player.x;
+              dy = target.y - this.player.y;
+              distance = Math.hypot(dx, dy);
+              this.lastProgressDistance = distance;
+            } else {
+              this.path = [];
+            }
+          } else {
+            this.path = [];
+            this.player.body.setVelocity(0, 0);
+            this.updateDestinationMarker(null);
+            this.savePlayerPosition(true);
+            return;
+          }
+          if (!this.path.length) {
+            this.player.body.setVelocity(0, 0);
+            this.updateDestinationMarker(null);
+            this.savePlayerPosition(true);
+            return;
+          }
+        }
+
+        if (distance <= 2) {
+          // Never teleport the Arcade body through a collider; accept the small arrival tolerance.
+          this.player.body.setVelocity(0, 0);
           this.path.shift();
-          if (!this.path.length) this.player.body.setVelocity(0, 0);
-          this.player.setDepth(this.player.y + 12);
-          if (!this.path.length) this.updateDestinationMarker(null);
-          this.savePlayerPosition(this.path.length === 0);
+          this.lastProgressDistance = null;
+          this.stuckElapsed = 0;
+          if (!this.path.length) {
+            this.updateDestinationMarker(null);
+            this.savePlayerPosition(true);
+            const tile = this.getPlayerBodyTile();
+            this.lastObservedPlayerTileKey = tile ? `${tile.x},${tile.y}` : null;
+            this.stuckRepathCount = 0;
+          }
           return;
         }
 
         const speed = 76;
-        const vx = (dx / distance) * speed;
-        const vy = (dy / distance) * speed;
+        const frameSeconds = Math.max(0.001, elapsed / 1000);
+        const velocity = Math.min(speed, distance / frameSeconds);
+        const vx = (dx / distance) * velocity;
+        const vy = (dy / distance) * velocity;
         this.player.body.setVelocity(vx, vy);
         this.facingRow = core.directionRow(vx, vy);
         this.player.anims.play(`walk-${this.facingRow}`, true);
         this.player.setDepth(this.player.y + 12);
-        this.savePlayerPosition();
+        this.savePlayerPositionWhenTileChanges();
       }
+
     }
 
     const config = {
