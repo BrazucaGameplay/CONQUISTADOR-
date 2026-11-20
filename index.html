@@ -15,12 +15,30 @@
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
+    #perf-panel {
+      position: fixed;
+      top: max(8px, env(safe-area-inset-top));
+      left: 8px;
+      z-index: 20;
+      max-width: min(310px, calc(100vw - 16px));
+      padding: 8px 10px;
+      border: 1px solid rgba(230, 227, 200, 0.35);
+      border-radius: 7px;
+      background: rgba(13, 22, 16, 0.88);
+      color: #f1f0df;
+      font: 11px/1.38 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+      pointer-events: none;
+      user-select: none;
+    }
+    #perf-panel[hidden] { display: none; }
   </style>
 </head>
 <body>
   <div id="game-root" aria-label="Mundo explorável do CONQUISTADOR"></div>
   <div id="loading">Carregando o mundo…</div>
   <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span></div></div>
+  <pre id="perf-panel" hidden aria-hidden="true"></pre>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" crossorigin="anonymous"></script>
 
@@ -133,6 +151,46 @@
 
     function roadKey(x, y) {
       return `${x},${y}`;
+    }
+
+    function isRoadCell(generator, x, y) {
+      return generator.roadCells.has(roadKey(x, y));
+    }
+
+    function isSpawnClearance(generator, x, y) {
+      return Math.abs(x - generator.playerStart.x) <= 5 &&
+        Math.abs(y - generator.playerStart.y) <= 5;
+    }
+
+    // Shared terrain predicates are the single source of truth for both the
+    // visible chunk generator and the authoritative collision generator.
+    function isCliffCell(generator, x, y) {
+      if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
+          isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
+          isSpawnClearance(generator, x, y)) return false;
+      for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
+        const patch = CLIFF_PATCHES[patchIndex];
+        const nx = (x - patch.x) / patch.rx;
+        const ny = (y - patch.y) / patch.ry;
+        const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
+        if (nx * nx + ny * ny < 1 + raggedEdge) return true;
+      }
+      return false;
+    }
+
+    function getGeneratedTreeId(generator, x, y, cliff) {
+      if (x < 2 || y < 2 || x >= generator.worldTiles - 2 || y >= generator.worldTiles - 2 ||
+          isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) || cliff ||
+          isSpawnClearance(generator, x, y)) return 0;
+      let density = 0;
+      for (const patch of TREE_PATCHES) {
+        const nx = (x - patch.x) / patch.rx;
+        const ny = (y - patch.y) / patch.ry;
+        if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+      }
+      if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
+      if (!density || stableNoise(x, y, 103) > density) return 0;
+      return TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)] || 0;
     }
 
     // Roads are short, fixed world paths. Rasterize them once as a compact set;
@@ -260,43 +318,12 @@
       const width = Math.min(size, generator.worldTiles - originX);
       const height = Math.min(size, generator.worldTiles - originY);
       const blocked = Array.from({ length: height }, () => new Uint8Array(width));
-      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
-      const isSpawnClearance = (x, y) =>
-        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
-
-      function isCliffCell(x, y) {
-        if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
-            isOriginalTile(x, y, generator) || hasRoad(x, y) || isSpawnClearance(x, y)) return false;
-        for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
-          const patch = CLIFF_PATCHES[patchIndex];
-          const nx = (x - patch.x) / patch.rx;
-          const ny = (y - patch.y) / patch.ry;
-          const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
-          if (nx * nx + ny * ny < 1 + raggedEdge) return true;
-        }
-        return false;
-      }
-
-      function hasGeneratedTree(x, y, cliff) {
-        if (x < 2 || y < 2 || x >= generator.worldTiles - 2 || y >= generator.worldTiles - 2 ||
-            isOriginalTile(x, y, generator) || hasRoad(x, y) || cliff || isSpawnClearance(x, y)) return false;
-        let density = 0;
-        for (const patch of TREE_PATCHES) {
-          const nx = (x - patch.x) / patch.rx;
-          const ny = (y - patch.y) / patch.ry;
-          if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
-        }
-        if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
-        if (!density || stableNoise(x, y, 103) > density) return false;
-        const treeId = TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)];
-        return TREE_IDS.has(treeId);
-      }
 
       for (let localY = 0; localY < height; localY += 1) {
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          if (hasRoad(x, y)) continue; // Roads always take precedence and are walkable.
+          if (isRoadCell(generator, x, y)) continue; // Roads always take precedence and are walkable.
 
           if (isOriginalTile(x, y, generator)) {
             const sx = x - generator.mapOffset;
@@ -308,8 +335,8 @@
             continue;
           }
 
-          const cliff = isCliffCell(x, y);
-          blocked[localY][localX] = cliff || hasGeneratedTree(x, y, cliff) ? 1 : 0;
+          const cliff = isCliffCell(generator, x, y);
+          blocked[localY][localX] = cliff || getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
         }
       }
 
@@ -353,9 +380,7 @@
       const width = Math.min(size, generator.worldTiles - originX);
       const height = Math.min(size, generator.worldTiles - originY);
       const isOriginal = (x, y) => isOriginalTile(x, y, generator);
-      const isSpawnClearance = (x, y) =>
-        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
-      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
+      const hasRoad = (x, y) => isRoadCell(generator, x, y);
 
       // One-cell halo is enough for the four-neighbour Wang mask of cliff edges.
       const cliffMask = Array.from({ length: height + 2 }, () => Array(width + 2).fill(false));
@@ -363,18 +388,7 @@
         for (let lx = -1; lx <= width; lx += 1) {
           const x = originX + lx;
           const y = originY + ly;
-          if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
-              isOriginal(x, y) || hasRoad(x, y) || isSpawnClearance(x, y)) continue;
-          for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
-            const patch = CLIFF_PATCHES[patchIndex];
-            const nx = (x - patch.x) / patch.rx;
-            const ny = (y - patch.y) / patch.ry;
-            const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
-            if (nx * nx + ny * ny < 1 + raggedEdge) {
-              cliffMask[ly + 1][lx + 1] = true;
-              break;
-            }
-          }
+          cliffMask[ly + 1][lx + 1] = isCliffCell(generator, x, y);
         }
       }
 
@@ -382,8 +396,11 @@
       const structures = Array.from({ length: height }, () => Array(width).fill(0));
       const upperObjects = Array.from({ length: height }, () => Array(width).fill(0));
       const includeBlocked = !options || options.includeBlocked !== false;
-      const blocked = includeBlocked ? Array.from({ length: height }, () => Array(width).fill(false)) : null;
-      const treeSprites = TREE_SPRITE_IDS;
+      // Collision is delegated to the same rules used by the global navigation grid.
+      // Visual data never carries a second implementation of obstacle decisions.
+      const blocked = includeBlocked
+        ? createChunkBlockedData(generator, chunkX, chunkY, size).blocked
+        : null;
 
       for (let ly = 0; ly < height; ly += 1) {
         const y = originY + ly;
@@ -419,33 +436,17 @@
             ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
           }
 
-          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
-              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] && !isSpawnClearance(x, y)) {
-            let density = 0;
-            for (const patch of TREE_PATCHES) {
-              const nx = (x - patch.x) / patch.rx;
-              const ny = (y - patch.y) / patch.ry;
-              if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
-            }
-            if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
-            if (density && stableNoise(x, y, 103) <= density) {
-              const tree = treeSprites[Math.floor(stableNoise(x, y, 109) * treeSprites.length)];
-              structures[ly][lx] = tree;
-            }
-          }
+          const generatedTreeId = getGeneratedTreeId(
+            generator, x, y, cliffMask[ly + 1][lx + 1]
+          );
+          if (generatedTreeId) structures[ly][lx] = generatedTreeId;
 
           if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
               !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] &&
-              !structures[ly][lx] && !isSpawnClearance(x, y) && stableNoise(x, y, 127) < 0.022) {
+              !structures[ly][lx] && !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
-          if (blocked) {
-            blocked[ly][lx] = cliffMask[ly + 1][lx + 1] || CLIFF_IDS.has(ground[ly][lx]) ||
-              TREE_IDS.has(structures[ly][lx]) || SOLID_IDS.has(structures[ly][lx]);
-            // Roads always take precedence over terrain obstacles and are walkable.
-            if (hasRoad(x, y)) blocked[ly][lx] = false;
-          }
         }
       }
 
@@ -660,6 +661,8 @@
     const WORLD_TILES = 90;
     const CHUNK_TILES = 30;
     const CHUNK_LOAD_RADIUS = 1;
+    // Diagnostic overlay is enabled only with ?perf=1; normal play is unchanged.
+    const PERF_ENABLED = new URLSearchParams(window.location.search).get('perf') === '1';
     const WORLD_PIXELS = WORLD_TILES * TILE_SIZE;
     const MAP_OFFSET = 30;
     const PLAYER_START = { x: 45, y: 65 };
@@ -696,6 +699,17 @@
         super('WorldScene');
         this.path = [];
         this.facingRow = 0;
+        this.perfPanel = PERF_ENABLED ? document.getElementById('perf-panel') : null;
+        this.perf = {
+          frameSamples: [],
+          lastPanelUpdate: 0,
+          lastStreamMs: 0,
+          lastStreamLoads: 0,
+          lastStreamUnloads: 0,
+          lastStreamCenter: '-',
+          lastPathMs: 0,
+          lastPathLength: 0
+        };
       }
 
       preload() {
@@ -722,6 +736,7 @@
         }
 
         try {
+          if (this.perfPanel) this.perfPanel.hidden = false;
           this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
           this.buildWorld(sample.layers);
           this.createPlayerAnimations();
@@ -848,6 +863,7 @@
         const worldY = chunk.tileY * TILE_SIZE;
         const drawGround = chunk.ground.map(row => row.slice());
         const visualObjects = [];
+        const renderStats = { cliffs: 0, structures: 0, upperObjects: 0 };
 
         // Cliff tiles are separate depth-sorted objects, preserving their exact cells.
         for (let localY = 0; localY < chunk.height; localY += 1) {
@@ -863,6 +879,7 @@
               this.getTileFrame(tileId)
             ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(cliff);
+            renderStats.cliffs += 1;
             drawGround[localY][localX] = 0;
           }
         }
@@ -884,6 +901,7 @@
               this.getTileFrame(tileId)
             );
             visualObjects.push(image);
+            renderStats.structures += 1;
             if (this.treeSpriteIds.has(tileId)) {
               const scale = core.getTreeScale(worldTileX, worldTileY, tileId);
               image.setOrigin(0.5, 1);
@@ -909,6 +927,7 @@
               this.getTileFrame(tileId)
             ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(image);
+            renderStats.upperObjects += 1;
           }
         }
 
@@ -937,6 +956,7 @@
         chunk.collisionMap = collisionMap;
         chunk.collisionLayer = collisionLayer;
         chunk.visualObjects = visualObjects;
+        chunk.renderStats = renderStats;
         chunk.collider = null;
         chunk.state = 'loaded';
         this.activeChunkIds.add(chunk.id);
@@ -964,6 +984,7 @@
         chunk.collisionMap = null;
         chunk.collisionLayer = null;
         chunk.visualObjects = [];
+        chunk.renderStats = null;
         chunk.state = 'unloaded';
         this.activeChunkIds.delete(chunk.id);
         // Free visual tile arrays; the compact global navigation grid remains.
@@ -993,6 +1014,7 @@
           this.activeChunkIds
         );
 
+        const streamStartedAt = PERF_ENABLED ? performance.now() : 0;
         // Rebuild only missing data, once for the whole transition. Load first,
         // unload second: the player never crosses a seam before the neighbouring
         // chunk's ground and collider are available.
@@ -1001,6 +1023,12 @@
         for (const chunk of chunksToLoad) this.loadChunk(chunk);
         for (const id of plan.unload) this.unloadChunk(this.chunks.get(id));
         this.streamingCenterId = center.id;
+        if (PERF_ENABLED) {
+          this.perf.lastStreamMs = performance.now() - streamStartedAt;
+          this.perf.lastStreamLoads = plan.load.length;
+          this.perf.lastStreamUnloads = plan.unload.length;
+          this.perf.lastStreamCenter = center.id;
+        }
       }
 
       createTileLayer(data, depth, worldX = 0, worldY = 0) {
@@ -1057,7 +1085,12 @@
         if (this.blocked[destination.y][destination.x]) return;
 
         const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
+        const pathStartedAt = PERF_ENABLED ? performance.now() : 0;
         const route = core.findPath(this.blocked, start, destination);
+        if (PERF_ENABLED) {
+          this.perf.lastPathMs = performance.now() - pathStartedAt;
+          this.perf.lastPathLength = route.length;
+        }
         if (!route.length) return;
         this.path = route.map((tile) => ({
           x: (tile.x + 0.5) * TILE_SIZE,
@@ -1065,8 +1098,53 @@
         }));
       }
 
+      updatePerformancePanel(time) {
+        if (!PERF_ENABLED || !this.perfPanel) return;
+
+        const rawFrameMs = Number(this.game.loop.rawDelta) || 0;
+        if (rawFrameMs > 0 && rawFrameMs < 1000) {
+          this.perf.frameSamples.push(rawFrameMs);
+          if (this.perf.frameSamples.length > 180) this.perf.frameSamples.shift();
+        }
+        if (time - this.perf.lastPanelUpdate < 300) return;
+        this.perf.lastPanelUpdate = time;
+
+        const samples = this.perf.frameSamples;
+        const sorted = samples.slice().sort((a, b) => a - b);
+        const average = samples.length
+          ? samples.reduce((sum, value) => sum + value, 0) / samples.length
+          : 0;
+        const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] : 0;
+        const maxFrame = samples.length ? Math.max(...samples) : 0;
+
+        let cliffCount = 0;
+        let structureCount = 0;
+        let upperCount = 0;
+        for (const id of this.activeChunkIds) {
+          const stats = this.chunks.get(id)?.renderStats;
+          if (!stats) continue;
+          cliffCount += stats.cliffs;
+          structureCount += stats.structures;
+          upperCount += stats.upperObjects;
+        }
+
+        const fps = Number(this.game.loop.actualFps) || 0;
+        const activeChunks = this.activeChunkIds.size;
+        const gameObjects = this.children.list.length;
+        this.perfPanel.textContent = [
+          'CONQUISTADOR · DIAGNÓSTICO',
+          `FPS médio: ${fps.toFixed(1)}   Objetos: ${gameObjects}`,
+          `Frame ms médio/p95/pico: ${average.toFixed(1)} / ${p95.toFixed(1)} / ${maxFrame.toFixed(1)}`,
+          `Chunks ativos: ${activeChunks}   Centro: ${this.streamingCenterId || '-'}`,
+          `Images: penhascos ${cliffCount} | estruturas ${structureCount} | topo ${upperCount}`,
+          `Última troca de chunk: ${this.perf.lastStreamMs.toFixed(1)} ms (${this.perf.lastStreamLoads} entrou / ${this.perf.lastStreamUnloads} saiu)`,
+          `Último A*: ${this.perf.lastPathMs.toFixed(1)} ms · ${this.perf.lastPathLength} passos`
+        ].join('\n');
+      }
+
       update(_time, delta) {
         if (!this.player || !this.player.body) return;
+        this.updatePerformancePanel(_time);
         this.updateChunkStreaming();
         if (!this.path.length) {
           this.player.body.setVelocity(0, 0);
