@@ -370,6 +370,33 @@
       return { width, height, chunkSize: size, columns, rows, chunks };
     }
 
+    // Rebuild only the requested chunk's arrays from the deterministic world
+    // generator. The authoritative collision grid is supplied separately, so
+    // pathfinding remains global even after a chunk releases its local copy.
+    function extractChunkFromWorld(world, authoritativeBlocked, tileX, tileY, chunkSize) {
+      const size = Number(chunkSize);
+      if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido para reconstrução.');
+      if (!world || !Array.isArray(world.ground) || !Array.isArray(authoritativeBlocked)) {
+        throw new Error('Não há dados suficientes para reconstruir o chunk.');
+      }
+      const height = world.ground.length;
+      const width = world.ground[0] ? world.ground[0].length : 0;
+      if (!Number.isInteger(tileX) || !Number.isInteger(tileY) || tileX < 0 || tileY < 0 ||
+          tileX + size > width || tileY + size > height) {
+        throw new Error('Coordenadas do chunk fora dos limites do mundo.');
+      }
+      const sliceLayer = (layer) => {
+        if (!Array.isArray(layer) || layer.length !== height) throw new Error('Camada inválida durante a reconstrução do chunk.');
+        return layer.slice(tileY, tileY + size).map(row => row.slice(tileX, tileX + size));
+      };
+      return {
+        ground: sliceLayer(world.ground),
+        structures: sliceLayer(world.structures),
+        upperObjects: sliceLayer(world.upperObjects),
+        blocked: sliceLayer(authoritativeBlocked)
+      };
+    }
+
     function getChunkAtTile(tileX, tileY, chunkSize, columns, rows) {
       if (!Number.isInteger(tileX) || !Number.isInteger(tileY) || tileX < 0 || tileY < 0) return null;
       const chunkX = Math.floor(tileX / chunkSize);
@@ -496,6 +523,7 @@
       createGroundBase,
       getTreeScale,
       splitWorldIntoChunks,
+      extractChunkFromWorld,
       getChunkAtTile,
       getChunkNeighborhood,
       planChunkStreaming
@@ -589,6 +617,9 @@
 
       buildWorld(sourceLayers) {
         core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
+        // Keep only the compact source map so unloaded regions can be rebuilt
+        // deterministically without retaining all generated chunk arrays.
+        this.sourceLayers = sourceLayers;
         const expanded = core.createExpandedWorld(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
 
         // Prepare one authoritative collision grid for the complete world.
@@ -624,6 +655,45 @@
 
         // Initial load: current chunk plus its eight neighbours, clipped at world edges.
         this.updateChunkStreaming(true);
+        // The first active window is ready. Release generated arrays for all
+        // distant chunks immediately; their data will be recreated on demand.
+        for (const chunk of this.chunkGrid.chunks) {
+          if (!this.activeChunkIds.has(chunk.id)) this.releaseChunkData(chunk);
+        }
+      }
+
+      releaseChunkData(chunk) {
+        if (!chunk || chunk.state === 'loaded') return;
+        chunk.ground = null;
+        chunk.structures = null;
+        chunk.upperObjects = null;
+        chunk.blocked = null;
+        if (chunk.state !== 'loaded') chunk.state = 'unloaded';
+      }
+
+      rebuildMissingChunkData(chunks) {
+        const missing = (chunks || []).filter(chunk =>
+          chunk && (!Array.isArray(chunk.ground) || !Array.isArray(chunk.structures) ||
+          !Array.isArray(chunk.upperObjects) || !Array.isArray(chunk.blocked))
+        );
+        if (!missing.length) return;
+
+        // One deterministic regeneration serves every missing chunk in this
+        // streaming transition. The temporary full-world arrays go out of scope
+        // as soon as the requested slices have been copied.
+        const regenerated = core.createExpandedWorld(
+          this.sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START
+        );
+        for (const chunk of missing) {
+          const data = core.extractChunkFromWorld(
+            regenerated, this.blocked, chunk.tileX, chunk.tileY, this.chunkGrid.chunkSize
+          );
+          chunk.ground = data.ground;
+          chunk.structures = data.structures;
+          chunk.upperObjects = data.upperObjects;
+          chunk.blocked = data.blocked;
+          chunk.state = 'prepared';
+        }
       }
 
       getTileFrame(tileId) {
@@ -649,6 +719,10 @@
 
       loadChunk(chunk) {
         if (!chunk || chunk.state === 'loaded') return;
+        if (!Array.isArray(chunk.ground) || !Array.isArray(chunk.structures) ||
+            !Array.isArray(chunk.upperObjects) || !Array.isArray(chunk.blocked)) {
+          throw new Error(`Os dados do chunk ${chunk.id} não foram reconstruídos antes do carregamento.`);
+        }
 
         const worldX = chunk.tileX * TILE_SIZE;
         const worldY = chunk.tileY * TILE_SIZE;
@@ -769,6 +843,8 @@
         chunk.visualObjects = [];
         chunk.state = 'unloaded';
         this.activeChunkIds.delete(chunk.id);
+        // Free the tile arrays too; global navigation data remains in this.blocked.
+        this.releaseChunkData(chunk);
       }
 
       updateChunkStreaming(force = false) {
@@ -794,9 +870,12 @@
           this.activeChunkIds
         );
 
-        // Load first, unload second. The player never crosses a seam before the
-        // neighbouring chunk's ground and collider are available.
-        for (const id of plan.load) this.loadChunk(this.chunks.get(id));
+        // Rebuild only missing data, once for the whole transition. Load first,
+        // unload second: the player never crosses a seam before the neighbouring
+        // chunk's ground and collider are available.
+        const chunksToLoad = plan.load.map(id => this.chunks.get(id)).filter(Boolean);
+        this.rebuildMissingChunkData(chunksToLoad);
+        for (const chunk of chunksToLoad) this.loadChunk(chunk);
         for (const id of plan.unload) this.unloadChunk(this.chunks.get(id));
         this.streamingCenterId = center.id;
       }
