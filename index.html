@@ -76,87 +76,78 @@
       return 4;
     }
 
-    function createExpandedWorld(sourceLayers, worldTiles, mapOffset, playerStart) {
-      const layers = sourceLayers.filter((layer) => layer.type === 'tilelayer');
-      if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
+    const CLIFF_TILE_IDS = [109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167];
+    const TREE_SPRITE_IDS = [207, 261, 706, 730, 784, 760, 838];
+    const SOLID_STRUCTURE_TILE_IDS = [
+      703, 704, 785, 798, 812, 849, 896, 897, 898, 899,
+      904, 905, 923, 924, 926, 931, 932,
+      952, 953, 954, 1004, 1006, 1007, 1008, 1009
+    ];
+    const CENTRAL_TREE_IDS = new Set(TREE_SPRITE_IDS);
+    const CLIFF_IDS = new Set(CLIFF_TILE_IDS);
+    const TREE_IDS = new Set(TREE_SPRITE_IDS);
+    const SOLID_IDS = new Set(SOLID_STRUCTURE_TILE_IDS);
+    const GRASS_TILES = [1, 2, 3, 28, 29, 30, 55, 56, 57];
+    const DIRT_PATH_BY_MASK = {
+      1: 58, 2: 86, 3: 59, 4: 4, 5: 31, 6: 5, 7: 32,
+      8: 88, 9: 61, 10: 87, 11: 60, 12: 7, 13: 34, 14: 6, 15: 33
+    };
+    const CLIFF_TILE_BY_MASK = {
+      1: 163, 2: 109, 3: 136, 4: 111, 5: 167, 6: 110, 7: 112,
+      8: 165, 9: 164, 10: 166, 11: 139, 12: 138, 13: 140, 14: 113, 15: 137
+    };
+    const CLIFF_PATCHES = [
+      { x: 9, y: 12, rx: 9, ry: 7 },
+      { x: 78, y: 12, rx: 10, ry: 8 },
+      { x: 11, y: 78, rx: 10, ry: 8 },
+      { x: 79, y: 78, rx: 10, ry: 8 },
+      { x: 17, y: 49, rx: 6, ry: 9 },
+      { x: 74, y: 48, rx: 7, ry: 9 }
+    ];
+    const TREE_PATCHES = [
+      { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
+      { x: 76, y: 12, rx: 9, ry: 7, density: 0.42 },
+      { x: 11, y: 77, rx: 8, ry: 8, density: 0.44 },
+      { x: 78, y: 77, rx: 8, ry: 8, density: 0.42 },
+      { x: 15, y: 48, rx: 6, ry: 8, density: 0.30 },
+      { x: 75, y: 48, rx: 6, ry: 8, density: 0.30 },
+      { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
+      { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
+      { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
+      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
+    ];
+    const ROAD_POLYLINES = [
+      { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
+      { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
+      { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }], width: 2 },
+      { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
+      { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
+      { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
+    ];
 
-      const sw = layers[0].width || 30;
-      const sh = layers[0].height || 30;
-      const sourceGround = layers[0].data;
-      const sourceStructures = layers[1].data;
-      const sourceUpperObjects = layers[2].data;
-      const grassTiles = [1, 2, 3, 28, 29, 30, 55, 56, 57];
-      const waterIds = new Set([272, 274, 298, 326, 328, 354]);
-      const bridgeIds = new Set([85, 86, 88]);
-      const blocked = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
-      const structures = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
-      const upperObjects = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
-      const inOriginal = (x, y) => x >= mapOffset && x < mapOffset + sw && y >= mapOffset && y < mapOffset + sh;
-      const inSpawnClearance = (x, y) => Math.abs(x - playerStart.x) <= 5 && Math.abs(y - playerStart.y) <= 5;
-      const pickGrass = (x, y, salt = 17) => grassTiles[Math.floor(stableNoise(x, y, salt) * grassTiles.length)];
+    function isOriginalTile(x, y, generator) {
+      return x >= generator.mapOffset && x < generator.mapOffset + generator.sourceWidth &&
+        y >= generator.mapOffset && y < generator.sourceHeight + generator.mapOffset;
+    }
 
-      // Start with real grass tiles across the entire 90x90 world. The low-frequency
-      // variation gives the fields texture without repeating a 30x30 map pattern.
-      const ground = Array.from({ length: worldTiles }, (_, y) =>
-        Array.from({ length: worldTiles }, (_, x) => {
-          const noise = stableNoise(x, y, 4);
-          return noise < 0.62 ? 1 : pickGrass(x, y, 8);
-        })
-      );
+    function roadKey(x, y) {
+      return `${x},${y}`;
+    }
 
-      // Keep the tested starting area intact, but do not clone it into the new areas.
-      // Only this single central 30x30 region uses the original map data.
-      for (let sy = 0; sy < sh; sy += 1) {
-        for (let sx = 0; sx < sw; sx += 1) {
-          const x = sx + mapOffset;
-          const y = sy + mapOffset;
-          const original = sourceGround[sy * sw + sx] || pickGrass(x, y, 31);
-          ground[y][x] = waterIds.has(original) || bridgeIds.has(original) ? pickGrass(x, y, 37) : original;
-          structures[y][x] = sourceStructures[sy * sw + sx] || 0;
-          upperObjects[y][x] = sourceUpperObjects[sy * sw + sx] || 0;
-          if (bridgeIds.has(structures[y][x])) structures[y][x] = 0;
-          if (bridgeIds.has(upperObjects[y][x])) upperObjects[y][x] = 0;
-        }
-      }
-
-      // Thin only dense clusters of small trees inside the original map.
-      // Buildings, paths, cliffs and the original layout remain untouched.
-      // Only tiles confirmed by the Puny World sprite catalog as trees are
-      // treated as trees. 703 is a rock and 704 is a stone, not a tree.
-      const centralTreeObstacleIds = new Set([207, 261, 706, 730, 784, 760, 838]);
-      let removedCentralTrees = 0;
-      for (let y = mapOffset; y < mapOffset + sh; y += 1) {
-        for (let x = mapOffset; x < mapOffset + sw; x += 1) {
-          if (!centralTreeObstacleIds.has(structures[y][x])) continue;
-          let nearbyTrees = 0;
-          for (let oy = -2; oy <= 2; oy += 1) {
-            for (let ox = -2; ox <= 2; ox += 1) {
-              const nx = x + ox;
-              const ny = y + oy;
-              if (nx < mapOffset || ny < mapOffset || nx >= mapOffset + sw || ny >= mapOffset + sh) continue;
-              if (centralTreeObstacleIds.has(structures[ny][nx])) nearbyTrees += 1;
-            }
-          }
-          if (nearbyTrees < 6) continue;
-          const removalChance = Math.min(0.34, 0.12 + (nearbyTrees - 6) * 0.045);
-          if (stableNoise(x, y, 241) < removalChance) {
-            structures[y][x] = 0;
-            removedCentralTrees += 1;
-          }
-        }
-      }
-
-      // New roads are drawn as connected paths using the tileset's actual Wang
-      // dirt-path pieces. No copied map blocks and no CSS/flat-color road art.
-      const roadColors = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
-      function setRoadCell(x, y, color) {
-        if (x < 0 || y < 0 || x >= worldTiles || y >= worldTiles || inOriginal(x, y)) return;
-        roadColors[y][x] = color;
-      }
-      function paintRoad(points, width, color) {
-        for (let segment = 0; segment < points.length - 1; segment += 1) {
-          const a = points[segment];
-          const b = points[segment + 1];
+    // Roads are short, fixed world paths. Rasterize them once as a compact set;
+    // each chunk can then calculate its own Wang edge mask, including neighbours.
+    function buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight) {
+      const cells = new Set();
+      const add = (x, y) => {
+        if (x < 0 || y < 0 || x >= worldTiles || y >= worldTiles) return;
+        if (x >= mapOffset && x < mapOffset + sourceWidth && y >= mapOffset && y < mapOffset + sourceHeight) return;
+        cells.add(roadKey(x, y));
+      };
+      for (const road of ROAD_POLYLINES) {
+        for (let segment = 0; segment < road.points.length - 1; segment += 1) {
+          const a = road.points[segment];
+          const b = road.points[segment + 1];
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
@@ -165,235 +156,213 @@
             const t = steps ? step / steps : 0;
             const x = Math.round(a.x + dx * t);
             const y = Math.round(a.y + dy * t);
-            if (previous && x !== previous.x && y !== previous.y) {
-              // Add an orthogonal bridge cell so diagonal samples remain connected.
-              setRoadCell(x, previous.y, color);
-            }
-            for (let oy = 0; oy < width; oy += 1) {
-              for (let ox = 0; ox < width; ox += 1) setRoadCell(x + ox, y + oy, color);
+            if (previous && x !== previous.x && y !== previous.y) add(x, previous.y);
+            for (let oy = 0; oy < road.width; oy += 1) {
+              for (let ox = 0; ox < road.width; ox += 1) add(x + ox, y + oy);
             }
             previous = { x, y };
           }
         }
       }
+      return cells;
+    }
 
-      // Main dirt roads connect the four edges of the original starting region.
-      paintRoad([{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], 2, 1);
-      paintRoad([{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], 2, 1);
-      paintRoad([{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], 2, 1);
-      paintRoad([{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }], 2, 1);
-      // Narrower sandy trails lead to clearings beyond the main roads.
-      paintRoad([{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], 1, 1);
-      paintRoad([{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], 1, 1);
-      paintRoad([{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], 1, 1);
+    function prepareWorldGenerator(sourceLayers, worldTiles, mapOffset, playerStart) {
+      const layers = sourceLayers.filter(layer => layer.type === 'tilelayer');
+      if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
+      const sourceWidth = layers[0].width || 30;
+      const sourceHeight = layers[0].height || 30;
+      const sourceGround = layers[0].data;
+      const sourceStructures = layers[1].data;
+      const sourceUpperObjects = layers[2].data;
+      if (!Array.isArray(sourceGround) || !Array.isArray(sourceStructures) || !Array.isArray(sourceUpperObjects)) {
+        throw new Error('As camadas do mapa-base não possuem dados válidos.');
+      }
+      if (sourceGround.length !== sourceWidth * sourceHeight ||
+          sourceStructures.length !== sourceWidth * sourceHeight ||
+          sourceUpperObjects.length !== sourceWidth * sourceHeight) {
+        throw new Error('As dimensões das camadas do mapa-base não correspondem aos dados recebidos.');
+      }
+      if (mapOffset < 0 || mapOffset + sourceWidth > worldTiles || mapOffset + sourceHeight > worldTiles) {
+        throw new Error('A área original do mapa está fora dos limites do mundo.');
+      }
 
-      const dirtPathByMask = {
-        1: 58, 2: 86, 3: 59, 4: 4, 5: 31, 6: 5, 7: 32,
-        8: 88, 9: 61, 10: 87, 11: 60, 12: 7, 13: 34, 14: 6, 15: 33
-      };
-      const sandPathByMask = {
-        1: 70, 2: 98, 3: 71, 4: 16, 5: 43, 6: 17, 7: 44,
-        8: 100, 9: 73, 10: 99, 11: 72, 12: 19, 13: 46, 14: 18, 15: 45
-      };
-      for (let y = 0; y < worldTiles; y += 1) {
-        for (let x = 0; x < worldTiles; x += 1) {
-          const color = roadColors[y][x];
-          if (!color) continue;
-          const mask =
-            (y > 0 && roadColors[y - 1][x] ? 1 : 0) |
-            (x + 1 < worldTiles && roadColors[y][x + 1] ? 2 : 0) |
-            (y + 1 < worldTiles && roadColors[y + 1][x] ? 4 : 0) |
-            (x > 0 && roadColors[y][x - 1] ? 8 : 0);
-          ground[y][x] = dirtPathByMask[mask] || pickGrass(x, y, 43);
+      const waterIds = new Set([272, 274, 298, 326, 328, 354]);
+      const bridgeIds = new Set([85, 86, 88]);
+      const pickGrass = (x, y, salt = 17) => GRASS_TILES[Math.floor(stableNoise(x, y, salt) * GRASS_TILES.length)];
+      const originalGround = Array.from({ length: sourceHeight }, () => Array(sourceWidth).fill(0));
+      const originalStructures = Array.from({ length: sourceHeight }, () => Array(sourceWidth).fill(0));
+      const originalUpperObjects = Array.from({ length: sourceHeight }, () => Array(sourceWidth).fill(0));
+
+      for (let sy = 0; sy < sourceHeight; sy += 1) {
+        for (let sx = 0; sx < sourceWidth; sx += 1) {
+          const x = sx + mapOffset;
+          const y = sy + mapOffset;
+          const index = sy * sourceWidth + sx;
+          const original = sourceGround[index] || pickGrass(x, y, 31);
+          originalGround[sy][sx] = waterIds.has(original) || bridgeIds.has(original) ? pickGrass(x, y, 37) : original;
+          originalStructures[sy][sx] = sourceStructures[index] || 0;
+          originalUpperObjects[sy][sx] = sourceUpperObjects[index] || 0;
+          if (bridgeIds.has(originalStructures[sy][sx])) originalStructures[sy][sx] = 0;
+          if (bridgeIds.has(originalUpperObjects[sy][sx])) originalUpperObjects[sy][sx] = 0;
         }
       }
 
-      // Build several natural rocky outcrops from the tileset's cliff-edge pieces.
-      // Their edge tiles are selected from the Wang cardinal-neighbour pattern.
-      const cliffMask = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
-      const cliffPatches = [
-        // Broad, connected mountain groups. The same Wang cliff-edge tiles are
-        // used, with moderate footprints so they define regions without sealing them.
-        { x: 9, y: 12, rx: 9, ry: 7 },
-        { x: 78, y: 12, rx: 10, ry: 8 },
-        { x: 11, y: 78, rx: 10, ry: 8 },
-        { x: 79, y: 78, rx: 10, ry: 8 },
-        { x: 17, y: 49, rx: 6, ry: 9 },
-        { x: 74, y: 48, rx: 7, ry: 9 }
-      ];
-      for (let pIndex = 0; pIndex < cliffPatches.length; pIndex += 1) {
-        const patch = cliffPatches[pIndex];
-        for (let y = Math.max(1, patch.y - patch.ry); y <= Math.min(worldTiles - 2, patch.y + patch.ry); y += 1) {
-          for (let x = Math.max(1, patch.x - patch.rx); x <= Math.min(worldTiles - 2, patch.x + patch.rx); x += 1) {
-            if (inOriginal(x, y) || roadColors[y][x] || inSpawnClearance(x, y)) continue;
-            const nx = (x - patch.x) / patch.rx;
-            const ny = (y - patch.y) / patch.ry;
-            const raggedEdge = (stableNoise(x, y, pIndex + 61) - 0.5) * 0.28;
-            if (nx * nx + ny * ny < 1 + raggedEdge) cliffMask[y][x] = true;
+      // Preserve the original map's sequential thinning order exactly. This small
+      // source patch is prepared once and reused by every chunk that intersects it.
+      for (let sy = 0; sy < sourceHeight; sy += 1) {
+        for (let sx = 0; sx < sourceWidth; sx += 1) {
+          const x = sx + mapOffset;
+          const y = sy + mapOffset;
+          if (!CENTRAL_TREE_IDS.has(originalStructures[sy][sx])) continue;
+          let nearbyTrees = 0;
+          for (let oy = -2; oy <= 2; oy += 1) {
+            for (let ox = -2; ox <= 2; ox += 1) {
+              const nx = sx + ox;
+              const ny = sy + oy;
+              if (nx < 0 || ny < 0 || nx >= sourceWidth || ny >= sourceHeight) continue;
+              if (CENTRAL_TREE_IDS.has(originalStructures[ny][nx])) nearbyTrees += 1;
+            }
           }
-        }
-      }
-      const cliffTileByMask = {
-        1: 163, 2: 109, 3: 136, 4: 111, 5: 167, 6: 110, 7: 112,
-        8: 165, 9: 164, 10: 166, 11: 139, 12: 138, 13: 140, 14: 113, 15: 137
-      };
-      for (let y = 1; y < worldTiles - 1; y += 1) {
-        for (let x = 1; x < worldTiles - 1; x += 1) {
-          if (!cliffMask[y][x]) continue;
-          const mask =
-            (cliffMask[y - 1][x] ? 1 : 0) |
-            (cliffMask[y][x + 1] ? 2 : 0) |
-            (cliffMask[y + 1][x] ? 4 : 0) |
-            (cliffMask[y][x - 1] ? 8 : 0);
-          ground[y][x] = cliffTileByMask[mask] || 137;
-          blocked[y][x] = true;
-        }
-      }
-
-      // Add trees as separate tileset objects in clustered woodland patches.
-      // These are newly placed assets, not rows copied from the original map.
-      const treePatches = [
-        { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
-        { x: 76, y: 12, rx: 9, ry: 7, density: 0.42 },
-        { x: 11, y: 77, rx: 8, ry: 8, density: 0.44 },
-        { x: 78, y: 77, rx: 8, ry: 8, density: 0.42 },
-        { x: 15, y: 48, rx: 6, ry: 8, density: 0.30 },
-        { x: 75, y: 48, rx: 6, ry: 8, density: 0.30 },
-        // Four moderate clusters soften the transition around the original map.
-        { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
-        { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
-        { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
-        { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
-      ];
-      // Correct full-tree tiles from the Puny World atlas:
-      // conifers 207/261, round trees 706/730/784, palms 760/838.
-      const treeSprites = [207, 261, 706, 730, 784, 760, 838];
-      let generatedTrees = 0;
-      for (let y = 2; y < worldTiles - 2; y += 1) {
-        for (let x = 2; x < worldTiles - 2; x += 1) {
-          if (inOriginal(x, y) || roadColors[y][x] || cliffMask[y][x] || inSpawnClearance(x, y)) continue;
-          let density = 0;
-          for (const patch of treePatches) {
-            const nx = (x - patch.x) / patch.rx;
-            const ny = (y - patch.y) / patch.ry;
-            if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
-          }
-          // A few isolated trees soften the transitions between forest patches.
-          if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
-          if (!density || stableNoise(x, y, 103) > density) continue;
-          const tree = treeSprites[Math.floor(stableNoise(x, y, 109) * treeSprites.length)];
-          structures[y][x] = tree;
-          blocked[y][x] = true;
-          generatedTrees += 1;
-        }
-      }
-
-      // Sparse non-blocking foliage/details break up large fields without creating walls.
-      for (let y = 2; y < worldTiles - 2; y += 1) {
-        for (let x = 2; x < worldTiles - 2; x += 1) {
-          if (inOriginal(x, y) || roadColors[y][x] || cliffMask[y][x] || structures[y][x] || inSpawnClearance(x, y)) continue;
-          if (stableNoise(x, y, 127) < 0.022) {
-            upperObjects[y][x] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
-          }
-        }
-      }
-
-      // Roads take precedence over terrain obstacles and remain completely walkable.
-      for (let y = 0; y < worldTiles; y += 1) {
-        for (let x = 0; x < worldTiles; x += 1) {
-          if (roadColors[y][x]) blocked[y][x] = false;
+          if (nearbyTrees < 6) continue;
+          const removalChance = Math.min(0.34, 0.12 + (nearbyTrees - 6) * 0.045);
+          if (stableNoise(x, y, 241) < removalChance) originalStructures[sy][sx] = 0;
         }
       }
 
       return {
+        worldTiles,
+        mapOffset,
+        sourceWidth,
+        sourceHeight,
+        playerStart: { x: playerStart.x, y: playerStart.y },
+        originalGround,
+        originalStructures,
+        originalUpperObjects,
+        roadCells: buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight)
+      };
+    }
+
+    function createChunkData(generator, chunkX, chunkY, chunkSize) {
+      if (!generator || !Number.isInteger(chunkX) || !Number.isInteger(chunkY)) {
+        throw new Error('Coordenadas inválidas para gerar o chunk.');
+      }
+      const size = Number(chunkSize);
+      if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
+      const originX = chunkX * size;
+      const originY = chunkY * size;
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+        throw new Error('O chunk solicitado está fora dos limites do mundo.');
+      }
+      const width = Math.min(size, generator.worldTiles - originX);
+      const height = Math.min(size, generator.worldTiles - originY);
+      const isOriginal = (x, y) => isOriginalTile(x, y, generator);
+      const isSpawnClearance = (x, y) =>
+        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
+      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
+
+      // One-cell halo is enough for the four-neighbour Wang mask of cliff edges.
+      const cliffMask = Array.from({ length: height + 2 }, () => Array(width + 2).fill(false));
+      for (let ly = -1; ly <= height; ly += 1) {
+        for (let lx = -1; lx <= width; lx += 1) {
+          const x = originX + lx;
+          const y = originY + ly;
+          if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
+              isOriginal(x, y) || hasRoad(x, y) || isSpawnClearance(x, y)) continue;
+          for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
+            const patch = CLIFF_PATCHES[patchIndex];
+            const nx = (x - patch.x) / patch.rx;
+            const ny = (y - patch.y) / patch.ry;
+            const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
+            if (nx * nx + ny * ny < 1 + raggedEdge) {
+              cliffMask[ly + 1][lx + 1] = true;
+              break;
+            }
+          }
+        }
+      }
+
+      const ground = Array.from({ length: height }, () => Array(width).fill(0));
+      const structures = Array.from({ length: height }, () => Array(width).fill(0));
+      const upperObjects = Array.from({ length: height }, () => Array(width).fill(0));
+      const blocked = Array.from({ length: height }, () => Array(width).fill(false));
+      const treeSprites = TREE_SPRITE_IDS;
+
+      for (let ly = 0; ly < height; ly += 1) {
+        const y = originY + ly;
+        for (let lx = 0; lx < width; lx += 1) {
+          const x = originX + lx;
+          const noise = stableNoise(x, y, 4);
+          const pickGrass = (gx, gy, salt = 17) => GRASS_TILES[Math.floor(stableNoise(gx, gy, salt) * GRASS_TILES.length)];
+          ground[ly][lx] = noise < 0.62 ? 1 : pickGrass(x, y, 8);
+
+          if (isOriginal(x, y)) {
+            const sx = x - generator.mapOffset;
+            const sy = y - generator.mapOffset;
+            ground[ly][lx] = generator.originalGround[sy][sx];
+            structures[ly][lx] = generator.originalStructures[sy][sx];
+            upperObjects[ly][lx] = generator.originalUpperObjects[sy][sx];
+          }
+
+          if (hasRoad(x, y)) {
+            const mask =
+              (hasRoad(x, y - 1) ? 1 : 0) |
+              (hasRoad(x + 1, y) ? 2 : 0) |
+              (hasRoad(x, y + 1) ? 4 : 0) |
+              (hasRoad(x - 1, y) ? 8 : 0);
+            ground[ly][lx] = DIRT_PATH_BY_MASK[mask] || pickGrass(x, y, 43);
+          }
+
+          if (cliffMask[ly + 1][lx + 1]) {
+            const mask =
+              (cliffMask[ly][lx + 1] ? 1 : 0) |
+              (cliffMask[ly + 1][lx + 2] ? 2 : 0) |
+              (cliffMask[ly + 2][lx + 1] ? 4 : 0) |
+              (cliffMask[ly + 1][lx] ? 8 : 0);
+            ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
+          }
+
+          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
+              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] && !isSpawnClearance(x, y)) {
+            let density = 0;
+            for (const patch of TREE_PATCHES) {
+              const nx = (x - patch.x) / patch.rx;
+              const ny = (y - patch.y) / patch.ry;
+              if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+            }
+            if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
+            if (density && stableNoise(x, y, 103) <= density) {
+              const tree = treeSprites[Math.floor(stableNoise(x, y, 109) * treeSprites.length)];
+              structures[ly][lx] = tree;
+            }
+          }
+
+          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
+              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] &&
+              !structures[ly][lx] && !isSpawnClearance(x, y) && stableNoise(x, y, 127) < 0.022) {
+            upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
+          }
+
+          blocked[ly][lx] = cliffMask[ly + 1][lx + 1] || CLIFF_IDS.has(ground[ly][lx]) ||
+            TREE_IDS.has(structures[ly][lx]) || SOLID_IDS.has(structures[ly][lx]);
+          // Roads always take precedence over terrain obstacles and are walkable.
+          if (hasRoad(x, y)) blocked[ly][lx] = false;
+        }
+      }
+
+      return {
+        id: `${chunkX}:${chunkY}`,
+        chunkX,
+        chunkY,
+        tileX: originX,
+        tileY: originY,
+        width,
+        height,
         ground,
         structures,
         upperObjects,
         blocked,
-        stats: {
-          tiles: worldTiles * worldTiles,
-          roadCells: roadColors.flat().filter(Boolean).length,
-          cliffCells: cliffMask.flat().filter(Boolean).length,
-          generatedTrees
-        }
-      };
-    }
-
-    // Divide a matriz já construída em chunks independentes. A função não
-    // recalcula terreno, caminhos ou obstáculos: apenas recorta as mesmas células.
-    function splitWorldIntoChunks(world, chunkSize) {
-      const size = Number(chunkSize);
-      if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
-      const layers = ['ground', 'structures', 'upperObjects', 'blocked'];
-      const first = world && world.ground;
-      if (!Array.isArray(first) || !first.length || !Array.isArray(first[0]) || !first[0].length) {
-        throw new Error('Dados de terreno inválidos para dividir em chunks.');
-      }
-      const height = first.length;
-      const width = first[0].length;
-      if (width % size !== 0 || height % size !== 0) {
-        throw new Error('As dimensões do mundo precisam ser divisíveis pelo tamanho dos chunks.');
-      }
-      for (const layerName of layers) {
-        const layer = world[layerName];
-        if (!Array.isArray(layer) || layer.length !== height || layer.some(row => !Array.isArray(row) || row.length !== width)) {
-          throw new Error(`Camada ${layerName} não corresponde às dimensões do mundo.`);
-        }
-      }
-
-      const chunks = [];
-      const columns = width / size;
-      const rows = height / size;
-      for (let chunkY = 0; chunkY < rows; chunkY += 1) {
-        for (let chunkX = 0; chunkX < columns; chunkX += 1) {
-          const tileX = chunkX * size;
-          const tileY = chunkY * size;
-          const sliceLayer = (layer) => layer
-            .slice(tileY, tileY + size)
-            .map(row => row.slice(tileX, tileX + size));
-          chunks.push({
-            id: `${chunkX}:${chunkY}`,
-            chunkX,
-            chunkY,
-            tileX,
-            tileY,
-            width: size,
-            height: size,
-            ground: sliceLayer(world.ground),
-            structures: sliceLayer(world.structures),
-            upperObjects: sliceLayer(world.upperObjects),
-            blocked: sliceLayer(world.blocked),
-            state: 'prepared'
-          });
-        }
-      }
-      return { width, height, chunkSize: size, columns, rows, chunks };
-    }
-
-    // Rebuild only the requested chunk's arrays from the deterministic world
-    // generator. The authoritative collision grid is supplied separately, so
-    // pathfinding remains global even after a chunk releases its local copy.
-    function extractChunkFromWorld(world, authoritativeBlocked, tileX, tileY, chunkSize) {
-      const size = Number(chunkSize);
-      if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido para reconstrução.');
-      if (!world || !Array.isArray(world.ground) || !Array.isArray(authoritativeBlocked)) {
-        throw new Error('Não há dados suficientes para reconstruir o chunk.');
-      }
-      const height = world.ground.length;
-      const width = world.ground[0] ? world.ground[0].length : 0;
-      if (!Number.isInteger(tileX) || !Number.isInteger(tileY) || tileX < 0 || tileY < 0 ||
-          tileX + size > width || tileY + size > height) {
-        throw new Error('Coordenadas do chunk fora dos limites do mundo.');
-      }
-      const sliceLayer = (layer) => {
-        if (!Array.isArray(layer) || layer.length !== height) throw new Error('Camada inválida durante a reconstrução do chunk.');
-        return layer.slice(tileY, tileY + size).map(row => row.slice(tileX, tileX + size));
-      };
-      return {
-        ground: sliceLayer(world.ground),
-        structures: sliceLayer(world.structures),
-        upperObjects: sliceLayer(world.upperObjects),
-        blocked: sliceLayer(authoritativeBlocked)
+        state: 'prepared'
       };
     }
 
@@ -447,8 +416,46 @@
       return blocked.map((row) => row.map((cell) => (cell ? 1 : -1)));
     }
 
+    function BinaryMinHeap(compare) {
+      this.items = [];
+      this.compare = compare;
+    }
+    BinaryMinHeap.prototype.push = function (value) {
+      const items = this.items;
+      let index = items.length;
+      items.push(value);
+      while (index > 0) {
+        const parent = Math.floor((index - 1) / 2);
+        if (this.compare(items[parent], value) <= 0) break;
+        items[index] = items[parent];
+        index = parent;
+      }
+      items[index] = value;
+    };
+    BinaryMinHeap.prototype.pop = function () {
+      const items = this.items;
+      if (!items.length) return null;
+      const first = items[0];
+      const last = items.pop();
+      if (items.length) {
+        let index = 0;
+        while (true) {
+          const left = index * 2 + 1;
+          const right = left + 1;
+          if (left >= items.length) break;
+          let best = left;
+          if (right < items.length && this.compare(items[right], items[left]) < 0) best = right;
+          if (this.compare(last, items[best]) <= 0) break;
+          items[index] = items[best];
+          index = best;
+        }
+        items[index] = last;
+      }
+      return first;
+    };
+
     function findPath(blocked, start, goal) {
-      if (!Array.isArray(blocked) || !blocked.length || !blocked[0].length) return [];
+      if (!Array.isArray(blocked) || !blocked.length || !Array.isArray(blocked[0]) || !blocked[0].length) return [];
       const width = blocked[0].length;
       const height = blocked.length;
       if (!inBounds(blocked, start.x, start.y) || !inBounds(blocked, goal.x, goal.y)) return [];
@@ -459,54 +466,63 @@
         [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
         [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]
       ];
-      const key = (x, y) => `${x},${y}`;
       const heuristic = (x, y) => {
         const dx = Math.abs(goal.x - x);
         const dy = Math.abs(goal.y - y);
         return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
       };
-      const startKey = key(start.x, start.y);
-      const goalKey = key(goal.x, goal.y);
-      const open = [{ x: start.x, y: start.y, g: 0, f: heuristic(start.x, start.y) }];
-      const gScore = new Map([[startKey, 0]]);
-      const cameFrom = new Map();
-      const closed = new Set();
+      const total = width * height;
+      const gScore = new Float64Array(total);
+      gScore.fill(Infinity);
+      const cameFrom = new Int32Array(total);
+      cameFrom.fill(-1);
+      const closed = new Uint8Array(total);
+      const startIndex = start.y * width + start.x;
+      const goalIndex = goal.y * width + goal.x;
+      let order = 0;
+      const open = new BinaryMinHeap((a, b) => a.f - b.f || a.order - b.order);
+      gScore[startIndex] = 0;
+      open.push({ index: startIndex, x: start.x, y: start.y, g: 0, f: heuristic(start.x, start.y), order: order++ });
 
-      while (open.length) {
-        let bestIndex = 0;
-        for (let i = 1; i < open.length; i += 1) {
-          if (open[i].f < open[bestIndex].f) bestIndex = i;
-        }
-        const current = open.splice(bestIndex, 1)[0];
-        const currentKey = key(current.x, current.y);
-        if (closed.has(currentKey)) continue;
-        if (currentKey === goalKey) {
+      while (open.items.length) {
+        const current = open.pop();
+        const currentIndex = current.index;
+        if (closed[currentIndex]) continue;
+        if (currentIndex === goalIndex) {
           const path = [];
-          let cursor = goalKey;
-          while (cursor !== startKey) {
-            const [x, y] = cursor.split(',').map(Number);
+          let cursor = goalIndex;
+          while (cursor !== startIndex) {
+            const x = cursor % width;
+            const y = Math.floor(cursor / width);
             path.push({ x, y });
-            cursor = cameFrom.get(cursor);
-            if (!cursor) return [];
+            cursor = cameFrom[cursor];
+            if (cursor < 0) return [];
           }
           path.reverse();
           return path;
         }
-        closed.add(currentKey);
+        closed[currentIndex] = 1;
 
         for (const [dx, dy, cost] of directions) {
           const nx = current.x + dx;
           const ny = current.y + dy;
-          if (!inBounds(blocked, nx, ny) || blocked[ny][nx]) continue;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height || blocked[ny][nx]) continue;
           // Prevent diagonal movement from squeezing through two touching blockers.
           if (dx && dy && (blocked[current.y][nx] || blocked[ny][current.x])) continue;
-          const nextKey = key(nx, ny);
-          if (closed.has(nextKey)) continue;
+          const nextIndex = ny * width + nx;
+          if (closed[nextIndex]) continue;
           const tentative = current.g + cost;
-          if (tentative >= (gScore.has(nextKey) ? gScore.get(nextKey) : Infinity)) continue;
-          cameFrom.set(nextKey, currentKey);
-          gScore.set(nextKey, tentative);
-          open.push({ x: nx, y: ny, g: tentative, f: tentative + heuristic(nx, ny) });
+          if (tentative >= gScore[nextIndex]) continue;
+          cameFrom[nextIndex] = currentIndex;
+          gScore[nextIndex] = tentative;
+          open.push({
+            index: nextIndex,
+            x: nx,
+            y: ny,
+            g: tentative,
+            f: tentative + heuristic(nx, ny),
+            order: order++
+          });
         }
       }
       return [];
@@ -519,14 +535,16 @@
       expandTileLayer,
       toPhaserTileLayer,
       toCollisionLayer,
-      createExpandedWorld,
       createGroundBase,
       getTreeScale,
-      splitWorldIntoChunks,
-      extractChunkFromWorld,
+      prepareWorldGenerator,
+      createChunkData,
       getChunkAtTile,
       getChunkNeighborhood,
-      planChunkStreaming
+      planChunkStreaming,
+      CLIFF_TILE_IDS,
+      TREE_SPRITE_IDS,
+      SOLID_STRUCTURE_TILE_IDS
     };
   })(window);
   </script>
@@ -617,49 +635,61 @@
 
       buildWorld(sourceLayers) {
         core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
-        // Keep only the compact source map so unloaded regions can be rebuilt
-        // deterministically without retaining all generated chunk arrays.
-        this.sourceLayers = sourceLayers;
-        const expanded = core.createExpandedWorld(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
+        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
 
-        // Prepare one authoritative collision grid for the complete world.
-        // Pathfinding uses this grid even when distant Phaser chunks are unloaded.
-        this.cliffTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167]);
-        this.solidStructureTileIds = new Set([
-          703, 704, 785, 798, 812, 849, 896, 897, 898, 899,
-          904, 905, 923, 924, 926, 931, 932,
-          952, 953, 954, 1004, 1006, 1007, 1008, 1009
-        ]);
-        this.treeSpriteIds = new Set([207, 261, 706, 730, 784, 760, 838]);
-        this.blocked = expanded.blocked;
+        this.cliffTileIds = new Set(core.CLIFF_TILE_IDS);
+        this.solidStructureTileIds = new Set(core.SOLID_STRUCTURE_TILE_IDS);
+        this.treeSpriteIds = new Set(core.TREE_SPRITE_IDS);
 
-        for (let y = 0; y < WORLD_TILES; y += 1) {
-          for (let x = 0; x < WORLD_TILES; x += 1) {
-            const groundId = expanded.ground[y][x];
-            const structureId = expanded.structures[y][x];
-            if (this.cliffTileIds.has(groundId) || this.treeSpriteIds.has(structureId) || this.solidStructureTileIds.has(structureId)) {
-              this.blocked[y][x] = true;
-            }
-          }
-        }
-
-        // Split the exact same world data into independent 30x30 chunks.
-        // Tile arrays remain available for global pathfinding and reloading;
-        // Phaser render objects and collision layers are streamed separately.
-        expanded.blocked = this.blocked;
-        this.chunkGrid = core.splitWorldIntoChunks(expanded, CHUNK_TILES);
-        this.chunks = new Map(this.chunkGrid.chunks.map(chunk => [chunk.id, chunk]));
+        const columns = Math.ceil(WORLD_TILES / CHUNK_TILES);
+        const rows = Math.ceil(WORLD_TILES / CHUNK_TILES);
+        this.chunkGrid = { width: WORLD_TILES, height: WORLD_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
+        this.chunks = new Map();
         this.activeChunkIds = new Set();
         this.streamingCenterId = null;
         this.chunkTexture = this.textures.get('tiles');
 
-        // Initial load: current chunk plus its eight neighbours, clipped at world edges.
-        this.updateChunkStreaming(true);
-        // The first active window is ready. Release generated arrays for all
-        // distant chunks immediately; their data will be recreated on demand.
-        for (const chunk of this.chunkGrid.chunks) {
-          if (!this.activeChunkIds.has(chunk.id)) this.releaseChunkData(chunk);
+        // Global collision remains available to the current whole-world A*.
+        // Terrain/render arrays are generated one chunk at a time and retained
+        // only for the initial active window; distant chunk arrays are discarded.
+        this.blocked = Array.from({ length: WORLD_TILES }, () => Array(WORLD_TILES).fill(false));
+        const center = core.getChunkAtTile(
+          PLAYER_START.x, PLAYER_START.y, CHUNK_TILES, columns, rows
+        );
+        const initialIds = new Set(core.getChunkNeighborhood(
+          center.chunkX, center.chunkY, columns, rows, CHUNK_LOAD_RADIUS
+        ).map(item => item.id));
+
+        for (let chunkY = 0; chunkY < rows; chunkY += 1) {
+          for (let chunkX = 0; chunkX < columns; chunkX += 1) {
+            const data = core.createChunkData(this.worldGenerator, chunkX, chunkY, CHUNK_TILES);
+            for (let localY = 0; localY < data.height; localY += 1) {
+              for (let localX = 0; localX < data.width; localX += 1) {
+                this.blocked[data.tileY + localY][data.tileX + localX] = data.blocked[localY][localX];
+              }
+            }
+
+            const chunk = {
+              id: data.id,
+              chunkX,
+              chunkY,
+              tileX: data.tileX,
+              tileY: data.tileY,
+              width: data.width,
+              height: data.height,
+              ground: initialIds.has(data.id) ? data.ground : null,
+              structures: initialIds.has(data.id) ? data.structures : null,
+              upperObjects: initialIds.has(data.id) ? data.upperObjects : null,
+              blocked: initialIds.has(data.id) ? data.blocked : null,
+              state: initialIds.has(data.id) ? 'prepared' : 'unloaded'
+            };
+            this.chunks.set(chunk.id, chunk);
+            this.chunkGrid.chunks.push(chunk);
+          }
         }
+
+        // Load the spawn's 3x3 neighbourhood (clipped by world boundaries).
+        this.updateChunkStreaming(true);
       }
 
       releaseChunkData(chunk) {
@@ -672,21 +702,14 @@
       }
 
       rebuildMissingChunkData(chunks) {
-        const missing = (chunks || []).filter(chunk =>
-          chunk && (!Array.isArray(chunk.ground) || !Array.isArray(chunk.structures) ||
-          !Array.isArray(chunk.upperObjects) || !Array.isArray(chunk.blocked))
-        );
-        if (!missing.length) return;
+        for (const chunk of chunks || []) {
+          if (!chunk || (Array.isArray(chunk.ground) && Array.isArray(chunk.structures) &&
+              Array.isArray(chunk.upperObjects) && Array.isArray(chunk.blocked))) continue;
 
-        // One deterministic regeneration serves every missing chunk in this
-        // streaming transition. The temporary full-world arrays go out of scope
-        // as soon as the requested slices have been copied.
-        const regenerated = core.createExpandedWorld(
-          this.sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START
-        );
-        for (const chunk of missing) {
-          const data = core.extractChunkFromWorld(
-            regenerated, this.blocked, chunk.tileX, chunk.tileY, this.chunkGrid.chunkSize
+          // Rebuild only this chunk. The generator uses global coordinates and a
+          // fixed seed, so its result is identical without regenerating other areas.
+          const data = core.createChunkData(
+            this.worldGenerator, chunk.chunkX, chunk.chunkY, this.chunkGrid.chunkSize
           );
           chunk.ground = data.ground;
           chunk.structures = data.structures;
