@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V14 Monstro de Prova</title>
+  <title>CONQUISTADOR — V15 Inventário</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -966,6 +966,316 @@
       EventBus, EntityManager, StatusSystem, LevelSystem, SaveSystem, MonsterSystem, GameData,
       schemaVersion: 4
     });
+  })(window);
+  </script>
+
+  <script id="conquistador-inventory-v15">
+  (function (root) {
+    'use strict';
+    // InventorySystem is an independent UI module. It reads the public progress
+    // API and never accesses SaveSystem or LocalStorage directly.
+    class InventorySystem {
+      constructor(api, options = {}) {
+        if (!api || !api.events || !api.progress || !api.data) {
+          throw new TypeError('InventorySystem exige events, progress e data.');
+        }
+        this.api = api;
+        this.document = options.document || root.document;
+        if (!this.document || !this.document.body) {
+          throw new TypeError('InventorySystem exige um documento DOM ativo.');
+        }
+        this.opened = false;
+        this.active = true;
+        this.pendingSave = false;
+        this.createUI();
+        this.unsubscribers = [
+          this.api.events.on('progress:changed', event => {
+            if (event && event.section === 'items') {
+              this.pendingSave = true;
+              this.refresh();
+            }
+          }),
+          this.api.events.on('save:written', () => {
+            this.pendingSave = false;
+            this.refresh();
+          })
+        ];
+        this.refresh();
+      }
+
+      createElement(tag, styles = {}) {
+        const element = this.document.createElement(tag);
+        Object.assign(element.style, styles);
+        return element;
+      }
+
+      createUI() {
+        const button = this.createElement('button', {
+          position: 'fixed',
+          top: 'max(48px, env(safe-area-inset-top))',
+          right: 'max(10px, env(safe-area-inset-right))',
+          zIndex: '40',
+          minHeight: '40px',
+          padding: '8px 12px',
+          border: '2px solid #d8c27a',
+          borderRadius: '10px',
+          background: '#263b2b',
+          color: '#fff4cc',
+          font: 'bold 12px system-ui, sans-serif',
+          boxShadow: '0 2px 0 #142219',
+          touchAction: 'manipulation',
+          cursor: 'pointer'
+        });
+        button.type = 'button';
+        button.textContent = 'INVENTÁRIO';
+        button.setAttribute('aria-label', 'Abrir inventário');
+        button.setAttribute('aria-expanded', 'false');
+        this.buttonHandler = () => this.setOpen(!this.opened);
+        button.addEventListener('click', this.buttonHandler);
+
+        const backdrop = this.createElement('div', {
+          position: 'fixed',
+          inset: '0',
+          zIndex: '100',
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 'max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom))',
+          background: 'rgba(5, 12, 8, .78)',
+          touchAction: 'auto',
+          overscrollBehavior: 'contain'
+        });
+        backdrop.setAttribute('role', 'presentation');
+
+        const panel = this.createElement('section', {
+          width: 'min(100%, 420px)',
+          maxHeight: 'min(82dvh, 620px)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          border: '2px solid #9b8950',
+          borderRadius: '16px',
+          background: 'linear-gradient(180deg, #263d2c 0%, #17271d 100%)',
+          color: '#f5edcf',
+          boxShadow: '0 16px 48px rgba(0,0,0,.55)',
+          font: '14px/1.4 system-ui, sans-serif',
+          touchAction: 'pan-y'
+        });
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        panel.setAttribute('aria-label', 'Inventário do jogador');
+
+        const header = this.createElement('div', {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '15px 16px',
+          borderBottom: '1px solid rgba(216,194,122,.35)'
+        });
+        const headingWrap = this.createElement('div');
+        const heading = this.createElement('div', {
+          fontSize: '18px',
+          fontWeight: '800',
+          letterSpacing: '.04em'
+        });
+        heading.textContent = 'INVENTÁRIO';
+        const summary = this.createElement('div', {
+          marginTop: '3px',
+          color: '#c8c6a7',
+          fontSize: '12px'
+        });
+        headingWrap.append(heading, summary);
+
+        const close = this.createElement('button', {
+          minWidth: '38px',
+          minHeight: '38px',
+          border: '1px solid #9b8950',
+          borderRadius: '9px',
+          background: '#3b3020',
+          color: '#fff4cc',
+          fontSize: '20px',
+          fontWeight: '700',
+          touchAction: 'manipulation'
+        });
+        close.type = 'button';
+        close.textContent = '×';
+        close.setAttribute('aria-label', 'Fechar inventário');
+        this.closeHandler = () => this.setOpen(false);
+        close.addEventListener('click', this.closeHandler);
+        header.append(headingWrap, close);
+
+        const content = this.createElement('div', {
+          minHeight: '120px',
+          overflowY: 'auto',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '9px',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch'
+        });
+
+        const footer = this.createElement('div', {
+          padding: '10px 16px',
+          borderTop: '1px solid rgba(216,194,122,.25)',
+          color: '#aaaF91',
+          fontSize: '11px',
+          textAlign: 'center'
+        });
+        footer.textContent = 'Os materiais coletados são salvos automaticamente.';
+        panel.append(header, content, footer);
+        backdrop.appendChild(panel);
+        this.document.body.append(button, backdrop);
+
+        this.button = button;
+        this.closeButton = close;
+        this.backdrop = backdrop;
+        this.panel = panel;
+        this.summary = summary;
+        this.content = content;
+        this.footer = footer;
+        this.backdropHandler = event => {
+          if (event.target === backdrop) this.setOpen(false);
+        };
+        backdrop.addEventListener('click', this.backdropHandler);
+      }
+
+      getItems() {
+        const items = this.api.progress.get('items');
+        return Array.isArray(items) ? items : [];
+      }
+
+      getItemDefinition(itemId) {
+        const definitions = this.api.data.ITEMS || {};
+        return definitions[itemId] || { id: itemId, name: itemId, category: 'material' };
+      }
+
+      refresh() {
+        if (!this.active || !this.content) return;
+        const groupedItems = new Map();
+        for (const savedItem of this.getItems()) {
+          if (!savedItem || typeof savedItem.id !== 'string' || !savedItem.id) continue;
+          const quantity = Math.max(0, Math.floor(Number(savedItem.quantity) || 0));
+          if (quantity <= 0) continue;
+          groupedItems.set(savedItem.id, (groupedItems.get(savedItem.id) || 0) + quantity);
+        }
+        const items = Array.from(groupedItems, ([id, quantity]) => ({ id, quantity }))
+          .sort((a, b) => {
+            const aName = this.getItemDefinition(a.id).name || a.id;
+            const bName = this.getItemDefinition(b.id).name || b.id;
+            return String(aName).localeCompare(String(bName), 'pt-BR');
+          });
+
+        const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+        this.summary.textContent = `${items.length} ${items.length === 1 ? 'tipo de item' : 'tipos de itens'} • ${totalQuantity} ${totalQuantity === 1 ? 'unidade' : 'unidades'}`;
+        this.footer.textContent = this.pendingSave
+          ? 'Salvando inventário com segurança…'
+          : 'Inventário salvo automaticamente.';
+        this.footer.style.color = this.pendingSave ? '#ffe8a1' : '#aaaf91';
+        while (this.content.firstChild) this.content.removeChild(this.content.firstChild);
+
+        if (!items.length) {
+          const empty = this.createElement('div', {
+            padding: '30px 16px',
+            border: '1px dashed rgba(216,194,122,.45)',
+            borderRadius: '12px',
+            color: '#d1cfb2',
+            textAlign: 'center'
+          });
+          const icon = this.createElement('div', { fontSize: '30px', marginBottom: '8px' });
+          icon.textContent = '🎒';
+          const title = this.createElement('div', { fontWeight: '700', color: '#fff4cc' });
+          title.textContent = 'Sua mochila está vazia';
+          const hint = this.createElement('div', { marginTop: '5px', fontSize: '12px' });
+          hint.textContent = 'Derrote monstros e colete os itens que eles deixam cair.';
+          empty.append(icon, title, hint);
+          this.content.appendChild(empty);
+          return;
+        }
+
+        for (const item of items) {
+          const definition = this.getItemDefinition(item.id);
+          const row = this.createElement('div', {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            minHeight: '66px',
+            padding: '10px 12px',
+            border: '1px solid rgba(216,194,122,.32)',
+            borderRadius: '11px',
+            background: 'rgba(8,17,11,.42)'
+          });
+          const icon = this.createElement('div', {
+            width: '42px',
+            height: '42px',
+            flex: '0 0 42px',
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: '10px',
+            background: '#314a35',
+            color: '#a8f3d1',
+            fontSize: '24px',
+            textShadow: '0 1px 3px #000'
+          });
+          icon.textContent = item.id === 'slime_gel' ? '◆' : '✦';
+          const details = this.createElement('div', {
+            minWidth: '0',
+            flex: '1'
+          });
+          const name = this.createElement('div', {
+            color: '#fff4cc',
+            fontWeight: '700',
+            overflowWrap: 'anywhere'
+          });
+          name.textContent = definition.name || item.id;
+          const category = this.createElement('div', {
+            marginTop: '2px',
+            color: '#aeb99f',
+            fontSize: '11px',
+            textTransform: 'uppercase',
+            letterSpacing: '.06em'
+          });
+          category.textContent = definition.category === 'material' ? 'Material' : (definition.category || 'Item');
+          const quantity = this.createElement('div', {
+            minWidth: '48px',
+            padding: '6px 9px',
+            borderRadius: '8px',
+            background: '#4a3d25',
+            color: '#ffe8a1',
+            fontWeight: '800',
+            textAlign: 'center',
+            fontVariantNumeric: 'tabular-nums'
+          });
+          quantity.textContent = `×${item.quantity}`;
+          details.append(name, category);
+          row.append(icon, details, quantity);
+          this.content.appendChild(row);
+        }
+      }
+
+      setOpen(open) {
+        if (!this.active) return;
+        this.opened = Boolean(open);
+        this.backdrop.style.display = this.opened ? 'flex' : 'none';
+        this.button.setAttribute('aria-expanded', String(this.opened));
+        if (this.opened) this.refresh();
+      }
+
+      destroy() {
+        if (!this.active) return;
+        this.active = false;
+        for (const unsubscribe of this.unsubscribers || []) unsubscribe();
+        this.unsubscribers = [];
+        if (this.button) this.button.removeEventListener('click', this.buttonHandler);
+        if (this.closeButton) this.closeButton.removeEventListener('click', this.closeHandler);
+        if (this.backdrop) this.backdrop.removeEventListener('click', this.backdropHandler);
+        if (this.button && this.button.remove) this.button.remove();
+        if (this.backdrop && this.backdrop.remove) this.backdrop.remove();
+      }
+    }
+
+    root.CONQUISTADOR_V15_SYSTEMS = Object.freeze({ InventorySystem });
   })(window);
   </script>
 
@@ -1997,9 +2307,14 @@
             scene: this,
             tileSize: TILE_SIZE
           });
+          this.inventorySystem = new window.CONQUISTADOR_V15_SYSTEMS.InventorySystem(this.extensionAPI, {
+            document: window.document
+          });
           this.events.once('shutdown', () => {
             if (this.monsterSystem) this.monsterSystem.destroy();
+            if (this.inventorySystem) this.inventorySystem.destroy();
             this.monsterSystem = null;
+            this.inventorySystem = null;
           });
           loading.style.display = 'none';
         } catch (error) {
@@ -3293,6 +3608,14 @@
         getMonsterSystem: () => {
           const scene = game.scene && game.scene.getScene ? game.scene.getScene('WorldScene') : null;
           return scene && scene.monsterSystem ? scene.monsterSystem : null;
+        }
+      });
+      window.CONQUISTADOR_V15 = Object.freeze({
+        version: 15,
+        game,
+        getInventorySystem: () => {
+          const scene = game.scene && game.scene.getScene ? game.scene.getScene('WorldScene') : null;
+          return scene && scene.inventorySystem ? scene.inventorySystem : null;
         }
       });
     } catch (error) {
