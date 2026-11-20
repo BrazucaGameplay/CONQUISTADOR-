@@ -972,8 +972,7 @@
   <script id="conquistador-inventory-v15">
   (function (root) {
     'use strict';
-    // InventorySystem is an independent UI module. It reads the public progress
-    // API and never accesses SaveSystem or LocalStorage directly.
+    // InventorySystem: presentation-only module backed by the public progress API.
     class InventorySystem {
       constructor(api, options = {}) {
         if (!api || !api.events || !api.progress || !api.data) {
@@ -986,159 +985,177 @@
         }
         this.opened = false;
         this.active = true;
-        this.pendingSave = false;
         this.createUI();
         this.unsubscribers = [
           this.api.events.on('progress:changed', event => {
-            if (event && event.section === 'items') {
-              this.pendingSave = true;
-              this.refresh();
-            }
+            if (event && event.section === 'items') this.refresh();
           }),
-          this.api.events.on('save:written', () => {
-            this.pendingSave = false;
-            this.refresh();
-          })
+          this.api.events.on('save:written', () => this.refresh())
         ];
         this.refresh();
       }
 
-      createElement(tag, styles = {}) {
-        const element = this.document.createElement(tag);
-        Object.assign(element.style, styles);
-        return element;
+      el(tag, styles = {}, className = '') {
+        const node = this.document.createElement(tag);
+        Object.assign(node.style, styles);
+        if (className) node.className = className;
+        return node;
       }
 
       createUI() {
-        const button = this.createElement('button', {
+        const openButton = this.el('button', {
           position: 'fixed',
-          top: 'max(48px, env(safe-area-inset-top))',
-          right: 'max(10px, env(safe-area-inset-right))',
+          top: 'max(52px, env(safe-area-inset-top))',
+          right: 'max(12px, env(safe-area-inset-right))',
           zIndex: '40',
-          minHeight: '40px',
-          padding: '8px 12px',
-          border: '2px solid #d8c27a',
-          borderRadius: '10px',
-          background: '#263b2b',
-          color: '#fff4cc',
-          font: 'bold 12px system-ui, sans-serif',
-          boxShadow: '0 2px 0 #142219',
+          padding: '7px 13px',
+          minHeight: '38px',
+          border: '1px solid rgba(221,196,128,.82)',
+          borderRadius: '20px',
+          background: 'linear-gradient(180deg, rgba(55,43,31,.96), rgba(22,19,17,.96))',
+          color: '#f4dfaa',
+          font: '700 11px/1 Georgia, serif',
+          letterSpacing: '.13em',
+          textShadow: '0 1px 2px #000',
+          boxShadow: '0 3px 12px rgba(0,0,0,.45)',
           touchAction: 'manipulation',
           cursor: 'pointer'
         });
-        button.type = 'button';
-        button.textContent = 'INVENTÁRIO';
-        button.setAttribute('aria-label', 'Abrir inventário');
-        button.setAttribute('aria-expanded', 'false');
-        this.buttonHandler = () => this.setOpen(!this.opened);
-        button.addEventListener('click', this.buttonHandler);
+        openButton.type = 'button';
+        openButton.textContent = 'MOCHILA';
+        openButton.setAttribute('aria-label', 'Abrir mochila');
+        openButton.setAttribute('aria-expanded', 'false');
+        this.openHandler = () => this.setOpen(!this.opened);
+        openButton.addEventListener('click', this.openHandler);
 
-        const backdrop = this.createElement('div', {
+        const backdrop = this.el('div', {
           position: 'fixed',
           inset: '0',
           zIndex: '100',
           display: 'none',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 'max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom))',
-          background: 'rgba(5, 12, 8, .78)',
-          touchAction: 'auto',
+          padding: 'max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom))',
+          background: 'rgba(0,0,0,.60)',
+          backdropFilter: 'blur(1.5px)',
+          WebkitBackdropFilter: 'blur(1.5px)',
           overscrollBehavior: 'contain'
         });
         backdrop.setAttribute('role', 'presentation');
 
-        const panel = this.createElement('section', {
-          width: 'min(100%, 420px)',
-          maxHeight: 'min(82dvh, 620px)',
+        const panel = this.el('section', {
+          position: 'relative',
+          width: 'min(100%, 540px)',
+          height: 'min(88dvh, 760px)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          border: '2px solid #9b8950',
-          borderRadius: '16px',
-          background: 'linear-gradient(180deg, #263d2c 0%, #17271d 100%)',
-          color: '#f5edcf',
-          boxShadow: '0 16px 48px rgba(0,0,0,.55)',
-          font: '14px/1.4 system-ui, sans-serif',
+          border: '2px solid rgba(190,169,125,.9)',
+          borderRadius: '9px',
+          outline: '1px solid rgba(28,20,14,.95)',
+          outlineOffset: '-6px',
+          background: 'linear-gradient(180deg, rgba(31,25,21,.94), rgba(12,12,11,.91))',
+          color: '#f3ead8',
+          boxShadow: '0 18px 55px rgba(0,0,0,.68), inset 0 0 38px rgba(0,0,0,.34)',
+          font: '14px/1.35 Georgia, "Times New Roman", serif',
           touchAction: 'pan-y'
         });
         panel.setAttribute('role', 'dialog');
         panel.setAttribute('aria-modal', 'true');
-        panel.setAttribute('aria-label', 'Inventário do jogador');
+        panel.setAttribute('aria-label', 'Mochila do jogador');
 
-        const header = this.createElement('div', {
+        const topRule = this.el('div', {
+          flex: '0 0 auto',
+          height: '4px',
+          margin: '7px 14px 0',
+          background: 'linear-gradient(90deg, transparent, rgba(204,179,124,.7), transparent)'
+        });
+        const header = this.el('div', {
+          position: 'relative',
+          flex: '0 0 auto',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          padding: '15px 16px',
-          borderBottom: '1px solid rgba(216,194,122,.35)'
+          justifyContent: 'center',
+          minHeight: '62px',
+          padding: '8px 54px 7px'
         });
-        const headingWrap = this.createElement('div');
-        const heading = this.createElement('div', {
-          fontSize: '18px',
-          fontWeight: '800',
-          letterSpacing: '.04em'
+        const title = this.el('div', {
+          color: '#f2e4c7',
+          font: 'bold 23px/1 Georgia, "Times New Roman", serif',
+          letterSpacing: '.055em',
+          textAlign: 'center',
+          textShadow: '0 2px 4px #000, 0 0 12px rgba(221,190,125,.18)'
         });
-        heading.textContent = 'INVENTÁRIO';
-        const summary = this.createElement('div', {
-          marginTop: '3px',
-          color: '#c8c6a7',
-          fontSize: '12px'
-        });
-        headingWrap.append(heading, summary);
-
-        const close = this.createElement('button', {
-          minWidth: '38px',
-          minHeight: '38px',
-          border: '1px solid #9b8950',
-          borderRadius: '9px',
-          background: '#3b3020',
-          color: '#fff4cc',
-          fontSize: '20px',
-          fontWeight: '700',
-          touchAction: 'manipulation'
+        title.textContent = 'MOCHILA';
+        const close = this.el('button', {
+          position: 'absolute',
+          right: '10px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: '36px',
+          height: '36px',
+          display: 'grid',
+          placeItems: 'center',
+          border: '1px solid rgba(219,198,157,.72)',
+          borderRadius: '50%',
+          background: 'linear-gradient(145deg, rgba(86,72,61,.95), rgba(25,22,20,.98))',
+          color: '#f7eddb',
+          font: '26px/1 Arial, sans-serif',
+          boxShadow: '0 2px 8px rgba(0,0,0,.55)',
+          touchAction: 'manipulation',
+          cursor: 'pointer'
         });
         close.type = 'button';
         close.textContent = '×';
-        close.setAttribute('aria-label', 'Fechar inventário');
+        close.setAttribute('aria-label', 'Fechar mochila');
         this.closeHandler = () => this.setOpen(false);
         close.addEventListener('click', this.closeHandler);
-        header.append(headingWrap, close);
+        header.append(title, close);
 
-        const content = this.createElement('div', {
-          minHeight: '120px',
+        const divider = this.el('div', {
+          flex: '0 0 auto',
+          height: '1px',
+          margin: '0 17px 9px',
+          background: 'linear-gradient(90deg, transparent, rgba(205,183,137,.65), transparent)'
+        });
+
+        const content = this.el('div', {
+          flex: '1 1 auto',
+          minHeight: '0',
           overflowY: 'auto',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '9px',
+          padding: '8px 12px 24px',
           overscrollBehavior: 'contain',
           WebkitOverflowScrolling: 'touch'
         });
 
-        const footer = this.createElement('div', {
-          padding: '10px 16px',
-          borderTop: '1px solid rgba(216,194,122,.25)',
-          color: '#aaaF91',
-          fontSize: '11px',
+        const empty = this.el('div', {
+          display: 'none',
+          padding: '52px 18px',
+          color: 'rgba(237,225,203,.8)',
+          font: 'italic 16px/1.5 Georgia, serif',
           textAlign: 'center'
         });
-        footer.textContent = 'Os materiais coletados são salvos automaticamente.';
-        panel.append(header, content, footer);
-        backdrop.appendChild(panel);
-        this.document.body.append(button, backdrop);
+        empty.textContent = 'A mochila está vazia.';
+        content.appendChild(empty);
 
-        this.button = button;
+        panel.append(topRule, header, divider, content);
+        backdrop.appendChild(panel);
+        this.document.body.append(openButton, backdrop);
+
+        this.openButton = openButton;
         this.closeButton = close;
         this.backdrop = backdrop;
         this.panel = panel;
-        this.summary = summary;
         this.content = content;
-        this.footer = footer;
+        this.emptyState = empty;
         this.backdropHandler = event => {
           if (event.target === backdrop) this.setOpen(false);
         };
         backdrop.addEventListener('click', this.backdropHandler);
+        this.keyHandler = event => {
+          if (this.opened && event.key === 'Escape') this.setOpen(false);
+        };
+        this.document.addEventListener('keydown', this.keyHandler);
       }
 
       getItems() {
@@ -1151,106 +1168,139 @@
         return definitions[itemId] || { id: itemId, name: itemId, category: 'material' };
       }
 
+      getIcon(item) {
+        const icon = this.el('div', {
+          width: '58px',
+          height: '58px',
+          margin: '0 auto 7px',
+          display: 'grid',
+          placeItems: 'center',
+          color: item.id === 'slime_gel' ? '#9df4dc' : '#e8d5a9',
+          font: '42px/1 "Arial Unicode MS", "DejaVu Sans", sans-serif',
+          textShadow: item.id === 'slime_gel'
+            ? '0 0 5px #48bda7, 0 0 12px rgba(53,225,192,.6), 2px 3px 2px #000'
+            : '0 2px 3px #000, 0 0 8px rgba(230,203,150,.35)',
+          filter: 'drop-shadow(0 3px 2px rgba(0,0,0,.85))'
+        });
+        icon.textContent = item.id === 'slime_gel' ? '◆' : '✦';
+        return icon;
+      }
+
       refresh() {
         if (!this.active || !this.content) return;
-        const groupedItems = new Map();
-        for (const savedItem of this.getItems()) {
-          if (!savedItem || typeof savedItem.id !== 'string' || !savedItem.id) continue;
-          const quantity = Math.max(0, Math.floor(Number(savedItem.quantity) || 0));
-          if (quantity <= 0) continue;
-          groupedItems.set(savedItem.id, (groupedItems.get(savedItem.id) || 0) + quantity);
-        }
-        const items = Array.from(groupedItems, ([id, quantity]) => ({ id, quantity }))
-          .sort((a, b) => {
-            const aName = this.getItemDefinition(a.id).name || a.id;
-            const bName = this.getItemDefinition(b.id).name || b.id;
-            return String(aName).localeCompare(String(bName), 'pt-BR');
-          });
-
-        const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-        this.summary.textContent = `${items.length} ${items.length === 1 ? 'tipo de item' : 'tipos de itens'} • ${totalQuantity} ${totalQuantity === 1 ? 'unidade' : 'unidades'}`;
-        this.footer.textContent = this.pendingSave
-          ? 'Salvando inventário com segurança…'
-          : 'Inventário salvo automaticamente.';
-        this.footer.style.color = this.pendingSave ? '#ffe8a1' : '#aaaf91';
-        while (this.content.firstChild) this.content.removeChild(this.content.firstChild);
-
-        if (!items.length) {
-          const empty = this.createElement('div', {
-            padding: '30px 16px',
-            border: '1px dashed rgba(216,194,122,.45)',
-            borderRadius: '12px',
-            color: '#d1cfb2',
-            textAlign: 'center'
-          });
-          const icon = this.createElement('div', { fontSize: '30px', marginBottom: '8px' });
-          icon.textContent = '🎒';
-          const title = this.createElement('div', { fontWeight: '700', color: '#fff4cc' });
-          title.textContent = 'Sua mochila está vazia';
-          const hint = this.createElement('div', { marginTop: '5px', fontSize: '12px' });
-          hint.textContent = 'Derrote monstros e colete os itens que eles deixam cair.';
-          empty.append(icon, title, hint);
-          this.content.appendChild(empty);
-          return;
+        const grouped = new Map();
+        for (const saved of this.getItems()) {
+          if (!saved || typeof saved.id !== 'string' || !saved.id) continue;
+          const quantity = Math.max(0, Math.floor(Number(saved.quantity) || 0));
+          if (quantity > 0) grouped.set(saved.id, (grouped.get(saved.id) || 0) + quantity);
         }
 
+        const items = Array.from(grouped, ([id, quantity]) => ({
+          id,
+          quantity,
+          definition: this.getItemDefinition(id)
+        })).sort((a, b) => {
+          const categoryCompare = String(a.definition.category || 'material')
+            .localeCompare(String(b.definition.category || 'material'), 'pt-BR');
+          return categoryCompare || String(a.definition.name || a.id)
+            .localeCompare(String(b.definition.name || b.id), 'pt-BR');
+        });
+
+        while (this.content.children.length > 1) {
+          this.content.removeChild(this.content.lastChild);
+        }
+        this.emptyState.style.display = items.length ? 'none' : 'block';
+        if (!items.length) return;
+
+        const categories = new Map();
         for (const item of items) {
-          const definition = this.getItemDefinition(item.id);
-          const row = this.createElement('div', {
+          const category = String(item.definition.category || 'material').toLowerCase();
+          if (!categories.has(category)) categories.set(category, []);
+          categories.get(category).push(item);
+        }
+
+        const categoryNames = {
+          material: 'MATERIAIS',
+          consumable: 'CONSUMÍVEIS',
+          potion: 'POÇÕES',
+          booster: 'APRIMORAMENTOS',
+          equipment: 'EQUIPAMENTOS',
+          quest: 'MISSÃO'
+        };
+
+        for (const [category, categoryItems] of categories) {
+          const section = this.el('section', {
+            margin: '8px 2px 22px'
+          });
+          const heading = this.el('div', {
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '12px',
-            minHeight: '66px',
-            padding: '10px 12px',
-            border: '1px solid rgba(216,194,122,.32)',
-            borderRadius: '11px',
-            background: 'rgba(8,17,11,.42)'
-          });
-          const icon = this.createElement('div', {
-            width: '42px',
-            height: '42px',
-            flex: '0 0 42px',
-            display: 'grid',
-            placeItems: 'center',
-            borderRadius: '10px',
-            background: '#314a35',
-            color: '#a8f3d1',
-            fontSize: '24px',
-            textShadow: '0 1px 3px #000'
-          });
-          icon.textContent = item.id === 'slime_gel' ? '◆' : '✦';
-          const details = this.createElement('div', {
-            minWidth: '0',
-            flex: '1'
-          });
-          const name = this.createElement('div', {
-            color: '#fff4cc',
-            fontWeight: '700',
-            overflowWrap: 'anywhere'
-          });
-          name.textContent = definition.name || item.id;
-          const category = this.createElement('div', {
-            marginTop: '2px',
-            color: '#aeb99f',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            letterSpacing: '.06em'
-          });
-          category.textContent = definition.category === 'material' ? 'Material' : (definition.category || 'Item');
-          const quantity = this.createElement('div', {
-            minWidth: '48px',
-            padding: '6px 9px',
-            borderRadius: '8px',
-            background: '#4a3d25',
-            color: '#ffe8a1',
-            fontWeight: '800',
+            margin: '4px 3px 16px',
+            color: '#e9d8b7',
+            font: 'bold 17px/1.2 Georgia, "Times New Roman", serif',
+            letterSpacing: '.045em',
             textAlign: 'center',
-            fontVariantNumeric: 'tabular-nums'
+            textShadow: '0 2px 3px #000'
           });
-          quantity.textContent = `×${item.quantity}`;
-          details.append(name, category);
-          row.append(icon, details, quantity);
-          this.content.appendChild(row);
+          const left = this.el('span', {
+            height: '1px',
+            flex: '1 1 20px',
+            maxWidth: '70px',
+            background: 'linear-gradient(90deg, transparent, rgba(194,169,125,.65))'
+          });
+          const label = this.el('span');
+          label.textContent = categoryNames[category] || category.replace(/[_-]/g, ' ').toUpperCase();
+          const right = this.el('span', {
+            height: '1px',
+            flex: '1 1 20px',
+            maxWidth: '70px',
+            background: 'linear-gradient(90deg, rgba(194,169,125,.65), transparent)'
+          });
+          heading.append(left, label, right);
+
+          const grid = this.el('div', {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            columnGap: '5px',
+            rowGap: '19px',
+            alignItems: 'start'
+          });
+          for (const item of categoryItems) {
+            const cell = this.el('div', {
+              minWidth: '0',
+              minHeight: '112px',
+              padding: '1px 2px 4px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              textAlign: 'center',
+              color: '#eee6d7'
+            });
+            const icon = this.getIcon(item);
+            const name = this.el('div', {
+              maxWidth: '100%',
+              color: '#eee6d7',
+              font: '14px/1.18 Georgia, "Times New Roman", serif',
+              overflowWrap: 'anywhere',
+              textShadow: '0 2px 3px #000'
+            });
+            name.textContent = item.definition.name || item.id;
+            const quantity = this.el('div', {
+              marginTop: '3px',
+              color: '#c9bfae',
+              font: '12px/1.1 Georgia, "Times New Roman", serif',
+              fontVariantNumeric: 'tabular-nums',
+              textShadow: '0 1px 2px #000'
+            });
+            quantity.textContent = `(${item.quantity.toLocaleString('pt-BR')})`;
+            cell.append(icon, name, quantity);
+            grid.appendChild(cell);
+          }
+          section.append(heading, grid);
+          this.content.appendChild(section);
         }
       }
 
@@ -1258,7 +1308,7 @@
         if (!this.active) return;
         this.opened = Boolean(open);
         this.backdrop.style.display = this.opened ? 'flex' : 'none';
-        this.button.setAttribute('aria-expanded', String(this.opened));
+        this.openButton.setAttribute('aria-expanded', String(this.opened));
         if (this.opened) this.refresh();
       }
 
@@ -1267,10 +1317,11 @@
         this.active = false;
         for (const unsubscribe of this.unsubscribers || []) unsubscribe();
         this.unsubscribers = [];
-        if (this.button) this.button.removeEventListener('click', this.buttonHandler);
+        if (this.openButton) this.openButton.removeEventListener('click', this.openHandler);
         if (this.closeButton) this.closeButton.removeEventListener('click', this.closeHandler);
         if (this.backdrop) this.backdrop.removeEventListener('click', this.backdropHandler);
-        if (this.button && this.button.remove) this.button.remove();
+        if (this.document && this.keyHandler) this.document.removeEventListener('keydown', this.keyHandler);
+        if (this.openButton && this.openButton.remove) this.openButton.remove();
         if (this.backdrop && this.backdrop.remove) this.backdrop.remove();
       }
     }
