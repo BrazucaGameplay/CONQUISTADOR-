@@ -67,6 +67,15 @@
       return value - Math.floor(value);
     }
 
+    // Integer scale keeps the pixel-art crisp. Larger crowns are anchored at
+    // the trunk base, so the collision cell stays aligned with the ground.
+    function getTreeScale(x, y, tileId) {
+      const roll = stableNoise(x, y, tileId + 173);
+      if (roll < 0.20) return 2;
+      if (roll < 0.82) return 3;
+      return 4;
+    }
+
     function createExpandedWorld(sourceLayers, worldTiles, mapOffset, playerStart) {
       const layers = sourceLayers.filter((layer) => layer.type === 'tilelayer');
       if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
@@ -201,12 +210,13 @@
       // Their edge tiles are selected from the Wang cardinal-neighbour pattern.
       const cliffMask = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
       const cliffPatches = [
-        { x: 10, y: 12, rx: 5, ry: 4 },
-        { x: 76, y: 12, rx: 6, ry: 4 },
-        { x: 12, y: 79, rx: 6, ry: 5 },
-        { x: 78, y: 78, rx: 6, ry: 4 },
-        { x: 17, y: 49, rx: 3, ry: 6 },
-        { x: 74, y: 48, rx: 4, ry: 5 }
+        // Larger, irregular formations rather than isolated short cliff fragments.
+        { x: 9, y: 12, rx: 8, ry: 6 },
+        { x: 77, y: 12, rx: 9, ry: 7 },
+        { x: 12, y: 78, rx: 9, ry: 7 },
+        { x: 78, y: 78, rx: 9, ry: 7 },
+        { x: 17, y: 49, rx: 5, ry: 9 },
+        { x: 74, y: 48, rx: 6, ry: 9 }
       ];
       for (let pIndex = 0; pIndex < cliffPatches.length; pIndex += 1) {
         const patch = cliffPatches[pIndex];
@@ -388,7 +398,7 @@
       return [];
     }
 
-    root.CONQUISTADOR_CORE = { findPath, worldToTile, directionRow, expandTileLayer, toPhaserTileLayer, toCollisionLayer, createExpandedWorld, createGroundBase };
+    root.CONQUISTADOR_CORE = { findPath, worldToTile, directionRow, expandTileLayer, toPhaserTileLayer, toCollisionLayer, createExpandedWorld, createGroundBase, getTreeScale };
   })(window);
   </script>
 
@@ -516,14 +526,27 @@
         }
         this.createTileLayer(ground, 2);
 
-        // Keep the buildings visible, but decorative pieces do not become walls.
+        // Tree canopies are enlarged at integer pixel-art scales. Their base is
+        // anchored to the tile's lower edge and sorted by that base for occlusion.
+        // Every tree trunk remains a solid 1x1 collision cell; the canopy itself
+        // can overlap nearby ground without creating an oversized invisible wall.
+        const treeSpriteIds = new Set([703, 705, 706, 707, 731, 732, 733]);
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = structures[y][x];
             if (!tileId) continue;
-            this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
-              .setDepth(y * TILE_SIZE + TILE_SIZE);
-            if (solidStructureTileIds.has(tileId)) this.blocked[y][x] = true;
+            const image = this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId));
+            if (treeSpriteIds.has(tileId)) {
+              const scale = core.getTreeScale(x, y, tileId);
+              image.setOrigin(0.5, 1);
+              image.setPosition(x * TILE_SIZE + 8, (y + 1) * TILE_SIZE);
+              image.setScale(scale);
+              image.setDepth((y + 1) * TILE_SIZE + 1);
+              this.blocked[y][x] = true;
+            } else {
+              image.setDepth(y * TILE_SIZE + TILE_SIZE);
+              if (solidStructureTileIds.has(tileId)) this.blocked[y][x] = true;
+            }
           }
         }
         for (let y = 0; y < WORLD_TILES; y += 1) {
