@@ -105,8 +105,6 @@
     const CLIFF_PATCHES = [
       { x: 9, y: 12, rx: 9, ry: 7 },
       { x: 78, y: 12, rx: 10, ry: 8 },
-      { x: 11, y: 78, rx: 10, ry: 8 },
-      { x: 79, y: 78, rx: 10, ry: 8 },
       { x: 17, y: 49, rx: 6, ry: 9 },
       { x: 74, y: 48, rx: 7, ry: 9 }
     ];
@@ -121,17 +119,13 @@
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
       { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
-      // New southern extension: moderate woodland inland from the coastline.
-      { x: 13, y: 94, rx: 8, ry: 5, density: 0.25 },
-      { x: 43, y: 94, rx: 9, ry: 5, density: 0.19 },
-      { x: 76, y: 94, rx: 8, ry: 5, density: 0.25 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      // The southern trail reaches the beach but never continues into the sea.
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }, { x: 49, y: 96 }], width: 2 },
+      // The southern trail ends on the beach; the ocean is impassable.
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 85 }, { x: 49, y: 87 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
@@ -155,23 +149,25 @@
         Math.abs(y - generator.playerStart.y) <= 5;
     }
 
-    // The southern coastline is calculated from global X coordinates so the
-    // beach and ocean remain continuous across chunk boundaries.
+    // The coast now sits directly after the existing southern land area.
+    // Coordinates are global so the irregular shoreline is continuous across
+    // all three columns and every chunk boundary. The entire lower extension
+    // becomes ocean; only a narrow sand strip remains between land and water.
     function getSouthernCoastlineY(generator, x) {
-      const broadBend = Math.sin(x * 0.105 + 0.65) * 2.0;
-      const smallBend = Math.sin(x * 0.255 + 1.9) * 1.15;
-      const roughness = (stableNoise(x, 0, 997) - 0.5) * 1.6;
-      const baseline = generator.worldHeight - 20;
+      const broadBend = Math.sin(x * 0.105 + 0.65) * 1.75;
+      const smallBend = Math.sin(x * 0.255 + 1.9) * 0.75;
+      const roughness = (stableNoise(x, 0, 997) - 0.5) * 0.9;
+      const baseline = generator.legacyWorldHeight - 2;
       const coastY = Math.round(baseline + broadBend + smallBend + roughness);
-      return Math.max(generator.legacyWorldHeight + 6,
-        Math.min(generator.worldHeight - 15, coastY));
+      return Math.max(generator.legacyWorldHeight - 4,
+        Math.min(generator.legacyWorldHeight - 1, coastY));
     }
 
-    // Four cells of sand create a readable beach between grassland and sea.
-    // Ocean begins two cells below the irregular shoreline.
+    // Four sand rows form the beach. The shoreline is deliberately placed at
+    // the former southern land boundary, not near the bottom of the map.
     function isSouthernBeachCell(generator, x, y) {
       if (generator.worldHeight <= generator.legacyWorldHeight ||
-          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 6 ||
           y >= generator.worldHeight) return false;
       const distance = y - getSouthernCoastlineY(generator, x);
       return distance >= -2 && distance <= 1;
@@ -179,15 +175,16 @@
 
     function isOceanCell(generator, x, y) {
       if (generator.worldHeight <= generator.legacyWorldHeight ||
-          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 2 ||
           y >= generator.worldHeight) return false;
       return y >= getSouthernCoastlineY(generator, x) + 2;
     }
 
-    function getBeachTileId(_generator, _x, _y) {
-      // GID 51 is the Puny World full-sand tile. The irregular beach boundary
-      // itself supplies the grass-to-sand variation without misusing corner tiles.
-      return 51;
+    function getBeachTileId(generator, x, y) {
+      const distance = y - getSouthernCoastlineY(generator, x);
+      // GID 52 is the Puny World grass-to-sand transition, oriented with land north
+      // and beach south. The remaining rows use the full-sand GID 51.
+      return distance === -2 ? 52 : 51;
     }
 
     function getShorelineTileId(generator, x, y) {
@@ -195,7 +192,7 @@
       // world sides as open water so the coastline does not turn up the edges.
       const isWaterAt = (tx, ty) => {
         if (tx < 0 || tx >= generator.worldTiles || ty >= generator.worldHeight) return true;
-        if (ty < generator.legacyWorldHeight || ty < 0) return false;
+        if (ty < generator.legacyWorldHeight - 2 || ty < 0) return false;
         return isOceanCell(generator, tx, ty);
       };
       const mask =
@@ -218,8 +215,8 @@
       return variation < 0.10 ? 316 : 321;
     }
 
-    // Preserve the exact old southern edge of the original 90x90 world. The
-    // added rows are new terrain; cells y=88 and y=89 keep their previous rules.
+    // Keep procedural trees/details inland from the new shoreline. The last
+    // southern rows are reserved for the beach and water transition.
     function isWithinGeneratedArea(generator, x, y) {
       if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
       if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
