@@ -96,6 +96,12 @@
       1: 163, 2: 109, 3: 136, 4: 111, 5: 167, 6: 110, 7: 112,
       8: 165, 9: 164, 10: 166, 11: 139, 12: 138, 13: 140, 14: 113, 15: 137
     };
+    // Puny World Wang transitions from sand (3) to shallow seawater (8).
+    // Keys use the same N/E/S/W bit order as the cliff-mask renderer.
+    const SHORELINE_TILE_BY_MASK = {
+      1: 337, 2: 283, 3: 310, 4: 285, 6: 284, 7: 286,
+      8: 339, 9: 338, 11: 313, 12: 312, 13: 314, 14: 287
+    };
     const CLIFF_PATCHES = [
       { x: 9, y: 12, rx: 9, ry: 7 },
       { x: 78, y: 12, rx: 10, ry: 8 },
@@ -115,16 +121,17 @@
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
       { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
-      // New southern extension: moderate woodland around the approach to the ridge.
-      { x: 13, y: 96, rx: 8, ry: 5, density: 0.25 },
-      { x: 43, y: 96, rx: 9, ry: 5, density: 0.19 },
-      { x: 76, y: 96, rx: 8, ry: 5, density: 0.25 }
+      // New southern extension: moderate woodland inland from the coastline.
+      { x: 13, y: 94, rx: 8, ry: 5, density: 0.25 },
+      { x: 43, y: 94, rx: 9, ry: 5, density: 0.19 },
+      { x: 76, y: 94, rx: 8, ry: 5, density: 0.25 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }, { x: 49, y: 97 }, { x: 45, y: 101 }], width: 2 },
+      // The southern trail reaches the beach but never continues into the sea.
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }, { x: 49, y: 96 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
@@ -148,20 +155,67 @@
         Math.abs(y - generator.playerStart.y) <= 5;
     }
 
-    // The southern mountain wall is generated from global X coordinates, so
-    // every adjacent chunk shares the exact same irregular ridge line.
-    function getSouthernRidgeTop(generator, x) {
-      const wave = Math.sin(x * 0.145) * 1.7 + Math.sin(x * 0.047 + 0.8) * 2.1;
-      const roughness = (stableNoise(x, 0, 991) - 0.5) * 1.6;
-      const base = generator.worldHeight - 15;
-      return Math.max(generator.worldHeight - 21,
-        Math.min(generator.worldHeight - 9, base + Math.round(wave + roughness)));
+    // The southern coastline is calculated from global X coordinates so the
+    // beach and ocean remain continuous across chunk boundaries.
+    function getSouthernCoastlineY(generator, x) {
+      const broadBend = Math.sin(x * 0.105 + 0.65) * 2.0;
+      const smallBend = Math.sin(x * 0.255 + 1.9) * 1.15;
+      const roughness = (stableNoise(x, 0, 997) - 0.5) * 1.6;
+      const baseline = generator.worldHeight - 20;
+      const coastY = Math.round(baseline + broadBend + smallBend + roughness);
+      return Math.max(generator.legacyWorldHeight + 6,
+        Math.min(generator.worldHeight - 15, coastY));
     }
 
-    function isSouthernMountainCell(generator, x, y) {
-      return generator.worldHeight > generator.legacyWorldHeight &&
-        x >= 0 && x < generator.worldTiles && y >= 0 && y < generator.worldHeight &&
-        y >= getSouthernRidgeTop(generator, x);
+    // Four cells of sand create a readable beach between grassland and sea.
+    // Ocean begins two cells below the irregular shoreline.
+    function isSouthernBeachCell(generator, x, y) {
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight ||
+          y >= generator.worldHeight) return false;
+      const distance = y - getSouthernCoastlineY(generator, x);
+      return distance >= -2 && distance <= 1;
+    }
+
+    function isOceanCell(generator, x, y) {
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight ||
+          y >= generator.worldHeight) return false;
+      return y >= getSouthernCoastlineY(generator, x) + 2;
+    }
+
+    function getBeachTileId(_generator, _x, _y) {
+      // GID 51 is the Puny World full-sand tile. The irregular beach boundary
+      // itself supplies the grass-to-sand variation without misusing corner tiles.
+      return 51;
+    }
+
+    function getShorelineTileId(generator, x, y) {
+      // The sea meets the beach at the southern edge of the land. Treat the
+      // world sides as open water so the coastline does not turn up the edges.
+      const isWaterAt = (tx, ty) => {
+        if (tx < 0 || tx >= generator.worldTiles || ty >= generator.worldHeight) return true;
+        if (ty < generator.legacyWorldHeight || ty < 0) return false;
+        return isOceanCell(generator, tx, ty);
+      };
+      const mask =
+        (isWaterAt(x, y - 1) ? 1 : 0) |
+        (isWaterAt(x + 1, y) ? 2 : 0) |
+        (isWaterAt(x, y + 1) ? 4 : 0) |
+        (isWaterAt(x - 1, y) ? 8 : 0);
+      return mask === 15 ? 0 : (SHORELINE_TILE_BY_MASK[mask] || 0);
+    }
+
+    function getOceanTileId(generator, x, y) {
+      const shorelineTile = getShorelineTileId(generator, x, y);
+      if (shorelineTile) return shorelineTile;
+      const depth = y - getSouthernCoastlineY(generator, x);
+      const variation = stableNoise(x, y, 751);
+      // GIDs 311/316/321 are the Puny World shallow, medium and deep sea fills.
+      if (depth <= 5) return variation < 0.045 ? 298 : 311;
+      if (depth <= 10) return variation < 0.24 ? 311 : 316;
+      if (depth <= 15) return variation < 0.28 ? 316 : 321;
+      return variation < 0.10 ? 316 : 321;
     }
 
     // Preserve the exact old southern edge of the original 90x90 world. The
@@ -169,6 +223,9 @@
     function isWithinGeneratedArea(generator, x, y) {
       if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
       if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      if (generator.worldHeight > generator.legacyWorldHeight &&
+          y >= getSouthernCoastlineY(generator, x) - 3) return false;
       return true;
     }
 
@@ -176,7 +233,7 @@
     // visible chunk generator and the authoritative collision generator.
     function isCliffCell(generator, x, y) {
       if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
-      if (isSouthernMountainCell(generator, x, y)) return true;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
       if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldHeight - 1 ||
           isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
           isSpawnClearance(generator, x, y)) return false;
@@ -337,7 +394,9 @@
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          if (isSouthernMountainCell(generator, x, y)) {
+          // Ocean is an absolute boundary: it remains blocked even if a road
+          // definition or another terrain rule overlaps the same coordinates.
+          if (isOceanCell(generator, x, y)) {
             blocked[localY][localX] = 1;
             continue;
           }
@@ -463,6 +522,18 @@
               !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
               !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
+          }
+
+          // Coastal ground is applied last so no road, tree or cliff rule can
+          // accidentally paint over the sand or the sea.
+          if (isSouthernBeachCell(generator, x, y)) {
+            ground[ly][lx] = getBeachTileId(generator, x, y);
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
+          } else if (isOceanCell(generator, x, y)) {
+            ground[ly][lx] = getOceanTileId(generator, x, y);
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
           }
 
         }
@@ -663,8 +734,11 @@
       extractChunkBlocked,
       createChunkData,
       isCliffCell,
-      isSouthernMountainCell,
-      getSouthernRidgeTop,
+      isSouthernBeachCell,
+      isOceanCell,
+      getSouthernCoastlineY,
+      getBeachTileId,
+      getOceanTileId,
       getChunkAtTile,
       getChunkNeighborhood,
       planChunkStreaming,
