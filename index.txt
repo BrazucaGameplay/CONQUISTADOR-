@@ -96,11 +96,15 @@
       1: 163, 2: 109, 3: 136, 4: 111, 5: 167, 6: 110, 7: 112,
       8: 165, 9: 164, 10: 166, 11: 139, 12: 138, 13: 140, 14: 113, 15: 137
     };
+    // Puny World Wang transitions from sand (3) to shallow seawater (8).
+    // Keys use the same N/E/S/W bit order as the cliff-mask renderer.
+    const SHORELINE_TILE_BY_MASK = {
+      1: 337, 2: 283, 3: 310, 4: 285, 6: 284, 7: 286,
+      8: 339, 9: 338, 11: 313, 12: 312, 13: 314, 14: 287
+    };
     const CLIFF_PATCHES = [
       { x: 9, y: 12, rx: 9, ry: 7 },
       { x: 78, y: 12, rx: 10, ry: 8 },
-      { x: 11, y: 78, rx: 10, ry: 8 },
-      { x: 79, y: 78, rx: 10, ry: 8 },
       { x: 17, y: 49, rx: 6, ry: 9 },
       { x: 74, y: 48, rx: 7, ry: 9 }
     ];
@@ -114,13 +118,14 @@
       { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
-      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
+      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }], width: 2 },
+      // The southern trail ends on the beach; the ocean is impassable.
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 85 }, { x: 49, y: 87 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
@@ -135,12 +140,130 @@
       return `${x},${y}`;
     }
 
+    function isRoadCell(generator, x, y) {
+      return generator.roadCells.has(roadKey(x, y));
+    }
+
+    function isSpawnClearance(generator, x, y) {
+      return Math.abs(x - generator.playerStart.x) <= 5 &&
+        Math.abs(y - generator.playerStart.y) <= 5;
+    }
+
+    // The coast now sits directly after the existing southern land area.
+    // Coordinates are global so the irregular shoreline is continuous across
+    // all three columns and every chunk boundary. The entire lower extension
+    // becomes ocean; only a narrow sand strip remains between land and water.
+    function getSouthernCoastlineY(generator, x) {
+      const broadBend = Math.sin(x * 0.105 + 0.65) * 1.75;
+      const smallBend = Math.sin(x * 0.255 + 1.9) * 0.75;
+      const roughness = (stableNoise(x, 0, 997) - 0.5) * 0.9;
+      const baseline = generator.legacyWorldHeight - 2;
+      const coastY = Math.round(baseline + broadBend + smallBend + roughness);
+      return Math.max(generator.legacyWorldHeight - 4,
+        Math.min(generator.legacyWorldHeight - 1, coastY));
+    }
+
+    // Four sand rows form the beach. The shoreline is deliberately placed at
+    // the former southern land boundary, not near the bottom of the map.
+    function isSouthernBeachCell(generator, x, y) {
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 6 ||
+          y >= generator.worldHeight) return false;
+      const distance = y - getSouthernCoastlineY(generator, x);
+      return distance >= -2 && distance <= 1;
+    }
+
+    function isOceanCell(generator, x, y) {
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 2 ||
+          y >= generator.worldHeight) return false;
+      return y >= getSouthernCoastlineY(generator, x) + 2;
+    }
+
+    function getBeachTileId(generator, x, y) {
+      const distance = y - getSouthernCoastlineY(generator, x);
+      // GID 52 is the Puny World grass-to-sand transition, oriented with land north
+      // and beach south. The remaining rows use the full-sand GID 51.
+      return distance === -2 ? 52 : 51;
+    }
+
+    function getShorelineTileId(generator, x, y) {
+      // The sea meets the beach at the southern edge of the land. Treat the
+      // world sides as open water so the coastline does not turn up the edges.
+      const isWaterAt = (tx, ty) => {
+        if (tx < 0 || tx >= generator.worldTiles || ty >= generator.worldHeight) return true;
+        if (ty < generator.legacyWorldHeight - 2 || ty < 0) return false;
+        return isOceanCell(generator, tx, ty);
+      };
+      const mask =
+        (isWaterAt(x, y - 1) ? 1 : 0) |
+        (isWaterAt(x + 1, y) ? 2 : 0) |
+        (isWaterAt(x, y + 1) ? 4 : 0) |
+        (isWaterAt(x - 1, y) ? 8 : 0);
+      return mask === 15 ? 0 : (SHORELINE_TILE_BY_MASK[mask] || 0);
+    }
+
+    function getOceanTileId(generator, x, y) {
+      const shorelineTile = getShorelineTileId(generator, x, y);
+      if (shorelineTile) return shorelineTile;
+      const depth = y - getSouthernCoastlineY(generator, x);
+      const variation = stableNoise(x, y, 751);
+      // GIDs 311/316/321 are the Puny World shallow, medium and deep sea fills.
+      if (depth <= 5) return variation < 0.045 ? 298 : 311;
+      if (depth <= 10) return variation < 0.24 ? 311 : 316;
+      if (depth <= 15) return variation < 0.28 ? 316 : 321;
+      return variation < 0.10 ? 316 : 321;
+    }
+
+    // Keep procedural trees/details inland from the new shoreline. The last
+    // southern rows are reserved for the beach and water transition.
+    function isWithinGeneratedArea(generator, x, y) {
+      if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
+      if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      if (generator.worldHeight > generator.legacyWorldHeight &&
+          y >= getSouthernCoastlineY(generator, x) - 3) return false;
+      return true;
+    }
+
+    // Shared terrain predicates are the single source of truth for both the
+    // visible chunk generator and the authoritative collision generator.
+    function isCliffCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldHeight - 1 ||
+          isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
+          isSpawnClearance(generator, x, y)) return false;
+      for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
+        const patch = CLIFF_PATCHES[patchIndex];
+        const nx = (x - patch.x) / patch.rx;
+        const ny = (y - patch.y) / patch.ry;
+        const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
+        if (nx * nx + ny * ny < 1 + raggedEdge) return true;
+      }
+      return false;
+    }
+
+    function getGeneratedTreeId(generator, x, y, cliff) {
+      if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
+          isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
+      let density = 0;
+      for (const patch of TREE_PATCHES) {
+        const nx = (x - patch.x) / patch.rx;
+        const ny = (y - patch.y) / patch.ry;
+        if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+      }
+      if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
+      if (!density || stableNoise(x, y, 103) > density) return 0;
+      return TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)] || 0;
+    }
+
     // Roads are short, fixed world paths. Rasterize them once as a compact set;
     // each chunk can then calculate its own Wang edge mask, including neighbours.
-    function buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight) {
+    function buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight, worldHeight = worldTiles) {
       const cells = new Set();
       const add = (x, y) => {
-        if (x < 0 || y < 0 || x >= worldTiles || y >= worldTiles) return;
+        if (x < 0 || y < 0 || x >= worldTiles || y >= worldHeight) return;
         if (x >= mapOffset && x < mapOffset + sourceWidth && y >= mapOffset && y < mapOffset + sourceHeight) return;
         cells.add(roadKey(x, y));
       };
@@ -167,7 +290,7 @@
       return cells;
     }
 
-    function prepareWorldGenerator(sourceLayers, worldTiles, mapOffset, playerStart) {
+    function prepareWorldGenerator(sourceLayers, worldTiles, mapOffset, playerStart, worldHeight = worldTiles) {
       const layers = sourceLayers.filter(layer => layer.type === 'tilelayer');
       if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
       const sourceWidth = layers[0].width || 30;
@@ -183,7 +306,7 @@
           sourceUpperObjects.length !== sourceWidth * sourceHeight) {
         throw new Error('As dimensões das camadas do mapa-base não correspondem aos dados recebidos.');
       }
-      if (mapOffset < 0 || mapOffset + sourceWidth > worldTiles || mapOffset + sourceHeight > worldTiles) {
+      if (mapOffset < 0 || mapOffset + sourceWidth > worldTiles || mapOffset + sourceHeight > worldHeight) {
         throw new Error('A área original do mapa está fora dos limites do mundo.');
       }
 
@@ -230,8 +353,11 @@
         }
       }
 
+      const legacyWorldHeight = worldTiles;
       return {
         worldTiles,
+        worldHeight,
+        legacyWorldHeight,
         mapOffset,
         sourceWidth,
         sourceHeight,
@@ -239,7 +365,7 @@
         originalGround,
         originalStructures,
         originalUpperObjects,
-        roadCells: buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight)
+        roadCells: buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight, worldHeight)
       };
     }
 
@@ -254,49 +380,24 @@
       if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
       const originX = chunkX * size;
       const originY = chunkY * size;
-      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldHeight) {
         throw new Error('O chunk solicitado está fora dos limites do mundo.');
       }
       const width = Math.min(size, generator.worldTiles - originX);
-      const height = Math.min(size, generator.worldTiles - originY);
+      const height = Math.min(size, generator.worldHeight - originY);
       const blocked = Array.from({ length: height }, () => new Uint8Array(width));
-      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
-      const isSpawnClearance = (x, y) =>
-        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
-
-      function isCliffCell(x, y) {
-        if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
-            isOriginalTile(x, y, generator) || hasRoad(x, y) || isSpawnClearance(x, y)) return false;
-        for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
-          const patch = CLIFF_PATCHES[patchIndex];
-          const nx = (x - patch.x) / patch.rx;
-          const ny = (y - patch.y) / patch.ry;
-          const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
-          if (nx * nx + ny * ny < 1 + raggedEdge) return true;
-        }
-        return false;
-      }
-
-      function hasGeneratedTree(x, y, cliff) {
-        if (x < 2 || y < 2 || x >= generator.worldTiles - 2 || y >= generator.worldTiles - 2 ||
-            isOriginalTile(x, y, generator) || hasRoad(x, y) || cliff || isSpawnClearance(x, y)) return false;
-        let density = 0;
-        for (const patch of TREE_PATCHES) {
-          const nx = (x - patch.x) / patch.rx;
-          const ny = (y - patch.y) / patch.ry;
-          if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
-        }
-        if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
-        if (!density || stableNoise(x, y, 103) > density) return false;
-        const treeId = TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)];
-        return TREE_IDS.has(treeId);
-      }
 
       for (let localY = 0; localY < height; localY += 1) {
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          if (hasRoad(x, y)) continue; // Roads always take precedence and are walkable.
+          // Ocean is an absolute boundary: it remains blocked even if a road
+          // definition or another terrain rule overlaps the same coordinates.
+          if (isOceanCell(generator, x, y)) {
+            blocked[localY][localX] = 1;
+            continue;
+          }
+          if (isRoadCell(generator, x, y)) continue; // Roads remain walkable outside hard world boundaries.
 
           if (isOriginalTile(x, y, generator)) {
             const sx = x - generator.mapOffset;
@@ -308,8 +409,8 @@
             continue;
           }
 
-          const cliff = isCliffCell(x, y);
-          blocked[localY][localX] = cliff || hasGeneratedTree(x, y, cliff) ? 1 : 0;
+          const cliff = isCliffCell(generator, x, y);
+          blocked[localY][localX] = cliff || getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
         }
       }
 
@@ -347,15 +448,13 @@
       if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
       const originX = chunkX * size;
       const originY = chunkY * size;
-      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldHeight) {
         throw new Error('O chunk solicitado está fora dos limites do mundo.');
       }
       const width = Math.min(size, generator.worldTiles - originX);
-      const height = Math.min(size, generator.worldTiles - originY);
+      const height = Math.min(size, generator.worldHeight - originY);
       const isOriginal = (x, y) => isOriginalTile(x, y, generator);
-      const isSpawnClearance = (x, y) =>
-        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
-      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
+      const hasRoad = (x, y) => isRoadCell(generator, x, y);
 
       // One-cell halo is enough for the four-neighbour Wang mask of cliff edges.
       const cliffMask = Array.from({ length: height + 2 }, () => Array(width + 2).fill(false));
@@ -363,18 +462,7 @@
         for (let lx = -1; lx <= width; lx += 1) {
           const x = originX + lx;
           const y = originY + ly;
-          if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
-              isOriginal(x, y) || hasRoad(x, y) || isSpawnClearance(x, y)) continue;
-          for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
-            const patch = CLIFF_PATCHES[patchIndex];
-            const nx = (x - patch.x) / patch.rx;
-            const ny = (y - patch.y) / patch.ry;
-            const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
-            if (nx * nx + ny * ny < 1 + raggedEdge) {
-              cliffMask[ly + 1][lx + 1] = true;
-              break;
-            }
-          }
+          cliffMask[ly + 1][lx + 1] = isCliffCell(generator, x, y);
         }
       }
 
@@ -382,8 +470,11 @@
       const structures = Array.from({ length: height }, () => Array(width).fill(0));
       const upperObjects = Array.from({ length: height }, () => Array(width).fill(0));
       const includeBlocked = !options || options.includeBlocked !== false;
-      const blocked = includeBlocked ? Array.from({ length: height }, () => Array(width).fill(false)) : null;
-      const treeSprites = TREE_SPRITE_IDS;
+      // Collision is delegated to the same rules used by the global navigation grid.
+      // Visual data never carries a second implementation of obstacle decisions.
+      const blocked = includeBlocked
+        ? createChunkBlockedData(generator, chunkX, chunkY, size).blocked
+        : null;
 
       for (let ly = 0; ly < height; ly += 1) {
         const y = originY + ly;
@@ -419,33 +510,29 @@
             ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
           }
 
-          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
-              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] && !isSpawnClearance(x, y)) {
-            let density = 0;
-            for (const patch of TREE_PATCHES) {
-              const nx = (x - patch.x) / patch.rx;
-              const ny = (y - patch.y) / patch.ry;
-              if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
-            }
-            if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
-            if (density && stableNoise(x, y, 103) <= density) {
-              const tree = treeSprites[Math.floor(stableNoise(x, y, 109) * treeSprites.length)];
-              structures[ly][lx] = tree;
-            }
-          }
+          const generatedTreeId = getGeneratedTreeId(
+            generator, x, y, cliffMask[ly + 1][lx + 1]
+          );
+          if (generatedTreeId) structures[ly][lx] = generatedTreeId;
 
-          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
-              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] &&
-              !structures[ly][lx] && !isSpawnClearance(x, y) && stableNoise(x, y, 127) < 0.022) {
+          if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
+              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
+              !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
-          if (blocked) {
-            blocked[ly][lx] = cliffMask[ly + 1][lx + 1] || CLIFF_IDS.has(ground[ly][lx]) ||
-              TREE_IDS.has(structures[ly][lx]) || SOLID_IDS.has(structures[ly][lx]);
-            // Roads always take precedence over terrain obstacles and are walkable.
-            if (hasRoad(x, y)) blocked[ly][lx] = false;
+          // Coastal ground is applied last so no road, tree or cliff rule can
+          // accidentally paint over the sand or the sea.
+          if (isSouthernBeachCell(generator, x, y)) {
+            ground[ly][lx] = getBeachTileId(generator, x, y);
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
+          } else if (isOceanCell(generator, x, y)) {
+            ground[ly][lx] = getOceanTileId(generator, x, y);
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
           }
+
         }
       }
 
@@ -496,13 +583,14 @@
       };
     }
 
-    function createGroundBase(scene, worldTiles, tileSize, color) {
-      const worldPixels = worldTiles * tileSize;
+    function createGroundBase(scene, worldWidthTiles, worldHeightTiles, tileSize, color) {
+      const worldWidthPixels = worldWidthTiles * tileSize;
+      const worldHeightPixels = worldHeightTiles * tileSize;
       return scene.add.rectangle(
-        worldPixels / 2,
-        worldPixels / 2,
-        worldPixels,
-        worldPixels,
+        worldWidthPixels / 2,
+        worldHeightPixels / 2,
+        worldWidthPixels,
+        worldHeightPixels,
         color === undefined ? 0x8ca450 : color
       ).setDepth(0);
     }
@@ -642,6 +730,12 @@
       createChunkBlockedData,
       extractChunkBlocked,
       createChunkData,
+      isCliffCell,
+      isSouthernBeachCell,
+      isOceanCell,
+      getSouthernCoastlineY,
+      getBeachTileId,
+      getOceanTileId,
       getChunkAtTile,
       getChunkNeighborhood,
       planChunkStreaming,
@@ -657,10 +751,12 @@
     'use strict';
 
     const TILE_SIZE = 16;
-    const WORLD_TILES = 90;
+    const WORLD_WIDTH_TILES = 90;
+    const WORLD_HEIGHT_TILES = 120;
     const CHUNK_TILES = 30;
     const CHUNK_LOAD_RADIUS = 1;
-    const WORLD_PIXELS = WORLD_TILES * TILE_SIZE;
+    const WORLD_WIDTH_PIXELS = WORLD_WIDTH_TILES * TILE_SIZE;
+    const WORLD_HEIGHT_PIXELS = WORLD_HEIGHT_TILES * TILE_SIZE;
     const MAP_OFFSET = 30;
     const PLAYER_START = { x: 45, y: 65 };
     const TILESET_URL = 'https://cdn.jsdelivr.net/gh/TheBogdichHD/procedural-generation-godot@0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png';
@@ -722,7 +818,7 @@
         }
 
         try {
-          this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+          this.physics.world.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
           this.buildWorld(sample.layers);
           this.createPlayerAnimations();
           this.createPlayer();
@@ -737,16 +833,16 @@
       }
 
       buildWorld(sourceLayers) {
-        core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
-        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
+        core.createGroundBase(this, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES, TILE_SIZE, 0x8ca450);
+        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_WIDTH_TILES, MAP_OFFSET, PLAYER_START, WORLD_HEIGHT_TILES);
 
         this.cliffTileIds = new Set(core.CLIFF_TILE_IDS);
         this.solidStructureTileIds = new Set(core.SOLID_STRUCTURE_TILE_IDS);
         this.treeSpriteIds = new Set(core.TREE_SPRITE_IDS);
 
-        const columns = Math.ceil(WORLD_TILES / CHUNK_TILES);
-        const rows = Math.ceil(WORLD_TILES / CHUNK_TILES);
-        this.chunkGrid = { width: WORLD_TILES, height: WORLD_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
+        const columns = Math.ceil(WORLD_WIDTH_TILES / CHUNK_TILES);
+        const rows = Math.ceil(WORLD_HEIGHT_TILES / CHUNK_TILES);
+        this.chunkGrid = { width: WORLD_WIDTH_TILES, height: WORLD_HEIGHT_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
         this.chunks = new Map();
         this.activeChunkIds = new Set();
         this.streamingCenterId = null;
@@ -756,7 +852,7 @@
         // Each chunk contributes only a compact collision row set here; visual
         // terrain/object arrays are generated separately for active chunks only.
         // Uint8Array keeps the persistent navigation grid compact (one byte/tile).
-        this.blocked = Array.from({ length: WORLD_TILES }, () => new Uint8Array(WORLD_TILES));
+        this.blocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
         for (let chunkY = 0; chunkY < rows; chunkY += 1) {
           for (let chunkX = 0; chunkX < columns; chunkX += 1) {
             const collision = core.createChunkBlockedData(
@@ -786,7 +882,7 @@
           }
         }
 
-        // Load the spawn's 3x3 neighbourhood (clipped by world boundaries).
+        // Load the spawn's 3x3 neighbourhood (clipped by rectangular world boundaries).
         this.updateChunkStreaming(true);
       }
 
@@ -1044,7 +1140,7 @@
 
       setupCamera() {
         const camera = this.cameras.main;
-        camera.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+        camera.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
         camera.setLerp(0.12, 0.12);
         camera.startFollow(this.player, true, 0.12, 0.12);
       }
@@ -1053,7 +1149,7 @@
         if (pointer.rightButtonDown()) return;
         pointer.updateWorldPoint(this.cameras.main);
         const destination = core.worldToTile(pointer.worldX, pointer.worldY, TILE_SIZE);
-        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_TILES || destination.y >= WORLD_TILES) return;
+        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
         if (this.blocked[destination.y][destination.x]) return;
 
         const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
