@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V21 Tamanho dos Monstros</title>
+  <title>CONQUISTADOR — V22 Combate Animado</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -534,7 +534,12 @@
         this.lastPlayerAttackAt = -Infinity;
         this.playerAttackCooldownMs = Number.isFinite(options.playerAttackCooldownMs)
           ? Math.max(0, options.playerAttackCooldownMs) : 420;
-        this.attackRange = 42;
+        this.attackRange = 48;
+        this.playerApproachRange = 260;
+        this.playerAttackWindupMs = 180;
+        this.pendingPlayerAttack = null;
+        this.approachTargetId = null;
+        this.lastApproachRequestAt = -Infinity;
         this.aggroRange = 260;
         this.monsterAttackRange = 24;
         this.monsterAttackCooldownMs = 1350;
@@ -974,42 +979,179 @@
         return nearest;
       }
 
+      getNearestMonsterForApproach(playerPoint) {
+        if (!playerPoint) return null;
+        let nearest = null;
+        let nearestDistance = Infinity;
+        for (const record of this.monsters.values()) {
+          if (!record.alive || !record.sprite || !record.sprite.active) continue;
+          const distance = Math.hypot(
+            record.sprite.x - playerPoint.x,
+            record.sprite.y - playerPoint.y
+          );
+          if (distance <= this.playerApproachRange && distance < nearestDistance) {
+            nearest = record;
+            nearestDistance = distance;
+          }
+        }
+        return nearest;
+      }
+
       autoAttackNearbyMonster() {
-        if (!this.active || this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) {
+        if (!this.active) return false;
+        const playerPoint = this.getPlayerPoint();
+        if (!playerPoint) return false;
+
+        const target = this.getNearestMonsterForApproach(playerPoint);
+        if (!target) {
+          if (this.approachTargetId) {
+            this.events.emit('player:combat-stop', { targetId: this.approachTargetId });
+            this.approachTargetId = null;
+          }
           return false;
         }
-        const playerPoint = this.getPlayerPoint();
-        const target = this.getNearestMonsterInRange(playerPoint);
-        if (!target) return false;
+
+        const distance = Math.hypot(
+          target.sprite.x - playerPoint.x,
+          target.sprite.y - playerPoint.y
+        );
+
+        if (distance > this.attackRange - 5) {
+          this.pendingPlayerAttack = null;
+          if (this.approachTargetId !== target.id ||
+              this.now - this.lastApproachRequestAt >= 700) {
+            this.approachTargetId = target.id;
+            this.lastApproachRequestAt = this.now;
+            this.events.emit('player:combat-move-request', {
+              targetId: target.id,
+              tileX: target.tile.x,
+              tileY: target.tile.y
+            });
+          }
+          return false;
+        }
+
+        if (this.approachTargetId) {
+          this.events.emit('player:combat-stop', { targetId: this.approachTargetId });
+          this.approachTargetId = null;
+        }
+        if (this.pendingPlayerAttack || this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) {
+          return false;
+        }
         return this.playerAttack(target);
       }
 
       playerAttack(targetRecord = null) {
-        if (!this.active) return false;
+        if (!this.active || this.pendingPlayerAttack) return false;
         const playerPoint = this.getPlayerPoint();
         if (!playerPoint) return false;
         const record = targetRecord || this.getNearestMonsterInRange(playerPoint);
         if (!record || !record.alive || !record.sprite || !record.sprite.active) return false;
-        if (this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) return false;
         const distance = Math.hypot(record.sprite.x - playerPoint.x, record.sprite.y - playerPoint.y);
         if (distance > this.attackRange) return false;
+
         this.lastPlayerAttackAt = this.now;
+        this.pendingPlayerAttack = {
+          targetId: record.id,
+          hitAt: this.now + this.playerAttackWindupMs
+        };
+        this.events.emit('player:combat-attack-animation', {
+          targetId: record.id,
+          x: record.sprite.x,
+          y: record.sprite.y
+        });
+        return true;
+      }
+
+      resolvePendingPlayerAttack() {
+        const pending = this.pendingPlayerAttack;
+        if (!pending || this.now < pending.hitAt) return false;
+        this.pendingPlayerAttack = null;
+        const record = this.monsters.get(pending.targetId);
+        if (!record || !record.alive || !record.sprite || !record.sprite.active) return false;
+
+        const playerPoint = this.getPlayerPoint();
+        if (!playerPoint) return false;
+        const distance = Math.hypot(record.sprite.x - playerPoint.x, record.sprite.y - playerPoint.y);
+        if (distance > this.attackRange + 8) return false;
+
         const strength = this.status.getStat('player', 'strength') || 1;
         const defense = this.status.getStat(record.id, 'defense') || 0;
         const damage = Math.max(1, strength - defense);
         const result = this.status.applyDamage(record.id, damage);
         if (!result) return false;
+
+        this.showMonsterHitEffect(record);
         this.events.emit('combat:hit', {
-          attackerId: 'player', targetId: record.id, damage, remainingHp: result.hp
+          attackerId: 'player',
+          targetId: record.id,
+          damage,
+          remainingHp: result.hp
         });
         if (result.defeated) this.killMonster(record, 'player');
         this.refreshUI();
         return true;
       }
 
+      showMonsterHitEffect(record) {
+        if (!record || !record.sprite || !record.sprite.active) return;
+        const sprite = record.sprite;
+        sprite.setTintFill(0xff5757);
+        this.scene.time.delayedCall(90, () => {
+          if (sprite.active) sprite.clearTint();
+        });
+
+        // Stylized blood-like hit particles: tiny red droplets, no gore.
+        for (let i = 0; i < 5; i += 1) {
+          const particle = this.scene.add.circle(
+            sprite.x + (i - 2) * 2,
+            sprite.y - 5,
+            i % 2 ? 1.8 : 2.4,
+            i % 2 ? 0xc83e42 : 0xf06a62,
+            0.95
+          );
+          particle.setDepth(sprite.depth + 4);
+          const angle = (-Math.PI * 0.85) + (i / 4) * (Math.PI * 0.7);
+          const distance = 8 + (i % 3) * 4;
+          this.scene.tweens.add({
+            targets: particle,
+            x: particle.x + Math.cos(angle) * distance,
+            y: particle.y + Math.sin(angle) * distance,
+            alpha: 0,
+            scale: 0.35,
+            duration: 220 + (i % 2) * 55,
+            onComplete: () => particle.destroy()
+          });
+        }
+
+        // A small recoil makes a hit readable without changing its tile owner.
+        this.scene.tweens.killTweensOf(sprite);
+        const originalX = sprite.x;
+        const originalY = sprite.y;
+        const playerPoint = this.getPlayerPoint();
+        const dx = sprite.x - (playerPoint ? playerPoint.x : sprite.x);
+        const dy = sprite.y - (playerPoint ? playerPoint.y : sprite.y);
+        const length = Math.max(1, Math.hypot(dx, dy));
+        this.scene.tweens.add({
+          targets: sprite,
+          x: originalX + (dx / length) * 3,
+          y: originalY + (dy / length) * 3,
+          duration: 65,
+          yoyo: true,
+          ease: 'Quad.Out'
+        });
+      }
+
       killMonster(record, killerId) {
         if (!record || !record.alive) return false;
         record.alive = false;
+        if (this.approachTargetId === record.id) {
+          this.events.emit('player:combat-stop', { targetId: record.id });
+          this.approachTargetId = null;
+        }
+        if (this.pendingPlayerAttack && this.pendingPlayerAttack.targetId === record.id) {
+          this.pendingPlayerAttack = null;
+        }
         const tile = { x: record.tile.x, y: record.tile.y };
         this.scheduleChunkRespawn(record);
         // LevelSystem is the only entity:die subscriber that awards XP.
@@ -1024,7 +1166,20 @@
         this.createDrop(record);
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
-        if (record.sprite && record.sprite.destroy) record.sprite.destroy();
+        if (record.sprite && record.sprite.active) {
+          const deathSprite = record.sprite;
+          this.scene.tweens.killTweensOf(deathSprite);
+          this.scene.tweens.add({
+            targets: deathSprite,
+            alpha: 0,
+            scaleX: 0.35,
+            scaleY: 0.35,
+            angle: (deathSprite.x % 2 ? 12 : -12),
+            duration: 260,
+            ease: 'Back.In',
+            onComplete: () => deathSprite.destroy()
+          });
+        }
         this.refreshUI();
         return true;
       }
@@ -1202,6 +1357,7 @@
           for (const record of Array.from(this.monsters.values())) {
             this.updateMonster(record, playerPoint, this.now, Number(delta) || 0);
           }
+          this.resolvePendingPlayerAttack();
           this.autoAttackNearbyMonster();
           this.collectNearbyDrops();
         }
@@ -1227,6 +1383,8 @@
         for (const drop of this.drops.values()) if (drop.sprite && drop.sprite.destroy) drop.sprite.destroy();
         this.monsters.clear();
         this.drops.clear();
+        this.pendingPlayerAttack = null;
+        this.approachTargetId = null;
         if (this.uiRoot && this.uiRoot.remove) this.uiRoot.remove();
         if (this.autoAttackBadge && this.autoAttackBadge.remove) this.autoAttackBadge.remove();
       }
@@ -2892,7 +3050,24 @@
         this.events.once('shutdown', () => {
           for (const unsubscribe of this._systemSaveUnsubs || []) unsubscribe();
           this._systemSaveUnsubs = [];
+          for (const unsubscribe of this._combatUnsubs || []) unsubscribe();
+          this._combatUnsubs = [];
         });
+        this._combatMoveRequestUnsub = this.eventBus.on('player:combat-move-request', request => {
+          if (request && this.player) this.setCombatDestination(request);
+        });
+        this._combatStopUnsub = this.eventBus.on('player:combat-stop', () => {
+          this.clearPlayerPath();
+          this.player.anims.play(`idle-${this.facingRow}`, true);
+        });
+        this._combatAttackAnimationUnsub = this.eventBus.on('player:combat-attack-animation', event => {
+          if (event) this.playCombatAttackAnimation(event);
+        });
+        this._combatUnsubs = [
+          this._combatMoveRequestUnsub,
+          this._combatStopUnsub,
+          this._combatAttackAnimationUnsub
+        ];
         this.extensionAPI = Object.freeze({
           events: this.eventBus,
           entities: this.entityManager,
@@ -3794,6 +3969,7 @@
         this.path = [];
         this.invalidSaveRouteActive = false;
         this.currentDestinationKey = null;
+        this.combatMoveTargetKey = null;
         if (resetRetry) {
           this.stuckElapsed = 0;
           this.stuckRepathCount = 0;
@@ -3992,6 +4168,116 @@
         camera.centerOn(this.player.x, this.player.y);
         camera.setLerp(0.12, 0.12);
         camera.startFollow(this.player, true, 0.12, 0.12);
+      }
+
+      setCombatDestination(request) {
+        if (!this.player || !this.player.body || !request ||
+            !Number.isFinite(request.tileX) || !Number.isFinite(request.tileY)) return false;
+
+        const targetKey = `${request.targetId}:${request.tileX},${request.tileY}`;
+        if (this.combatMoveTargetKey === targetKey && this.path.length) return true;
+
+        const start = this.getPlayerBodyTile();
+        const navigation = this.getNavigationGrid(this.spawnCollisionDegraded || !this.player.body.enable);
+        if (!start || !navigation) return false;
+
+        const candidates = [];
+        for (let dy = -2; dy <= 2; dy += 1) {
+          for (let dx = -2; dx <= 2; dx += 1) {
+            if (!dx && !dy) continue;
+            const x = request.tileX + dx;
+            const y = request.tileY + dy;
+            if (y < 0 || y >= navigation.length || !navigation[y] ||
+                x < 0 || x >= navigation[y].length || navigation[y][x]) continue;
+            const worldDistance = Math.hypot(dx * TILE_SIZE, dy * TILE_SIZE);
+            if (worldDistance > 48 || worldDistance < 20) continue;
+            candidates.push({ x, y, worldDistance });
+          }
+        }
+
+        let bestRoute = null;
+        let bestScore = Infinity;
+        for (const candidate of candidates) {
+          const route = core.findPath(navigation, start, candidate, { allowBlockedStart: true });
+          if (!route.length) continue;
+          const score = route.length * 16 + Math.abs(candidate.worldDistance - 34) * 0.15;
+          if (score < bestScore) {
+            bestScore = score;
+            bestRoute = route;
+          }
+        }
+        if (!bestRoute) return false;
+
+        this.clearInvalidDestinationFeedback();
+        this.path = bestRoute.map(tile => this.getPlayerWaypoint(tile));
+        const final = bestRoute[bestRoute.length - 1];
+        this.currentDestinationKey = `${final.x},${final.y}`;
+        this.combatMoveTargetKey = targetKey;
+        this.stuckElapsed = 0;
+        this.stuckRepathCount = 0;
+        this.lastProgressPosition = { x: this.player.x, y: this.player.y };
+        this.updateDestinationMarker(final);
+        return true;
+      }
+
+      playCombatAttackAnimation(event) {
+        if (!this.player || !this.player.active) return;
+        const dx = Number(event.x) - this.player.x;
+        const dy = Number(event.y) - this.player.y;
+        const length = Math.max(1, Math.hypot(dx, dy));
+        const nx = dx / length;
+        const ny = dy / length;
+        const originX = this.player.x;
+        const originY = this.player.y;
+        const originalAngle = this.player.angle || 0;
+
+        this.facingRow = core.directionRow(nx, ny);
+        this.player.anims.play(`idle-${this.facingRow}`, true);
+
+        // Short forward feint and recovery: the hit is still resolved by the
+        // combat system at the animation's impact frame.
+        this.tweens.killTweensOf(this.player);
+        this.tweens.add({
+          targets: this.player,
+          x: originX + nx * 4,
+          y: originY + ny * 4,
+          angle: originalAngle + (nx >= 0 ? 8 : -8),
+          duration: 90,
+          yoyo: true,
+          ease: 'Quad.Out',
+          onComplete: () => {
+            if (this.player && this.player.active) this.player.setAngle(0);
+          }
+        });
+
+        const slash = this.add.graphics();
+        slash.setDepth(Math.max(this.player.depth, Number(event.y) + 18));
+        slash.lineStyle(3, 0xffe5a0, 0.95);
+        slash.beginPath();
+        const baseAngle = Math.atan2(ny, nx);
+        const radius = 19;
+        slash.arc(
+          Number(event.x), Number(event.y) - 5,
+          radius, baseAngle - 0.95, baseAngle + 0.95,
+          false
+        );
+        slash.strokePath();
+        slash.lineStyle(1.5, 0xffffff, 0.9);
+        slash.beginPath();
+        slash.arc(
+          Number(event.x), Number(event.y) - 5,
+          radius - 4, baseAngle - 0.72, baseAngle + 0.72,
+          false
+        );
+        slash.strokePath();
+        this.tweens.add({
+          targets: slash,
+          alpha: 0,
+          scaleX: 1.35,
+          scaleY: 1.35,
+          duration: 170,
+          onComplete: () => slash.destroy()
+        });
       }
 
       // ===== ENTRADA DO JOGADOR E PLANEJAMENTO DE ROTA =====
@@ -4355,6 +4641,17 @@
         },
         monsterOrigin: [0.5, 0.86],
         playerFrameSize: 32
+      });
+      window.CONQUISTADOR_V22 = Object.freeze({
+        version: 22,
+        game,
+        playerBasicAttack: true,
+        autoApproach: true,
+        attackRange: 48,
+        hitWindupMs: 180,
+        hitEffects: ['slash', 'red-hit-flash', 'blood-like-particles', 'recoil', 'death-fade'],
+        maxMonstersPerChunk: 6,
+        respawnDelayMs: 30000
       });
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
