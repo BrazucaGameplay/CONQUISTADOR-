@@ -110,6 +110,31 @@
         }
       }
 
+      // Thin only dense clusters of small trees inside the original map.
+      // Buildings, paths, cliffs and the original layout remain untouched.
+      const centralTreeObstacleIds = new Set([703, 705, 706, 707, 731, 732, 733]);
+      let removedCentralTrees = 0;
+      for (let y = mapOffset; y < mapOffset + sh; y += 1) {
+        for (let x = mapOffset; x < mapOffset + sw; x += 1) {
+          if (!centralTreeObstacleIds.has(structures[y][x])) continue;
+          let nearbyTrees = 0;
+          for (let oy = -2; oy <= 2; oy += 1) {
+            for (let ox = -2; ox <= 2; ox += 1) {
+              const nx = x + ox;
+              const ny = y + oy;
+              if (nx < mapOffset || ny < mapOffset || nx >= mapOffset + sw || ny >= mapOffset + sh) continue;
+              if (centralTreeObstacleIds.has(structures[ny][nx])) nearbyTrees += 1;
+            }
+          }
+          if (nearbyTrees < 6) continue;
+          const removalChance = Math.min(0.34, 0.12 + (nearbyTrees - 6) * 0.045);
+          if (stableNoise(x, y, 241) < removalChance) {
+            structures[y][x] = 0;
+            removedCentralTrees += 1;
+          }
+        }
+      }
+
       // New roads are drawn as connected paths using the tileset's actual Wang
       // dirt-path pieces. No copied map blocks and no CSS/flat-color road art.
       const roadColors = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
@@ -220,7 +245,12 @@
         { x: 11, y: 77, rx: 8, ry: 8, density: 0.44 },
         { x: 78, y: 77, rx: 8, ry: 8, density: 0.42 },
         { x: 15, y: 48, rx: 6, ry: 8, density: 0.30 },
-        { x: 75, y: 48, rx: 6, ry: 8, density: 0.30 }
+        { x: 75, y: 48, rx: 6, ry: 8, density: 0.30 },
+        // Four moderate clusters soften the transition around the original map.
+        { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
+        { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
+        { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
+        { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
       ];
       const treeSprites = [703, 705, 706, 707, 731, 732, 733];
       let generatedTrees = 0;
