@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V15 Inventário</title>
+  <title>CONQUISTADOR — V16 Ataque Automático</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -521,7 +521,7 @@
         this.lastPlayerAttackAt = -Infinity;
         this.playerAttackCooldownMs = Number.isFinite(options.playerAttackCooldownMs)
           ? Math.max(0, options.playerAttackCooldownMs) : 420;
-        this.attackRange = 27;
+        this.attackRange = 42;
         this.aggroRange = 260;
         this.monsterAttackRange = 24;
         this.monsterAttackCooldownMs = 1350;
@@ -603,34 +603,30 @@
         messageLine.style.background = 'rgba(20,30,22,.82)';
         messageLine.style.color = '#ffe58a';
         root.append(playerLine, monsterLine, messageLine);
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = 'ATACAR SLIME';
-        button.setAttribute('aria-label', 'Atacar o slime');
-        button.style.position = 'fixed';
-        button.style.right = 'max(16px, env(safe-area-inset-right))';
-        button.style.bottom = 'max(18px, env(safe-area-inset-bottom))';
-        button.style.zIndex = '30';
-        button.style.minWidth = '116px';
-        button.style.minHeight = '46px';
-        button.style.padding = '10px 14px';
-        button.style.border = '2px solid #f4d36d';
-        button.style.borderRadius = '12px';
-        button.style.background = '#613d24';
-        button.style.color = '#fff4cc';
-        button.style.font = 'bold 13px system-ui, sans-serif';
-        button.style.boxShadow = '0 3px 0 #302014';
-        button.style.touchAction = 'manipulation';
-        button.style.cursor = 'pointer';
-        this.buttonHandler = () => this.playerAttack();
-        button.addEventListener('click', this.buttonHandler);
+        const autoAttackBadge = document.createElement('div');
+        autoAttackBadge.textContent = '⚔ AUTO';
+        autoAttackBadge.setAttribute('aria-label', 'Ataque automático ativo');
+        autoAttackBadge.style.position = 'fixed';
+        autoAttackBadge.style.right = 'max(14px, env(safe-area-inset-right))';
+        autoAttackBadge.style.bottom = 'max(16px, env(safe-area-inset-bottom))';
+        autoAttackBadge.style.zIndex = '30';
+        autoAttackBadge.style.padding = '8px 12px';
+        autoAttackBadge.style.border = '1px solid rgba(221,196,128,.78)';
+        autoAttackBadge.style.borderRadius = '18px';
+        autoAttackBadge.style.background = 'linear-gradient(180deg, rgba(55,43,31,.94), rgba(22,19,17,.96))';
+        autoAttackBadge.style.color = '#f4dfaa';
+        autoAttackBadge.style.font = 'bold 11px Georgia, serif';
+        autoAttackBadge.style.letterSpacing = '.08em';
+        autoAttackBadge.style.textShadow = '0 1px 2px #000';
+        autoAttackBadge.style.boxShadow = '0 2px 8px rgba(0,0,0,.45)';
+        autoAttackBadge.style.pointerEvents = 'none';
         document.body.appendChild(root);
-        document.body.appendChild(button);
+        document.body.appendChild(autoAttackBadge);
         this.uiRoot = root;
         this.playerLine = playerLine;
         this.monsterLine = monsterLine;
         this.messageLine = messageLine;
-        this.attackButton = button;
+        this.autoAttackBadge = autoAttackBadge;
       }
 
       findSpawnTile() {
@@ -708,21 +704,43 @@
         return null;
       }
 
-      playerAttack() {
-        if (!this.active) return false;
-        const record = this.getLivingMonster();
-        if (!record) {
-          this.setMessage('Não há monstros vivos por perto.', 1800);
+      getNearestMonsterInRange(playerPoint) {
+        if (!playerPoint) return null;
+        let nearest = null;
+        let nearestDistance = Infinity;
+        for (const record of this.monsters.values()) {
+          if (!record.alive || !record.sprite || !record.sprite.active) continue;
+          const distance = Math.hypot(
+            record.sprite.x - playerPoint.x,
+            record.sprite.y - playerPoint.y
+          );
+          if (distance <= this.attackRange && distance < nearestDistance) {
+            nearest = record;
+            nearestDistance = distance;
+          }
+        }
+        return nearest;
+      }
+
+      autoAttackNearbyMonster() {
+        if (!this.active || this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) {
           return false;
         }
-        if (this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) return false;
+        const playerPoint = this.getPlayerPoint();
+        const target = this.getNearestMonsterInRange(playerPoint);
+        if (!target) return false;
+        return this.playerAttack(target);
+      }
+
+      playerAttack(targetRecord = null) {
+        if (!this.active) return false;
         const playerPoint = this.getPlayerPoint();
         if (!playerPoint) return false;
+        const record = targetRecord || this.getNearestMonsterInRange(playerPoint);
+        if (!record || !record.alive || !record.sprite || !record.sprite.active) return false;
+        if (this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) return false;
         const distance = Math.hypot(record.sprite.x - playerPoint.x, record.sprite.y - playerPoint.y);
-        if (distance > this.attackRange) {
-          this.setMessage('Aproxime-se do slime para atacar.', 1800);
-          return false;
-        }
+        if (distance > this.attackRange) return false;
         this.lastPlayerAttackAt = this.now;
         const strength = this.status.getStat('player', 'strength') || 1;
         const defense = this.status.getStat(record.id, 'defense') || 0;
@@ -917,6 +935,7 @@
           for (const record of Array.from(this.monsters.values())) {
             this.updateMonster(record, playerPoint, this.now, Number(delta) || 0);
           }
+          this.autoAttackNearbyMonster();
           this.collectNearbyDrops();
         }
         if (this.now > this.messageUntil && this.message) {
@@ -934,7 +953,6 @@
           this.scene.events.off('update', this.boundUpdate);
           this.scene.events.off('shutdown', this.boundDestroy);
         }
-        if (this.attackButton && this.buttonHandler) this.attackButton.removeEventListener('click', this.buttonHandler);
         for (const record of this.monsters.values()) {
           if (record.sprite && record.sprite.destroy) record.sprite.destroy();
           this.entities.remove(record.id);
@@ -943,7 +961,7 @@
         this.monsters.clear();
         this.drops.clear();
         if (this.uiRoot && this.uiRoot.remove) this.uiRoot.remove();
-        if (this.attackButton && this.attackButton.remove) this.attackButton.remove();
+        if (this.autoAttackBadge && this.autoAttackBadge.remove) this.autoAttackBadge.remove();
       }
     }
 
@@ -3997,6 +4015,14 @@
         getInventorySystem: () => {
           const scene = game.scene && game.scene.getScene ? game.scene.getScene('WorldScene') : null;
           return scene && scene.inventorySystem ? scene.inventorySystem : null;
+        }
+      });
+      window.CONQUISTADOR_V16 = Object.freeze({
+        version: 16,
+        game,
+        getMonsterSystem: () => {
+          const scene = game.scene && game.scene.getScene ? game.scene.getScene('WorldScene') : null;
+          return scene && scene.monsterSystem ? scene.monsterSystem : null;
         }
       });
     } catch (error) {
