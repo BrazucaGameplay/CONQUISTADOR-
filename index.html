@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#17251b">
+  <title>CONQUISTADOR</title>
+  <style>
+    :root { color-scheme: dark; background: #17251b; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17251b; }
+    body { min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
+    #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #8ca450; touch-action: none; }
+    #game-root canvas { display: block; background: #8ca450; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+    #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
+    #error { display: none; color: #ffe1d6; }
+    #error strong { display: block; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="game-root" aria-label="Mundo explorável do CONQUISTADOR"></div>
+  <div id="loading">Carregando o mundo…</div>
+  <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" crossorigin="anonymous"></script>
+
+  <script id="conquistador-core">
+  (function (root) {
+    'use strict';
+
+    function inBounds(grid, x, y) {
+      return Number.isInteger(x) && Number.isInteger(y) && y >= 0 && y < grid.length && x >= 0 && x < (grid[0] ? grid[0].length : 0);
+    }
+
+    function worldToTile(worldX, worldY, tileSize) {
+      const size = Number(tileSize) || 16;
+      return { x: Math.floor(worldX / size), y: Math.floor(worldY / size) };
+    }
+
+    function directionRow(dx, dy) {
+      if (!dx && !dy) return 0;
+      const angle = Math.atan2(dy, dx);
+      const sector = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
+      // Puny Characters: rows [S, SE, E, NE, N, NW, W, SW].
+      return [2, 1, 0, 7, 6, 5, 4, 3][sector];
+    }
+
+    function expandTileLayer(source, sourceWidth, sourceHeight, targetWidth, targetHeight, offsetX, offsetY, fillValue) {
+      const fill = fillValue === undefined ? 0 : fillValue;
+      const ox = offsetX || 0;
+      const oy = offsetY || 0;
+      const result = Array.from({ length: targetHeight }, () => Array(targetWidth).fill(fill));
+      for (let sy = 0; sy < sourceHeight; sy += 1) {
+        const ty = sy + oy;
+        if (ty < 0 || ty >= targetHeight) continue;
+        for (let sx = 0; sx < sourceWidth; sx += 1) {
+          const tx = sx + ox;
+          if (tx < 0 || tx >= targetWidth) continue;
+          result[ty][tx] = source[sy * sourceWidth + sx] || 0;
+        }
+      }
+      return result;
+    }
+
+    function stableNoise(x, y, salt) {
+      const value = Math.sin((x + salt * 17.17) * 127.1 + (y - salt * 9.31) * 311.7) * 43758.5453123;
+      return value - Math.floor(value);
+    }
+
+    function createExpandedWorld(sourceLayers, worldTiles, mapOffset, playerStart) {
+      const layers = sourceLayers.filter((layer) => layer.type === 'tilelayer');
+      if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
+
+      const sw = layers[0].width || 30;
+      const sh = layers[0].height || 30;
+      const sourceGround = layers[0].data;
+      const sourceStructures = layers[1].data;
+      const sourceUpperObjects = layers[2].data;
+      const grassTiles = [1, 2, 3, 28, 29, 30, 55, 56, 57];
+      const waterIds = new Set([272, 274, 298, 326, 328, 354]);
+      const bridgeIds = new Set([85, 86, 88]);
+      const blocked = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
+      const structures = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
+      const upperObjects = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
+      const inOriginal = (x, y) => x >= mapOffset && x < mapOffset + sw && y >= mapOffset && y < mapOffset + sh;
+      const inSpawnClearance = (x, y) => Math.abs(x - playerStart.x) <= 5 && Math.abs(y - playerStart.y) <= 5;
+      const pickGrass = (x, y, salt = 17) => grassTiles[Math.floor(stableNoise(x, y, salt) * grassTiles.length)];
+
+      // Start with real grass tiles across the entire 90x90 world. The low-frequency
+      // variation gives the fields texture without repeating a 30x30 map pattern.
+      const ground = Array.from({ length: worldTiles }, (_, y) =>
+        Array.from({ length: worldTiles }, (_, x) => {
+          const noise = stableNoise(x, y, 4);
+          return noise < 0.62 ? 1 : pickGrass(x, y, 8);
+        })
+      );
+
+      // Keep the tested starting area intact, but do not clone it into the new areas.
+      // Only this single central 30x30 region uses the original map data.
+      for (let sy = 0; sy < sh; sy += 1) {
+        for (let sx = 0; sx < sw; sx += 1) {
+          const x = sx + mapOffset;
+          const y = sy + mapOffset;
+          const original = sourceGround[sy * sw + sx] || pickGrass(x, y, 31);
+          ground[y][x] = waterIds.has(original) || bridgeIds.has(original) ? pickGrass(x, y, 37) : original;
+          structures[y][x] = sourceStructures[sy * sw + sx] || 0;
+          upperObjects[y][x] = sourceUpperObjects[sy * sw + sx] || 0;
+          if (bridgeIds.has(structures[y][x])) structures[y][x] = 0;
+          if (bridgeIds.has(upperObjects[y][x])) upperObjects[y][x] = 0;
+        }
+      }
+
+      // New roads are drawn as connected paths using the tileset's actual Wang
+      // dirt-path pieces. No copied map blocks and no CSS/flat-color road art.
+      const roadColors = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(0));
+      function setRoadCell(x, y, color) {
+        if (x < 0 || y < 0 || x >= worldTiles || y >= worldTiles || inOriginal(x, y)) return;
+        roadColors[y][x] = color;
+      }
+      function paintRoad(points, width, color) {
+        for (let segment = 0; segment < points.length - 1; segment += 1) {
+          const a = points[segment];
+          const b = points[segment + 1];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
+          let previous = null;
+          for (let step = 0; step <= steps; step += 1) {
+            const t = steps ? step / steps : 0;
+            const x = Math.round(a.x + dx * t);
+            const y = Math.round(a.y + dy * t);
+            if (previous && x !== previous.x && y !== previous.y) {
+              // Add an orthogonal bridge cell so diagonal samples remain connected.
+              setRoadCell(x, previous.y, color);
+            }
+            for (let oy = 0; oy < width; oy += 1) {
+              for (let ox = 0; ox < width; ox += 1) setRoadCell(x + ox, y + oy, color);
+            }
+            previous = { x, y };
+          }
+        }
+      }
+
+      // Main dirt roads connect the four edges of the original starting region.
+      paintRoad([{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], 2, 1);
+      paintRoad([{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], 2, 1);
+      paintRoad([{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], 2, 1);
+      paintRoad([{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }], 2, 1);
+      // Narrower sandy trails lead to clearings beyond the main roads.
+      paintRoad([{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], 1, 1);
+      paintRoad([{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], 1, 1);
+      paintRoad([{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], 1, 1);
+
+      const dirtPathByMask = {
+        1: 58, 2: 86, 3: 59, 4: 4, 5: 31, 6: 5, 7: 32,
+        8: 88, 9: 61, 10: 87, 11: 60, 12: 7, 13: 34, 14: 6, 15: 33
+      };
+      const sandPathByMask = {
+        1: 70, 2: 98, 3: 71, 4: 16, 5: 43, 6: 17, 7: 44,
+        8: 100, 9: 73, 10: 99, 11: 72, 12: 19, 13: 46, 14: 18, 15: 45
+      };
+      for (let y = 0; y < worldTiles; y += 1) {
+        for (let x = 0; x < worldTiles; x += 1) {
+          const color = roadColors[y][x];
+          if (!color) continue;
+          const mask =
+            (y > 0 && roadColors[y - 1][x] ? 1 : 0) |
+            (x + 1 < worldTiles && roadColors[y][x + 1] ? 2 : 0) |
+            (y + 1 < worldTiles && roadColors[y + 1][x] ? 4 : 0) |
+            (x > 0 && roadColors[y][x - 1] ? 8 : 0);
+          ground[y][x] = dirtPathByMask[mask] || pickGrass(x, y, 43);
+        }
+      }
+
+      // Build several natural rocky outcrops from the tileset's cliff-edge pieces.
+      // Their edge tiles are selected from the Wang cardinal-neighbour pattern.
+      const cliffMask = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
+      const cliffPatches = [
+        { x: 10, y: 12, rx: 5, ry: 4 },
+        { x: 76, y: 12, rx: 6, ry: 4 },
+        { x: 12, y: 79, rx: 6, ry: 5 },
+        { x: 78, y: 78, rx: 6, ry: 4 },
+        { x: 17, y: 49, rx: 3, ry: 6 },
+        { x: 74, y: 48, rx: 4, ry: 5 }
+      ];
+      for (let pIndex = 0; pIndex < cliffPatches.length; pIndex += 1) {
+        const patch = cliffPatches[pIndex];
+        for (let y = Math.max(1, patch.y - patch.ry); y <= Math.min(worldTiles - 2, patch.y + patch.ry); y += 1) {
+          for (let x = Math.max(1, patch.x - patch.rx); x <= Math.min(worldTiles - 2, patch.x + patch.rx); x += 1) {
+            if (inOriginal(x, y) || roadColors[y][x] || inSpawnClearance(x, y)) continue;
+            const nx = (x - patch.x) / patch.rx;
+            const ny = (y - patch.y) / patch.ry;
+            const raggedEdge = (stableNoise(x, y, pIndex + 61) - 0.5) * 0.28;
+            if (nx * nx + ny * ny < 1 + raggedEdge) cliffMask[y][x] = true;
+          }
+        }
+      }
+      const cliffTileByMask = {
+        1: 163, 2: 109, 3: 136, 4: 111, 5: 167, 6: 110, 7: 112,
+        8: 165, 9: 164, 10: 166, 11: 139, 12: 138, 13: 140, 14: 113, 15: 137
+      };
+      for (let y = 1; y < worldTiles - 1; y += 1) {
+        for (let x = 1; x < worldTiles - 1; x += 1) {
+          if (!cliffMask[y][x]) continue;
+          const mask =
+            (cliffMask[y - 1][x] ? 1 : 0) |
+            (cliffMask[y][x + 1] ? 2 : 0) |
+            (cliffMask[y + 1][x] ? 4 : 0) |
+            (cliffMask[y][x - 1] ? 8 : 0);
+          ground[y][x] = cliffTileByMask[mask] || 137;
+          blocked[y][x] = true;
+        }
+      }
+
+      // Add trees as separate tileset objects in clustered woodland patches.
+      // These are newly placed assets, not rows copied from the original map.
+      const treePatches = [
+        { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
+        { x: 76, y: 12, rx: 9, ry: 7, density: 0.42 },
+        { x: 11, y: 77, rx: 8, ry: 8, density: 0.44 },
+        { x: 78, y: 77, rx: 8, ry: 8, density: 0.42 },
+        { x: 15, y: 48, rx: 6, ry: 8, density: 0.30 },
+        { x: 75, y: 48, rx: 6, ry: 8, density: 0.30 }
+      ];
+      const treeSprites = [703, 705, 706, 707, 731, 732, 733];
+      let generatedTrees = 0;
+      for (let y = 2; y < worldTiles - 2; y += 1) {
+        for (let x = 2; x < worldTiles - 2; x += 1) {
+          if (inOriginal(x, y) || roadColors[y][x] || cliffMask[y][x] || inSpawnClearance(x, y)) continue;
+          let density = 0;
+          for (const patch of treePatches) {
+            const nx = (x - patch.x) / patch.rx;
+            const ny = (y - patch.y) / patch.ry;
+            if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+          }
+          // A few isolated trees soften the transitions between forest patches.
+          if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
+          if (!density || stableNoise(x, y, 103) > density) continue;
+          const tree = treeSprites[Math.floor(stableNoise(x, y, 109) * treeSprites.length)];
+          structures[y][x] = tree;
+          blocked[y][x] = true;
+          generatedTrees += 1;
+        }
+      }
+
+      // Sparse non-blocking foliage/details break up large fields without creating walls.
+      for (let y = 2; y < worldTiles - 2; y += 1) {
+        for (let x = 2; x < worldTiles - 2; x += 1) {
+          if (inOriginal(x, y) || roadColors[y][x] || cliffMask[y][x] || structures[y][x] || inSpawnClearance(x, y)) continue;
+          if (stableNoise(x, y, 127) < 0.022) {
+            upperObjects[y][x] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
+          }
+        }
+      }
+
+      // Roads take precedence over terrain obstacles and remain completely walkable.
+      for (let y = 0; y < worldTiles; y += 1) {
+        for (let x = 0; x < worldTiles; x += 1) {
+          if (roadColors[y][x]) blocked[y][x] = false;
+        }
+      }
+
+      return {
+        ground,
+        structures,
+        upperObjects,
+        blocked,
+        stats: {
+          tiles: worldTiles * worldTiles,
+          roadCells: roadColors.flat().filter(Boolean).length,
+          cliffCells: cliffMask.flat().filter(Boolean).length,
+          generatedTrees
+        }
+      };
+    }
+
+    function createGroundBase(scene, worldTiles, tileSize, color) {
+      const worldPixels = worldTiles * tileSize;
+      return scene.add.rectangle(
+        worldPixels / 2,
+        worldPixels / 2,
+        worldPixels,
+        worldPixels,
+        color === undefined ? 0x8ca450 : color
+      ).setDepth(0);
+    }
+
+    function toPhaserTileLayer(tiledGids) {
+      return tiledGids.map((row) => row.map((gid) => (Number.isFinite(gid) && gid > 0 ? gid - 1 : -1)));
+    }
+
+    function toCollisionLayer(blocked) {
+      return blocked.map((row) => row.map((cell) => (cell ? 1 : -1)));
+    }
+
+    function findPath(blocked, start, goal) {
+      if (!Array.isArray(blocked) || !blocked.length || !blocked[0].length) return [];
+      const width = blocked[0].length;
+      const height = blocked.length;
+      if (!inBounds(blocked, start.x, start.y) || !inBounds(blocked, goal.x, goal.y)) return [];
+      if (blocked[start.y][start.x] || blocked[goal.y][goal.x]) return [];
+      if (start.x === goal.x && start.y === goal.y) return [];
+
+      const directions = [
+        [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+        [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]
+      ];
+      const key = (x, y) => `${x},${y}`;
+      const heuristic = (x, y) => {
+        const dx = Math.abs(goal.x - x);
+        const dy = Math.abs(goal.y - y);
+        return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+      };
+      const startKey = key(start.x, start.y);
+      const goalKey = key(goal.x, goal.y);
+      const open = [{ x: start.x, y: start.y, g: 0, f: heuristic(start.x, start.y) }];
+      const gScore = new Map([[startKey, 0]]);
+      const cameFrom = new Map();
+      const closed = new Set();
+
+      while (open.length) {
+        let bestIndex = 0;
+        for (let i = 1; i < open.length; i += 1) {
+          if (open[i].f < open[bestIndex].f) bestIndex = i;
+        }
+        const current = open.splice(bestIndex, 1)[0];
+        const currentKey = key(current.x, current.y);
+        if (closed.has(currentKey)) continue;
+        if (currentKey === goalKey) {
+          const path = [];
+          let cursor = goalKey;
+          while (cursor !== startKey) {
+            const [x, y] = cursor.split(',').map(Number);
+            path.push({ x, y });
+            cursor = cameFrom.get(cursor);
+            if (!cursor) return [];
+          }
+          path.reverse();
+          return path;
+        }
+        closed.add(currentKey);
+
+        for (const [dx, dy, cost] of directions) {
+          const nx = current.x + dx;
+          const ny = current.y + dy;
+          if (!inBounds(blocked, nx, ny) || blocked[ny][nx]) continue;
+          // Prevent diagonal movement from squeezing through two touching blockers.
+          if (dx && dy && (blocked[current.y][nx] || blocked[ny][current.x])) continue;
+          const nextKey = key(nx, ny);
+          if (closed.has(nextKey)) continue;
+          const tentative = current.g + cost;
+          if (tentative >= (gScore.has(nextKey) ? gScore.get(nextKey) : Infinity)) continue;
+          cameFrom.set(nextKey, currentKey);
+          gScore.set(nextKey, tentative);
+          open.push({ x: nx, y: ny, g: tentative, f: tentative + heuristic(nx, ny) });
+        }
+      }
+      return [];
+    }
+
+    root.CONQUISTADOR_CORE = { findPath, worldToTile, directionRow, expandTileLayer, toPhaserTileLayer, toCollisionLayer, createExpandedWorld, createGroundBase };
+  })(window);
+  </script>
+
+  <script>
+  (function () {
+    'use strict';
+
+    const TILE_SIZE = 16;
+    const WORLD_TILES = 90;
+    const WORLD_PIXELS = WORLD_TILES * TILE_SIZE;
+    const MAP_OFFSET = 30;
+    const PLAYER_START = { x: 45, y: 65 };
+    const TILESET_URL = 'https://cdn.jsdelivr.net/gh/TheBogdichHD/procedural-generation-godot@0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png';
+    const PLAYER_URL = 'https://cdn.jsdelivr.net/gh/ASH-CHA/Capstonr_Project_2D_RPG@d682c4c8cc051fd0d7c50c3049d5db8469f5354e/assets/npcs/Warrior-Red.png';
+    const SAMPLE_MAP_URL = 'https://raw.githubusercontent.com/series-ai/jam-ready-assets/196b654e3baacbd29d2b1c7903692000ce52113b/shade-puny-world/2D/top-down-rpg/Tiled/samplemap2.tmj';
+    const core = window.CONQUISTADOR_CORE;
+    const loading = document.getElementById('loading');
+    const errorPanel = document.getElementById('error');
+    const errorDetail = document.getElementById('error-detail');
+
+    function showError(message) {
+      loading.style.display = 'none';
+      errorPanel.style.display = 'grid';
+      if (message) errorDetail.textContent = message;
+    }
+
+    window.addEventListener('error', (event) => {
+      console.error('Erro global do CONQUISTADOR:', event.error || event.message);
+      if (loading.style.display !== 'none') showError(event.message || 'Erro inesperado no navegador.');
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Falha assíncrona do CONQUISTADOR:', event.reason);
+      if (loading.style.display !== 'none') showError('Falha ao iniciar o jogo. Recarregue a página e tente novamente.');
+    });
+
+    if (!window.Phaser || !core) {
+      showError('O motor do jogo não foi carregado. Confira sua conexão e atualize a página.');
+      return;
+    }
+
+    class WorldScene extends Phaser.Scene {
+      constructor() {
+        super('WorldScene');
+        this.path = [];
+        this.facingRow = 0;
+      }
+
+      preload() {
+        this.load.image('tiles', TILESET_URL);
+        this.load.spritesheet('hero', PLAYER_URL, { frameWidth: 32, frameHeight: 32 });
+        this.load.json('sampleMap', SAMPLE_MAP_URL);
+        this.load.on('loaderror', (file) => {
+          this.assetLoadFailed = true;
+          showError(`Falha ao carregar ${file.key}. Verifique a conexão com os recursos do jogo.`);
+        });
+      }
+
+      create() {
+        // If any external resource failed, keep its specific diagnostic on screen.
+        if (this.assetLoadFailed) return;
+        const sample = this.cache.json.get('sampleMap');
+        if (!this.textures.exists('tiles') || !this.textures.exists('hero')) {
+          showError('Os recursos visuais não foram carregados. Confira a conexão com a internet e recarregue a página.');
+          return;
+        }
+        if (!sample || !Array.isArray(sample.layers) || sample.layers.length < 3) {
+          showError('O arquivo do mapa não foi recebido ou não contém as três camadas esperadas. Atualize a página e tente novamente.');
+          return;
+        }
+
+        try {
+          this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+          this.buildWorld(sample.layers);
+          this.createPlayerAnimations();
+          this.createPlayer();
+          this.setupCamera();
+          this.input.mouse.disableContextMenu();
+          this.input.on('pointerdown', this.onMapTap, this);
+          loading.style.display = 'none';
+        } catch (error) {
+          console.error('Falha ao montar o mundo do CONQUISTADOR:', error);
+          showError(error && error.message ? `Erro ao montar o mundo: ${error.message}` : 'Erro inesperado ao montar o mundo.');
+        }
+      }
+
+      buildWorld(sourceLayers) {
+        // O mapa usa várias células transparentes para árvores/decorações e para
+        // preencher as áreas sem tiles. Esta base contínua de grama fica por baixo
+        // de todas as camadas e impede que o fundo escuro do canvas apareça.
+        core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
+        const expanded = core.createExpandedWorld(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
+        const ground = expanded.ground;
+        const structures = expanded.structures;
+        const upperObjects = expanded.upperObjects;
+        this.blocked = expanded.blocked;
+
+        const cliffTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167]);
+        // Only solid buildings/large structures block the walking grid.
+        const solidStructureTileIds = new Set([
+          703, 705, 706, 707, 731, 732, 733,
+          785, 798, 812, 849, 896, 897, 898, 899,
+          904, 905, 923, 924, 926, 931, 932,
+          952, 953, 954, 1004, 1006, 1007, 1008, 1009
+        ]);
+        const texture = this.textures.get('tiles');
+        const addTileFrame = (tileId) => {
+          const frameName = `tile-${tileId}`;
+          if (!texture.has(frameName)) {
+            const frameIndex = tileId - 1;
+            texture.add(frameName, 0, (frameIndex % 27) * TILE_SIZE, Math.floor(frameIndex / 27) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          }
+          return frameName;
+        };
+
+        // Cliff-edge tiles are separate depth-sorted objects and solid obstacles.
+        for (let y = 0; y < WORLD_TILES; y += 1) {
+          for (let x = 0; x < WORLD_TILES; x += 1) {
+            const tileId = ground[y][x];
+            if (!cliffTileIds.has(tileId)) continue;
+            this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
+              .setDepth(y * TILE_SIZE + TILE_SIZE);
+            ground[y][x] = 0;
+            this.blocked[y][x] = true;
+          }
+        }
+        this.createTileLayer(ground, 2);
+
+        // Keep the buildings visible, but decorative pieces do not become walls.
+        for (let y = 0; y < WORLD_TILES; y += 1) {
+          for (let x = 0; x < WORLD_TILES; x += 1) {
+            const tileId = structures[y][x];
+            if (!tileId) continue;
+            this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
+              .setDepth(y * TILE_SIZE + TILE_SIZE);
+            if (solidStructureTileIds.has(tileId)) this.blocked[y][x] = true;
+          }
+        }
+        for (let y = 0; y < WORLD_TILES; y += 1) {
+          for (let x = 0; x < WORLD_TILES; x += 1) {
+            const tileId = upperObjects[y][x];
+            if (!tileId) continue;
+            this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
+              .setDepth(y * TILE_SIZE + TILE_SIZE);
+          }
+        }
+
+        const collisionData = core.toCollisionLayer(this.blocked);
+        const collisionMap = this.make.tilemap({ data: collisionData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
+        const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+        const collisionLayer = collisionMap.createLayer(0, collisionTileset, 0, 0);
+        collisionLayer.setAlpha(0);
+        collisionLayer.setDepth(10000);
+        collisionMap.setCollision(1, true, true, collisionLayer, true);
+        this.collisionLayer = collisionLayer;
+      }
+
+      createTileLayer(data, depth) {
+        const phaserData = core.toPhaserTileLayer(data);
+        const map = this.make.tilemap({ data: phaserData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
+        const tileset = map.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+        const layer = map.createLayer(0, tileset, 0, 0);
+        layer.setDepth(depth);
+        return layer;
+      }
+
+      createPlayer() {
+        const x = (PLAYER_START.x + 0.5) * TILE_SIZE;
+        const y = (PLAYER_START.y + 0.5) * TILE_SIZE;
+        this.player = this.physics.add.sprite(x, y, 'hero', 0);
+        this.player.setOrigin(0.5, 0.86);
+        this.player.body.setSize(13, 9);
+        this.player.body.setOffset(9.5, 22);
+        this.player.setCollideWorldBounds(true);
+        this.player.setDepth(y + 12);
+        this.physics.add.collider(this.player, this.collisionLayer);
+        this.player.anims.play('idle-0');
+      }
+
+      createPlayerAnimations() {
+        for (let row = 0; row < 8; row += 1) {
+          this.anims.create({
+            key: `idle-${row}`,
+            frames: this.anims.generateFrameNumbers('hero', { start: row * 24, end: row * 24 + 1 }),
+            frameRate: 2,
+            repeat: -1
+          });
+          this.anims.create({
+            key: `walk-${row}`,
+            frames: this.anims.generateFrameNumbers('hero', { start: row * 24 + 2, end: row * 24 + 4 }),
+            frameRate: 8,
+            repeat: -1
+          });
+        }
+      }
+
+      setupCamera() {
+        const camera = this.cameras.main;
+        camera.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+        camera.setLerp(0.12, 0.12);
+        camera.startFollow(this.player, true, 0.12, 0.12);
+      }
+
+      onMapTap(pointer) {
+        if (pointer.rightButtonDown()) return;
+        pointer.updateWorldPoint(this.cameras.main);
+        const destination = core.worldToTile(pointer.worldX, pointer.worldY, TILE_SIZE);
+        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_TILES || destination.y >= WORLD_TILES) return;
+        if (this.blocked[destination.y][destination.x]) return;
+
+        const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
+        const route = core.findPath(this.blocked, start, destination);
+        if (!route.length) return;
+        this.path = route.map((tile) => ({
+          x: (tile.x + 0.5) * TILE_SIZE,
+          y: (tile.y + 0.5) * TILE_SIZE
+        }));
+      }
+
+      update(_time, delta) {
+        if (!this.player || !this.player.body) return;
+        if (!this.path.length) {
+          this.player.body.setVelocity(0, 0);
+          this.player.setDepth(this.player.y + 12);
+          this.player.anims.play(`idle-${this.facingRow}`, true);
+          return;
+        }
+
+        const target = this.path[0];
+        const dx = target.x - this.player.x;
+        const dy = target.y - this.player.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= Math.max(2, 78 * (delta / 1000))) {
+          this.player.body.reset(target.x, target.y);
+          this.path.shift();
+          if (!this.path.length) this.player.body.setVelocity(0, 0);
+          this.player.setDepth(this.player.y + 12);
+          return;
+        }
+
+        const speed = 76;
+        const vx = (dx / distance) * speed;
+        const vy = (dy / distance) * speed;
+        this.player.body.setVelocity(vx, vy);
+        this.facingRow = core.directionRow(vx, vy);
+        this.player.anims.play(`walk-${this.facingRow}`, true);
+        this.player.setDepth(this.player.y + 12);
+      }
+    }
+
+    const config = {
+      type: Phaser.AUTO,
+      parent: 'game-root',
+      width: 360,
+      height: 640,
+      backgroundColor: '#8ca450',
+      pixelArt: true,
+      roundPixels: true,
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: 360,
+        height: 640
+      },
+      physics: {
+        default: 'arcade',
+        arcade: { debug: false, gravity: { x: 0, y: 0 } }
+      },
+      scene: [WorldScene]
+    };
+
+    try {
+      new Phaser.Game(config);
+    } catch (error) {
+      showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
+    }
+  })();
+  </script>
+</body>
+</html>
