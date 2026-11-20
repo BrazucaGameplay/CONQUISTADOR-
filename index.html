@@ -218,7 +218,22 @@
 
         const treeTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165]);
         const treeTrunkIds = new Set([163, 164, 165]);
-        const waterTileIds = new Set([190, 191, 192, 193, 194, 195, 196, 197, 198, 207, 217, 218, 219, 220, 222, 223, 224, 244, 245, 246, 247, 248, 249, 250, 251, 272, 274, 298, 326, 328, 354]);
+        // The actual river tiles used by this map are in the 272+ tile range.
+        // IDs 190-251 are small vegetation / scenery pieces, not water; treating
+        // them as water made many harmless details become invisible walls.
+        const waterTileIds = new Set([272, 274, 298, 326, 328, 354]);
+        // Three overlay tiles form the wooden bridge sections in the sample map.
+        // They must remain walkable even though they sit on the object layer.
+        const bridgeTileIds = new Set([85, 86, 88]);
+        // Keep buildings and their structural pieces solid, but do not block
+        // decorative foliage, tiny props, or the bridge overlay.
+        const solidStructureTileIds = new Set([
+          703, 705, 706, 707, 731, 732, 733,
+          785, 798, 812, 849, 896, 897, 898, 899,
+          904, 905, 923, 924, 926, 931, 932,
+          952, 953, 954, 1004, 1006, 1007, 1008, 1009
+        ]);
+        const bridgeCells = [];
         const texture = this.textures.get('tiles');
         const addTileFrame = (tileId) => {
           const frameName = `tile-${tileId}`;
@@ -243,35 +258,47 @@
         }
         this.createTileLayer(ground, 2);
 
-        // Houses and large props are rendered piece-by-piece with the same y-depth rule.
+        // Buildings and hard structural objects remain solid. Small scenery
+        // overlays are still rendered, but do not turn every decorative tile
+        // into a one-tile wall that narrows the paths.
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = structures[y][x];
             if (!tileId) continue;
             this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
               .setDepth(y * TILE_SIZE + TILE_SIZE);
-            this.blocked[y][x] = true;
+            if (bridgeTileIds.has(tileId)) {
+              bridgeCells.push({ x, y });
+            } else if (solidStructureTileIds.has(tileId) || waterTileIds.has(tileId)) {
+              this.blocked[y][x] = true;
+            }
             structures[y][x] = 0;
           }
         }
 
-        // Small overlay objects are also separate and collision-aware.
+        // Upper-layer decoration is drawn above the player when appropriate,
+        // but it is not a collision surface (its footprint is handled below).
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = upperObjects[y][x];
             if (!tileId) continue;
             this.add.image(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'tiles', addTileFrame(tileId))
               .setDepth(y * TILE_SIZE + TILE_SIZE);
-            this.blocked[y][x] = true;
             upperObjects[y][x] = 0;
           }
         }
 
-        // Water and shoreline tiles on the ground are impassable.
+        // Water tiles on the ground are impassable.
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             if (waterTileIds.has(ground[y][x])) this.blocked[y][x] = true;
           }
+        }
+
+        // The bridge is a deliberate crossing over the river. Re-open its deck
+        // after water and object collision have been assembled.
+        for (const cell of bridgeCells) {
+          this.blocked[cell.y][cell.x] = false;
         }
 
         // Invisible tile layer is the physical collision boundary; pathfinding uses
