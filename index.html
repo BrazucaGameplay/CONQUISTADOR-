@@ -1181,6 +1181,165 @@
         actionBar.append(selectedLabel, deleteButton);
 
         panel.append(topRule, header, divider, content, actionBar);
+
+        // Custom confirmation dialog: intentionally uses the same dark,
+        // translucent, antique-gold visual language as the backpack.
+        const dialogShade = this.el('div', {
+          position: 'absolute',
+          inset: '0',
+          zIndex: '5',
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '18px',
+          background: 'rgba(0,0,0,.76)',
+          backdropFilter: 'blur(2px)',
+          WebkitBackdropFilter: 'blur(2px)'
+        });
+        const dialog = this.el('section', {
+          width: 'min(100%, 360px)',
+          padding: '20px 18px 16px',
+          border: '1px solid rgba(204,180,133,.9)',
+          borderRadius: '8px',
+          outline: '1px solid rgba(28,20,14,.95)',
+          outlineOffset: '-5px',
+          background: 'linear-gradient(180deg, rgba(43,34,27,.99), rgba(18,16,14,.99))',
+          boxShadow: '0 14px 42px rgba(0,0,0,.78), inset 0 0 28px rgba(0,0,0,.35)',
+          color: '#f0e2c7',
+          font: '14px/1.35 Georgia, "Times New Roman", serif'
+        });
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-label', 'Confirmar exclusão do item');
+
+        const dialogTitle = this.el('div', {
+          margin: '3px 0 8px',
+          color: '#f0dfbb',
+          font: 'bold 19px/1.2 Georgia, serif',
+          letterSpacing: '.07em',
+          textAlign: 'center',
+          textShadow: '0 2px 3px #000'
+        });
+        dialogTitle.textContent = 'EXCLUIR ITEM';
+        const dialogItemName = this.el('div', {
+          margin: '8px 0 16px',
+          color: '#d7c5a4',
+          font: '16px/1.3 Georgia, serif',
+          textAlign: 'center',
+          overflowWrap: 'anywhere'
+        });
+        const quantityCaption = this.el('div', {
+          marginBottom: '9px',
+          color: '#bca989',
+          font: '13px/1.2 Georgia, serif',
+          textAlign: 'center'
+        });
+        quantityCaption.textContent = 'Quantidade';
+        const quantityControls = this.el('div', {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '18px',
+          margin: '0 auto 10px'
+        });
+        const makeQuantityButton = (symbol, label) => {
+          const button = this.el('button', {
+            width: '40px',
+            height: '40px',
+            display: 'grid',
+            placeItems: 'center',
+            border: '1px solid rgba(204,180,133,.78)',
+            borderRadius: '50%',
+            background: 'linear-gradient(145deg, rgba(75,61,48,.98), rgba(25,22,19,.98))',
+            color: '#f0dfbb',
+            font: 'bold 23px/1 Georgia, serif',
+            boxShadow: '0 2px 7px rgba(0,0,0,.55)',
+            touchAction: 'manipulation',
+            cursor: 'pointer'
+          });
+          button.type = 'button';
+          button.textContent = symbol;
+          button.setAttribute('aria-label', label);
+          return button;
+        };
+        const quantityMinus = makeQuantityButton('−', 'Diminuir quantidade');
+        const quantityPlus = makeQuantityButton('+', 'Aumentar quantidade');
+        const quantityValue = this.el('div', {
+          minWidth: '58px',
+          color: '#f5e5c4',
+          font: 'bold 27px/1 Georgia, serif',
+          fontVariantNumeric: 'tabular-nums',
+          textAlign: 'center',
+          textShadow: '0 2px 4px #000'
+        });
+        quantityControls.append(quantityMinus, quantityValue, quantityPlus);
+
+        const quantityMax = this.el('div', {
+          marginBottom: '18px',
+          color: '#9f927e',
+          font: '12px/1.2 Georgia, serif',
+          textAlign: 'center'
+        });
+        const dialogActions = this.el('div', {
+          display: 'flex',
+          gap: '10px',
+          marginTop: '4px'
+        });
+        const makeActionButton = (label, destructive) => {
+          const button = this.el('button', {
+            flex: '1',
+            minHeight: '42px',
+            padding: '0 10px',
+            border: destructive
+              ? '1px solid rgba(204,135,113,.9)'
+              : '1px solid rgba(204,180,133,.75)',
+            borderRadius: '22px',
+            background: destructive
+              ? 'linear-gradient(180deg, rgba(111,52,42,.98), rgba(59,25,23,.98))'
+              : 'linear-gradient(180deg, rgba(74,62,50,.98), rgba(31,27,23,.98))',
+            color: destructive ? '#ffe6dc' : '#eadcc2',
+            font: 'bold 11px/1 Georgia, serif',
+            letterSpacing: '.07em',
+            textShadow: '0 1px 2px #000',
+            boxShadow: '0 2px 8px rgba(0,0,0,.45)',
+            touchAction: 'manipulation',
+            cursor: 'pointer'
+          });
+          button.type = 'button';
+          button.textContent = label;
+          return button;
+        };
+        const cancelDelete = makeActionButton('CANCELAR', false);
+        const confirmDelete = makeActionButton('CONFIRMAR', true);
+        dialogActions.append(cancelDelete, confirmDelete);
+        dialog.append(dialogTitle, dialogItemName, quantityCaption, quantityControls, quantityMax, dialogActions);
+        dialogShade.appendChild(dialog);
+        panel.appendChild(dialogShade);
+
+        this.dialogShade = dialogShade;
+        this.dialogItemName = dialogItemName;
+        this.quantityValue = quantityValue;
+        this.quantityMax = quantityMax;
+        this.quantityMinus = quantityMinus;
+        this.quantityPlus = quantityPlus;
+        this.cancelDeleteButton = cancelDelete;
+        this.confirmDeleteButton = confirmDelete;
+        this.quantityDialogItemId = null;
+        this.quantityDialogAmount = 1;
+        this.quantityDialogMaximum = 1;
+
+        this.quantityMinusHandler = () => this.setDialogQuantity(this.quantityDialogAmount - 1);
+        this.quantityPlusHandler = () => this.setDialogQuantity(this.quantityDialogAmount + 1);
+        this.cancelDeleteHandler = () => this.closeQuantityDialog();
+        this.confirmDeleteHandler = () => this.confirmQuantityDeletion();
+        quantityMinus.addEventListener('click', this.quantityMinusHandler);
+        quantityPlus.addEventListener('click', this.quantityPlusHandler);
+        cancelDelete.addEventListener('click', this.cancelDeleteHandler);
+        confirmDelete.addEventListener('click', this.confirmDeleteHandler);
+        dialogShade.addEventListener('click', event => {
+          if (event.target === dialogShade) this.closeQuantityDialog();
+        });
+
         backdrop.appendChild(panel);
         this.document.body.append(openButton, backdrop);
 
@@ -1371,6 +1530,80 @@
         }
       }
 
+      openQuantityDialog(itemId, maximum) {
+        this.quantityDialogItemId = itemId;
+        this.quantityDialogMaximum = Math.max(1, Math.floor(Number(maximum) || 1));
+        this.quantityDialogAmount = this.quantityDialogMaximum;
+        const definition = this.getItemDefinition(itemId);
+        this.dialogItemName.textContent = definition.name || itemId;
+        this.quantityMax.textContent = `Disponível: ${this.quantityDialogMaximum.toLocaleString('pt-BR')}`;
+        this.setDialogQuantity(this.quantityDialogAmount);
+        this.dialogShade.style.display = 'flex';
+      }
+
+      setDialogQuantity(value) {
+        const max = Math.max(1, this.quantityDialogMaximum || 1);
+        this.quantityDialogAmount = Math.max(1, Math.min(max, Math.floor(Number(value) || 1)));
+        this.quantityValue.textContent = this.quantityDialogAmount.toLocaleString('pt-BR');
+        this.quantityMinus.disabled = this.quantityDialogAmount <= 1;
+        this.quantityPlus.disabled = this.quantityDialogAmount >= max;
+        this.quantityMinus.style.opacity = this.quantityMinus.disabled ? '.35' : '1';
+        this.quantityPlus.style.opacity = this.quantityPlus.disabled ? '.35' : '1';
+      }
+
+      closeQuantityDialog() {
+        this.dialogShade.style.display = 'none';
+        this.quantityDialogItemId = null;
+      }
+
+      confirmQuantityDeletion() {
+        const itemId = this.quantityDialogItemId;
+        const amount = this.quantityDialogAmount;
+        if (!itemId || amount < 1) return false;
+        const current = this.getItems();
+        let available = 0;
+        for (const saved of current) {
+          if (saved && saved.id === itemId) {
+            available += Math.max(0, Math.floor(Number(saved.quantity) || 0));
+          }
+        }
+        if (available < amount) {
+          this.closeQuantityDialog();
+          this.selectedItemId = null;
+          this.refresh();
+          return false;
+        }
+        let toRemove = amount;
+        const remaining = [];
+        for (const saved of current) {
+          if (!saved) continue;
+          if (saved.id !== itemId || toRemove <= 0) {
+            remaining.push({ ...saved });
+            continue;
+          }
+          const oldQuantity = Math.max(0, Math.floor(Number(saved.quantity) || 0));
+          const removedHere = Math.min(oldQuantity, toRemove);
+          const nextQuantity = oldQuantity - removedHere;
+          toRemove -= removedHere;
+          if (nextQuantity > 0) remaining.push({ ...saved, quantity: nextQuantity });
+        }
+        const found = toRemove === 0;
+        if (!found) {
+          this.closeQuantityDialog();
+          this.selectedItemId = null;
+          this.refresh();
+          return false;
+        }
+        const result = this.api.progress.update('items', remaining);
+        if (result === 'pending' || result === true) {
+          this.closeQuantityDialog();
+          this.selectedItemId = null;
+          this.refresh();
+          return true;
+        }
+        return false;
+      }
+
       updateSelectionBar(items) {
         const selected = items.find(item => item.id === this.selectedItemId);
         this.actionBar.style.display = selected ? 'flex' : 'none';
@@ -1391,30 +1624,14 @@
           return false;
         }
 
-        // Confirmation is deliberately native and concise: no custom destructive
-        // modal is added to the inventory's visual language.
-        const definition = this.getItemDefinition(selectedId);
-        const itemName = definition.name || selectedId;
-        const confirmed = typeof root.confirm === 'function'
-          ? root.confirm(`Excluir ${itemName} (${selected.quantity})?`)
-          : false;
-        if (!confirmed) return false;
-
-        const remaining = current
-          .filter(item => item && item.id !== selectedId)
-          .map(item => ({ ...item }));
-        const result = this.api.progress.update('items', remaining);
-        if (result === 'pending' || result === true) {
-          this.selectedItemId = null;
-          this.refresh();
-          return true;
-        }
-        return false;
+        this.openQuantityDialog(selectedId, selected.quantity);
+        return true;
       }
 
       setOpen(open) {
         if (!this.active) return;
         this.opened = Boolean(open);
+        if (!this.opened && this.dialogShade) this.closeQuantityDialog();
         this.backdrop.style.display = this.opened ? 'flex' : 'none';
         this.openButton.setAttribute('aria-expanded', String(this.opened));
         if (this.opened) this.refresh();
@@ -1428,6 +1645,10 @@
         if (this.openButton) this.openButton.removeEventListener('click', this.openHandler);
         if (this.closeButton) this.closeButton.removeEventListener('click', this.closeHandler);
         if (this.deleteButton) this.deleteButton.removeEventListener('click', this.deleteHandler);
+        if (this.quantityMinus) this.quantityMinus.removeEventListener('click', this.quantityMinusHandler);
+        if (this.quantityPlus) this.quantityPlus.removeEventListener('click', this.quantityPlusHandler);
+        if (this.cancelDeleteButton) this.cancelDeleteButton.removeEventListener('click', this.cancelDeleteHandler);
+        if (this.confirmDeleteButton) this.confirmDeleteButton.removeEventListener('click', this.confirmDeleteHandler);
         if (this.backdrop) this.backdrop.removeEventListener('click', this.backdropHandler);
         if (this.document && this.keyHandler) this.document.removeEventListener('keydown', this.keyHandler);
         if (this.openButton && this.openButton.remove) this.openButton.remove();
