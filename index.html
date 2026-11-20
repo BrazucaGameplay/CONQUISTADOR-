@@ -10,8 +10,8 @@
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17251b; }
     body { min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
-    #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #17251b; touch-action: none; }
-    #game-root canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+    #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #8ca450; touch-action: none; }
+    #game-root canvas { display: block; background: #8ca450; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
@@ -72,7 +72,7 @@
       if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
       const sw = layers[0].width || 30;
       const sh = layers[0].height || 30;
-      const ground = expandTileLayer(layers[0].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 114);
+      const ground = expandTileLayer(layers[0].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 0);
       const structures = expandTileLayer(layers[1].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 0);
       const upperObjects = expandTileLayer(layers[2].data, sw, sh, worldTiles, worldTiles, mapOffset, mapOffset, 0);
 
@@ -86,7 +86,7 @@
           if (!inOriginal && stableNoise(x, y, 3) < 0.11) {
             ground[y][x] = grassVariants[Math.floor(stableNoise(x, y, 7) * grassVariants.length)];
           }
-          if (waterIds.has(ground[y][x]) || bridgeIds.has(ground[y][x])) ground[y][x] = 114;
+          if (waterIds.has(ground[y][x]) || bridgeIds.has(ground[y][x])) ground[y][x] = 0;
           if (bridgeIds.has(structures[y][x])) structures[y][x] = 0;
           if (bridgeIds.has(upperObjects[y][x])) upperObjects[y][x] = 0;
         }
@@ -445,7 +445,7 @@
       parent: 'game-root',
       width: 360,
       height: 640,
-      backgroundColor: '#29452c',
+      backgroundColor: '#8ca450',
       pixelArt: true,
       roundPixels: true,
       scale: {
