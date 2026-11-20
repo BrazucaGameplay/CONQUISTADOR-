@@ -121,7 +121,9 @@
 
       // Thin only dense clusters of small trees inside the original map.
       // Buildings, paths, cliffs and the original layout remain untouched.
-      const centralTreeObstacleIds = new Set([703, 705, 706, 707, 731, 732, 733]);
+      // Only tiles confirmed by the Puny World sprite catalog as trees are
+      // treated as trees. 703 is a rock and 704 is a stone, not a tree.
+      const centralTreeObstacleIds = new Set([207, 261, 706, 730, 784, 760, 838]);
       let removedCentralTrees = 0;
       for (let y = mapOffset; y < mapOffset + sh; y += 1) {
         for (let x = mapOffset; x < mapOffset + sw; x += 1) {
@@ -210,13 +212,14 @@
       // Their edge tiles are selected from the Wang cardinal-neighbour pattern.
       const cliffMask = Array.from({ length: worldTiles }, () => Array(worldTiles).fill(false));
       const cliffPatches = [
-        // Larger, irregular formations rather than isolated short cliff fragments.
-        { x: 9, y: 12, rx: 8, ry: 6 },
-        { x: 77, y: 12, rx: 9, ry: 7 },
-        { x: 12, y: 78, rx: 9, ry: 7 },
-        { x: 78, y: 78, rx: 9, ry: 7 },
-        { x: 17, y: 49, rx: 5, ry: 9 },
-        { x: 74, y: 48, rx: 6, ry: 9 }
+        // Broad, connected mountain groups. The same Wang cliff-edge tiles are
+        // used, with moderate footprints so they define regions without sealing them.
+        { x: 9, y: 12, rx: 9, ry: 7 },
+        { x: 78, y: 12, rx: 10, ry: 8 },
+        { x: 11, y: 78, rx: 10, ry: 8 },
+        { x: 79, y: 78, rx: 10, ry: 8 },
+        { x: 17, y: 49, rx: 6, ry: 9 },
+        { x: 74, y: 48, rx: 7, ry: 9 }
       ];
       for (let pIndex = 0; pIndex < cliffPatches.length; pIndex += 1) {
         const patch = cliffPatches[pIndex];
@@ -262,7 +265,9 @@
         { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
         { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
       ];
-      const treeSprites = [703, 705, 706, 707, 731, 732, 733];
+      // Correct full-tree tiles from the Puny World atlas:
+      // conifers 207/261, round trees 706/730/784, palms 760/838.
+      const treeSprites = [207, 261, 706, 730, 784, 760, 838];
       let generatedTrees = 0;
       for (let y = 2; y < worldTiles - 2; y += 1) {
         for (let x = 2; x < worldTiles - 2; x += 1) {
@@ -498,8 +503,7 @@
         const cliffTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167]);
         // Only solid buildings/large structures block the walking grid.
         const solidStructureTileIds = new Set([
-          703, 705, 706, 707, 731, 732, 733,
-          785, 798, 812, 849, 896, 897, 898, 899,
+          703, 704, 785, 798, 812, 849, 896, 897, 898, 899,
           904, 905, 923, 924, 926, 931, 932,
           952, 953, 954, 1004, 1006, 1007, 1008, 1009
         ]);
@@ -530,7 +534,8 @@
         // anchored to the tile's lower edge and sorted by that base for occlusion.
         // Every tree trunk remains a solid 1x1 collision cell; the canopy itself
         // can overlap nearby ground without creating an oversized invisible wall.
-        const treeSpriteIds = new Set([703, 705, 706, 707, 731, 732, 733]);
+        // Full tree sprites from the Puny World catalog, not rocks or small props.
+        const treeSpriteIds = new Set([207, 261, 706, 730, 784, 760, 838]);
         for (let y = 0; y < WORLD_TILES; y += 1) {
           for (let x = 0; x < WORLD_TILES; x += 1) {
             const tileId = structures[y][x];
