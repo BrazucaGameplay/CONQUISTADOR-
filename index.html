@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V22 Combate Animado</title>
+  <title>CONQUISTADOR — V23 Indicador de Recarga</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -642,27 +642,40 @@
         messageLine.style.background = 'rgba(20,30,22,.82)';
         messageLine.style.color = '#ffe58a';
         root.append(playerLine, monsterLine, messageLine);
+        // Cooldown indicator: a sword inside a circular ring. The ring fills
+        // smoothly while the basic attack recovers; no numeric timer is shown.
         const autoAttackBadge = document.createElement('div');
-        autoAttackBadge.textContent = '⚔';
-        autoAttackBadge.setAttribute('aria-label', 'Ataque automático ativo');
+        autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.right = 'max(14px, env(safe-area-inset-right))';
-        autoAttackBadge.style.bottom = 'max(16px, env(safe-area-inset-bottom))';
+        autoAttackBadge.style.left = 'max(16px, env(safe-area-inset-left))';
+        autoAttackBadge.style.bottom = 'max(18px, env(safe-area-inset-bottom))';
         autoAttackBadge.style.zIndex = '30';
-        autoAttackBadge.style.width = '48px';
-        autoAttackBadge.style.height = '48px';
-        autoAttackBadge.style.padding = '0';
+        autoAttackBadge.style.width = '56px';
+        autoAttackBadge.style.height = '56px';
+        autoAttackBadge.style.padding = '4px';
         autoAttackBadge.style.display = 'grid';
         autoAttackBadge.style.placeItems = 'center';
-        autoAttackBadge.style.border = '1px solid rgba(221,196,128,.78)';
         autoAttackBadge.style.borderRadius = '50%';
-        autoAttackBadge.style.background = 'linear-gradient(180deg, rgba(55,43,31,.94), rgba(22,19,17,.96))';
-        autoAttackBadge.style.color = '#f4dfaa';
-        autoAttackBadge.style.font = 'bold 23px Georgia, serif';
-        autoAttackBadge.style.lineHeight = '1';
-        autoAttackBadge.style.textShadow = '0 1px 2px #000';
-        autoAttackBadge.style.boxShadow = '0 2px 8px rgba(0,0,0,.45)';
+        autoAttackBadge.style.background = 'conic-gradient(from -90deg, #dfc47d 100%, rgba(90,78,57,.38) 100%)';
+        autoAttackBadge.style.boxShadow = '0 2px 9px rgba(0,0,0,.55), 0 0 0 1px rgba(221,196,128,.62)';
         autoAttackBadge.style.pointerEvents = 'none';
+
+        const autoAttackInner = document.createElement('div');
+        autoAttackInner.style.width = '100%';
+        autoAttackInner.style.height = '100%';
+        autoAttackInner.style.borderRadius = '50%';
+        autoAttackInner.style.display = 'grid';
+        autoAttackInner.style.placeItems = 'center';
+        autoAttackInner.style.background = 'radial-gradient(circle at 35% 28%, rgba(83,67,47,.98), rgba(21,18,16,.99))';
+        autoAttackInner.style.border = '1px solid rgba(241,219,165,.72)';
+        autoAttackInner.style.boxSizing = 'border-box';
+        autoAttackInner.style.color = '#f4dfaa';
+        autoAttackInner.style.font = 'bold 25px Georgia, serif';
+        autoAttackInner.style.lineHeight = '1';
+        autoAttackInner.style.textShadow = '0 1px 3px #000';
+        autoAttackInner.textContent = '⚔';
+        autoAttackBadge.appendChild(autoAttackInner);
+
         document.body.appendChild(root);
         document.body.appendChild(autoAttackBadge);
         this.uiRoot = root;
@@ -670,6 +683,24 @@
         this.monsterLine = monsterLine;
         this.messageLine = messageLine;
         this.autoAttackBadge = autoAttackBadge;
+        this.autoAttackInner = autoAttackInner;
+        this.updateAutoAttackIndicator();
+      }
+
+      updateAutoAttackIndicator() {
+        if (!this.autoAttackBadge) return;
+        const cooldown = Math.max(1, this.playerAttackCooldownMs || 420);
+        const elapsed = Math.max(0, this.now - this.lastPlayerAttackAt);
+        const progress = Math.max(0, Math.min(1, elapsed / cooldown));
+        const percent = (progress * 100).toFixed(1);
+        const muted = progress >= 1;
+        this.autoAttackBadge.style.background =
+          `conic-gradient(from -90deg, #dfc47d ${percent}%, rgba(90,78,57,.38) ${percent}% 100%)`;
+        this.autoAttackBadge.style.opacity = muted ? '1' : '0.96';
+        if (this.autoAttackInner) {
+          this.autoAttackInner.style.color = muted ? '#f4dfaa' : '#c8b98e';
+          this.autoAttackInner.style.filter = muted ? 'none' : 'saturate(.72)';
+        }
       }
 
       getChunkId(chunkX, chunkY) {
@@ -1350,6 +1381,7 @@
       update(time, delta) {
         if (!this.active) return;
         this.now = Number.isFinite(time) ? time : this.now + (Number(delta) || 0);
+        this.updateAutoAttackIndicator();
         this.updateInitialChunkFill();
         this.updateChunkRespawns();
         const playerPoint = this.getPlayerPoint();
@@ -4652,6 +4684,14 @@
         hitEffects: ['slash', 'red-hit-flash', 'blood-like-particles', 'recoil', 'death-fade'],
         maxMonstersPerChunk: 6,
         respawnDelayMs: 30000
+      });
+      window.CONQUISTADOR_V23 = Object.freeze({
+        version: 23,
+        game,
+        autoAttackIndicator: 'bottom-left-circular-sword',
+        cooldownVisual: 'animated-conic-ring',
+        cooldownNumericText: false,
+        cooldownMs: 420
       });
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
