@@ -388,6 +388,19 @@
       return result;
     }
 
+    // Keep only the chunks around the player's current chunk active. The caller
+    // loads the new set before unloading the old one to prevent visible gaps.
+    function planChunkStreaming(chunkX, chunkY, columns, rows, radius, activeIds) {
+      const keep = getChunkNeighborhood(chunkX, chunkY, columns, rows, radius).map(chunk => chunk.id);
+      const keepSet = new Set(keep);
+      const active = activeIds instanceof Set ? activeIds : new Set(activeIds || []);
+      return {
+        keep,
+        load: keep.filter(id => !active.has(id)),
+        unload: Array.from(active).filter(id => !keepSet.has(id))
+      };
+    }
+
     function createGroundBase(scene, worldTiles, tileSize, color) {
       const worldPixels = worldTiles * tileSize;
       return scene.add.rectangle(
@@ -484,7 +497,8 @@
       getTreeScale,
       splitWorldIntoChunks,
       getChunkAtTile,
-      getChunkNeighborhood
+      getChunkNeighborhood,
+      planChunkStreaming
     };
   })(window);
   </script>
@@ -496,6 +510,7 @@
     const TILE_SIZE = 16;
     const WORLD_TILES = 90;
     const CHUNK_TILES = 30;
+    const CHUNK_LOAD_RADIUS = 1;
     const WORLD_PIXELS = WORLD_TILES * TILE_SIZE;
     const MAP_OFFSET = 30;
     const PLAYER_START = { x: 45, y: 65 };
@@ -575,135 +590,215 @@
       buildWorld(sourceLayers) {
         core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
         const expanded = core.createExpandedWorld(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
-        this.blocked = expanded.blocked;
-        this.chunkGrid = core.splitWorldIntoChunks(expanded, CHUNK_TILES);
-        this.chunks = new Map();
-        this.collisionLayers = [];
 
-        const cliffTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167]);
-        const solidStructureTileIds = new Set([
+        // Prepare one authoritative collision grid for the complete world.
+        // Pathfinding uses this grid even when distant Phaser chunks are unloaded.
+        this.cliffTileIds = new Set([109, 110, 111, 112, 113, 136, 137, 138, 139, 140, 163, 164, 165, 166, 167]);
+        this.solidStructureTileIds = new Set([
           703, 704, 785, 798, 812, 849, 896, 897, 898, 899,
           904, 905, 923, 924, 926, 931, 932,
           952, 953, 954, 1004, 1006, 1007, 1008, 1009
         ]);
-        const treeSpriteIds = new Set([207, 261, 706, 730, 784, 760, 838]);
-        const texture = this.textures.get('tiles');
-        const addTileFrame = (tileId) => {
-          const frameName = `tile-${tileId}`;
-          if (!texture.has(frameName)) {
-            const frameIndex = tileId - 1;
-            texture.add(frameName, 0, (frameIndex % 27) * TILE_SIZE, Math.floor(frameIndex / 27) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
-          return frameName;
-        };
+        this.treeSpriteIds = new Set([207, 261, 706, 730, 784, 760, 838]);
+        this.blocked = expanded.blocked;
 
-        // The nine chunks use the exact same world coordinates and tiles as the
-        // previous monolithic map. Only rendering/collision ownership is split.
-        for (const chunk of this.chunkGrid.chunks) {
-          const worldX = chunk.tileX * TILE_SIZE;
-          const worldY = chunk.tileY * TILE_SIZE;
-          const drawGround = chunk.ground.map(row => row.slice());
-          const visualObjects = [];
-
-          for (let localY = 0; localY < chunk.height; localY += 1) {
-            for (let localX = 0; localX < chunk.width; localX += 1) {
-              const tileId = drawGround[localY][localX];
-              if (!cliffTileIds.has(tileId)) continue;
-              const worldTileX = chunk.tileX + localX;
-              const worldTileY = chunk.tileY + localY;
-              const cliff = this.add.image(
-                worldTileX * TILE_SIZE + 8,
-                worldTileY * TILE_SIZE + 8,
-                'tiles',
-                addTileFrame(tileId)
-              ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
-              visualObjects.push(cliff);
-              drawGround[localY][localX] = 0;
-              this.blocked[worldTileY][worldTileX] = true;
+        for (let y = 0; y < WORLD_TILES; y += 1) {
+          for (let x = 0; x < WORLD_TILES; x += 1) {
+            const groundId = expanded.ground[y][x];
+            const structureId = expanded.structures[y][x];
+            if (this.cliffTileIds.has(groundId) || this.treeSpriteIds.has(structureId) || this.solidStructureTileIds.has(structureId)) {
+              this.blocked[y][x] = true;
             }
           }
-
-          const groundRecord = this.createTileLayer(drawGround, 2, worldX, worldY);
-
-          for (let localY = 0; localY < chunk.height; localY += 1) {
-            for (let localX = 0; localX < chunk.width; localX += 1) {
-              const tileId = chunk.structures[localY][localX];
-              if (!tileId) continue;
-              const worldTileX = chunk.tileX + localX;
-              const worldTileY = chunk.tileY + localY;
-              const image = this.add.image(
-                worldTileX * TILE_SIZE + 8,
-                worldTileY * TILE_SIZE + 8,
-                'tiles',
-                addTileFrame(tileId)
-              );
-              visualObjects.push(image);
-              if (treeSpriteIds.has(tileId)) {
-                const scale = core.getTreeScale(worldTileX, worldTileY, tileId);
-                image.setOrigin(0.5, 1);
-                image.setPosition(worldTileX * TILE_SIZE + 8, (worldTileY + 1) * TILE_SIZE);
-                image.setScale(scale);
-                image.setDepth((worldTileY + 1) * TILE_SIZE + 1);
-                this.blocked[worldTileY][worldTileX] = true;
-              } else {
-                image.setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
-                if (solidStructureTileIds.has(tileId)) this.blocked[worldTileY][worldTileX] = true;
-              }
-            }
-          }
-
-          for (let localY = 0; localY < chunk.height; localY += 1) {
-            for (let localX = 0; localX < chunk.width; localX += 1) {
-              const tileId = chunk.upperObjects[localY][localX];
-              if (!tileId) continue;
-              const worldTileX = chunk.tileX + localX;
-              const worldTileY = chunk.tileY + localY;
-              const image = this.add.image(
-                worldTileX * TILE_SIZE + 8,
-                worldTileY * TILE_SIZE + 8,
-                'tiles',
-                addTileFrame(tileId)
-              ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
-              visualObjects.push(image);
-            }
-          }
-
-          // Each chunk owns a 30x30 collision layer positioned at its world origin.
-          // The master this.blocked grid remains intact for cross-chunk A* routing.
-          const collisionRows = this.blocked
-            .slice(chunk.tileY, chunk.tileY + chunk.height)
-            .map(row => row.slice(chunk.tileX, chunk.tileX + chunk.width));
-          // Keep the chunk's own collision snapshot in sync with the world grid,
-          // including tree/cliff blockers added while the visual objects are built.
-          chunk.blocked = collisionRows;
-          const collisionData = core.toCollisionLayer(collisionRows);
-          const collisionMap = this.make.tilemap({
-            data: collisionData,
-            tileWidth: TILE_SIZE,
-            tileHeight: TILE_SIZE,
-            insertNull: true
-          });
-          const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
-          const collisionLayer = collisionMap.createLayer(0, collisionTileset, worldX, worldY);
-          collisionLayer.setAlpha(0);
-          collisionLayer.setDepth(10000);
-          collisionMap.setCollision(1, true, true, collisionLayer, true);
-
-          chunk.worldX = worldX;
-          chunk.worldY = worldY;
-          chunk.groundMap = groundRecord.map;
-          chunk.groundLayer = groundRecord.layer;
-          chunk.collisionMap = collisionMap;
-          chunk.collisionLayer = collisionLayer;
-          chunk.visualObjects = visualObjects;
-          chunk.state = 'loaded';
-          this.collisionLayers.push(collisionLayer);
-          this.chunks.set(chunk.id, chunk);
         }
 
-        // The complete 3x3 grid remains loaded in this first chunking milestone.
-        // Selective loading/unloading will be added only after edge crossings work.
-        this.activeChunkIds = new Set(this.chunks.keys());
+        // Split the exact same world data into independent 30x30 chunks.
+        // Tile arrays remain available for global pathfinding and reloading;
+        // Phaser render objects and collision layers are streamed separately.
+        expanded.blocked = this.blocked;
+        this.chunkGrid = core.splitWorldIntoChunks(expanded, CHUNK_TILES);
+        this.chunks = new Map(this.chunkGrid.chunks.map(chunk => [chunk.id, chunk]));
+        this.activeChunkIds = new Set();
+        this.streamingCenterId = null;
+        this.chunkTexture = this.textures.get('tiles');
+
+        // Initial load: current chunk plus its eight neighbours, clipped at world edges.
+        this.updateChunkStreaming(true);
+      }
+
+      getTileFrame(tileId) {
+        const frameName = `tile-${tileId}`;
+        if (!this.chunkTexture.has(frameName)) {
+          const frameIndex = tileId - 1;
+          this.chunkTexture.add(
+            frameName,
+            0,
+            (frameIndex % 27) * TILE_SIZE,
+            Math.floor(frameIndex / 27) * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          );
+        }
+        return frameName;
+      }
+
+      attachChunkCollider(chunk) {
+        if (!this.player || !chunk || chunk.state !== 'loaded' || !chunk.collisionLayer || chunk.collider) return;
+        chunk.collider = this.physics.add.collider(this.player, chunk.collisionLayer);
+      }
+
+      loadChunk(chunk) {
+        if (!chunk || chunk.state === 'loaded') return;
+
+        const worldX = chunk.tileX * TILE_SIZE;
+        const worldY = chunk.tileY * TILE_SIZE;
+        const drawGround = chunk.ground.map(row => row.slice());
+        const visualObjects = [];
+
+        // Cliff tiles are separate depth-sorted objects, preserving their exact cells.
+        for (let localY = 0; localY < chunk.height; localY += 1) {
+          for (let localX = 0; localX < chunk.width; localX += 1) {
+            const tileId = drawGround[localY][localX];
+            if (!this.cliffTileIds.has(tileId)) continue;
+            const worldTileX = chunk.tileX + localX;
+            const worldTileY = chunk.tileY + localY;
+            const cliff = this.add.image(
+              worldTileX * TILE_SIZE + 8,
+              worldTileY * TILE_SIZE + 8,
+              'tiles',
+              this.getTileFrame(tileId)
+            ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
+            visualObjects.push(cliff);
+            drawGround[localY][localX] = 0;
+          }
+        }
+
+        const groundRecord = this.createTileLayer(drawGround, 2, worldX, worldY);
+
+        // Structures and oversized tree sprites are owned by the chunk containing
+        // their trunk/base cell. Their existing world depth is preserved.
+        for (let localY = 0; localY < chunk.height; localY += 1) {
+          for (let localX = 0; localX < chunk.width; localX += 1) {
+            const tileId = chunk.structures[localY][localX];
+            if (!tileId) continue;
+            const worldTileX = chunk.tileX + localX;
+            const worldTileY = chunk.tileY + localY;
+            const image = this.add.image(
+              worldTileX * TILE_SIZE + 8,
+              worldTileY * TILE_SIZE + 8,
+              'tiles',
+              this.getTileFrame(tileId)
+            );
+            visualObjects.push(image);
+            if (this.treeSpriteIds.has(tileId)) {
+              const scale = core.getTreeScale(worldTileX, worldTileY, tileId);
+              image.setOrigin(0.5, 1);
+              image.setPosition(worldTileX * TILE_SIZE + 8, (worldTileY + 1) * TILE_SIZE);
+              image.setScale(scale);
+              image.setDepth((worldTileY + 1) * TILE_SIZE + 1);
+            } else {
+              image.setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
+            }
+          }
+        }
+
+        for (let localY = 0; localY < chunk.height; localY += 1) {
+          for (let localX = 0; localX < chunk.width; localX += 1) {
+            const tileId = chunk.upperObjects[localY][localX];
+            if (!tileId) continue;
+            const worldTileX = chunk.tileX + localX;
+            const worldTileY = chunk.tileY + localY;
+            const image = this.add.image(
+              worldTileX * TILE_SIZE + 8,
+              worldTileY * TILE_SIZE + 8,
+              'tiles',
+              this.getTileFrame(tileId)
+            ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
+            visualObjects.push(image);
+          }
+        }
+
+        // Collision is built from the full world's authoritative grid. Only the
+        // active chunk has a Phaser collider, but navigation still sees every tile.
+        const collisionData = core.toCollisionLayer(chunk.blocked);
+        const collisionMap = this.make.tilemap({
+          data: collisionData,
+          tileWidth: TILE_SIZE,
+          tileHeight: TILE_SIZE,
+          insertNull: true
+        });
+        const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+        const collisionLayer = collisionMap.createLayer(0, collisionTileset, worldX, worldY);
+        collisionLayer.setAlpha(0);
+        collisionLayer.setDepth(10000);
+        collisionMap.setCollision(1, true, true, collisionLayer, true);
+
+        chunk.worldX = worldX;
+        chunk.worldY = worldY;
+        chunk.groundMap = groundRecord.map;
+        chunk.groundLayer = groundRecord.layer;
+        chunk.collisionMap = collisionMap;
+        chunk.collisionLayer = collisionLayer;
+        chunk.visualObjects = visualObjects;
+        chunk.collider = null;
+        chunk.state = 'loaded';
+        this.activeChunkIds.add(chunk.id);
+        this.attachChunkCollider(chunk);
+      }
+
+      unloadChunk(chunk) {
+        if (!chunk || chunk.state !== 'loaded') return;
+
+        // Remove physics first, then release visual objects and both tilemaps.
+        if (chunk.collider) {
+          chunk.collider.destroy();
+          chunk.collider = null;
+        }
+        for (const object of chunk.visualObjects || []) {
+          if (object && object.active) object.destroy();
+        }
+        if (chunk.groundLayer) chunk.groundLayer.destroy();
+        if (chunk.groundMap) chunk.groundMap.destroy();
+        if (chunk.collisionLayer) chunk.collisionLayer.destroy();
+        if (chunk.collisionMap) chunk.collisionMap.destroy();
+
+        chunk.groundMap = null;
+        chunk.groundLayer = null;
+        chunk.collisionMap = null;
+        chunk.collisionLayer = null;
+        chunk.visualObjects = [];
+        chunk.state = 'unloaded';
+        this.activeChunkIds.delete(chunk.id);
+      }
+
+      updateChunkStreaming(force = false) {
+        const playerTile = this.player
+          ? core.worldToTile(this.player.x, this.player.y, TILE_SIZE)
+          : PLAYER_START;
+        const center = core.getChunkAtTile(
+          playerTile.x,
+          playerTile.y,
+          this.chunkGrid.chunkSize,
+          this.chunkGrid.columns,
+          this.chunkGrid.rows
+        );
+        if (!center) return;
+        if (!force && center.id === this.streamingCenterId) return;
+
+        const plan = core.planChunkStreaming(
+          center.chunkX,
+          center.chunkY,
+          this.chunkGrid.columns,
+          this.chunkGrid.rows,
+          CHUNK_LOAD_RADIUS,
+          this.activeChunkIds
+        );
+
+        // Load first, unload second. The player never crosses a seam before the
+        // neighbouring chunk's ground and collider are available.
+        for (const id of plan.load) this.loadChunk(this.chunks.get(id));
+        for (const id of plan.unload) this.unloadChunk(this.chunks.get(id));
+        this.streamingCenterId = center.id;
       }
 
       createTileLayer(data, depth, worldX = 0, worldY = 0) {
@@ -724,12 +819,7 @@
         this.player.body.setOffset(9.5, 22);
         this.player.setCollideWorldBounds(true);
         this.player.setDepth(y + 12);
-        this.chunkColliders = [];
-        for (const chunk of this.chunkGrid.chunks) {
-          const collider = this.physics.add.collider(this.player, chunk.collisionLayer);
-          chunk.collider = collider;
-          this.chunkColliders.push(collider);
-        }
+        for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
         this.player.anims.play('idle-0');
       }
 
@@ -775,6 +865,7 @@
 
       update(_time, delta) {
         if (!this.player || !this.player.body) return;
+        this.updateChunkStreaming();
         if (!this.path.length) {
           this.player.body.setVelocity(0, 0);
           this.player.setDepth(this.player.y + 12);
