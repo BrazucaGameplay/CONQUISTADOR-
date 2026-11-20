@@ -761,6 +761,7 @@
     // A posição é salva no armazenamento local deste navegador/aparelho.
     const PLAYER_POSITION_STORAGE_KEY = 'conquistador.player-position.v1';
     const PLAYER_POSITION_BACKUP_KEY = 'conquistador.player-position.backup.v1';
+    const PLAYER_POSITION_PREVIOUS_BACKUP_KEY = 'conquistador.player-position.backup.previous.v1';
     const PLAYER_POSITION_WORLD_ID = 'overworld-90x120-v1';
     const PLAYER_FRAME_SIZE = 32;
     const PLAYER_BODY_WIDTH = 13;
@@ -892,6 +893,19 @@
             this.chunkGrid.chunks.push(chunk);
           }
         }
+
+        // Build navigation from the full 13x9 player footprint, not only the
+        // centre tile. Waypoints are centred on the body's actual ground point.
+        this.bodyBlocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
+        for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+          for (let tileX = 0; tileX < WORLD_WIDTH_TILES; tileX += 1) {
+            const waypointX = (tileX + 0.5) * TILE_SIZE;
+            const waypointY = (tileY + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+            this.bodyBlocked[tileY][tileX] = this.isPlayerBodyPositionWalkable(waypointX, waypointY) ? 0 : 1;
+          }
+        }
+        // This grid is the immutable navigation snapshot for the current world.
+        this.navigationGridBase = this.bodyBlocked;
 
         // Resolve and validate the saved position before the first chunk stream.
         // This prevents loading the spawn area and immediately replacing it with
@@ -1170,31 +1184,116 @@
 
       getPlayerBodyTile() {
         if (!this.player || !this.player.body) return null;
+        if (this.spawnCollisionDegraded || !this.player.body.enable) {
+          const bounds = this.getPlayerBodyBoundsAt(this.player.x, this.player.y);
+          return core.worldToTile(bounds.centerX, bounds.centerY, TILE_SIZE);
+        }
         const body = this.player.body;
-        const centerX = body.x + body.width / 2;
-        const centerY = body.y + body.height / 2;
-        return core.worldToTile(centerX, centerY, TILE_SIZE);
+        return core.worldToTile(body.x + body.width / 2, body.y + body.height / 2, TILE_SIZE);
       }
 
-      getSafeSpawnPosition() {
-        const start = PLAYER_START;
-        const candidates = [];
-        const maxRadius = Math.max(WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES);
-        for (let radius = 0; radius <= maxRadius; radius += 1) {
-          for (let y = Math.max(0, start.y - radius); y <= Math.min(WORLD_HEIGHT_TILES - 1, start.y + radius); y += 1) {
-            for (let x = Math.max(0, start.x - radius); x <= Math.min(WORLD_WIDTH_TILES - 1, start.x + radius); x += 1) {
-              if (Math.max(Math.abs(x - start.x), Math.abs(y - start.y)) !== radius) continue;
-              candidates.push({ x, y });
-            }
-          }
-          for (const tile of candidates) {
-            const spriteX = (tile.x + 0.5) * TILE_SIZE;
-            const spriteY = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
-            if (this.isPlayerBodyPositionWalkable(spriteX, spriteY)) return { x: spriteX, y: spriteY };
-          }
-          candidates.length = 0;
+      getNavigationGrid(startTile) {
+        // bodyBlocked is immutable after world construction. Reuse its cached
+        // rows instead of deep-copying 10,800 cells on every tap/repath.
+        const source = this.navigationGridBase || this.bodyBlocked;
+        if (!source) return null;
+        const copy = source.slice();
+        // Only the start cell may be temporarily opened to let the player leave
+        // a footprint that became obstructed. Clone that row before changing it.
+        if (startTile && copy[startTile.y] && startTile.x >= 0 &&
+            startTile.x < copy[startTile.y].length && copy[startTile.y][startTile.x]) {
+          copy[startTile.y] = Uint8Array.from(copy[startTile.y]);
+          copy[startTile.y][startTile.x] = 0;
         }
-        throw new Error('Não foi encontrado um ponto seguro para iniciar o jogador.');
+        return copy;
+      }
+
+      getPlayerWaypoint(tile) {
+        return {
+          x: (tile.x + 0.5) * TILE_SIZE,
+          y: (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y
+        };
+      }
+
+      updateDegradedCollisionState() {
+        if (!this.spawnCollisionDegraded || !this.player || !this.player.body) return;
+        if (!this.isPlayerBodyPositionWalkable(this.player.x, this.player.y)) return;
+        const body = this.player.body;
+        body.updateFromGameObject();
+        body.enable = true;
+        this.player.setCollideWorldBounds(true);
+        this.spawnCollisionDegraded = false;
+        this.preserveInvalidSave = false;
+        if (this.degradedWarningEvent) {
+          this.degradedWarningEvent.remove(false);
+          this.degradedWarningEvent = null;
+        }
+        for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
+        if (this.spawnWarning) {
+          this.spawnWarning.destroy();
+          this.spawnWarning = null;
+        }
+        this.savePlayerPosition(true);
+      }
+
+      getSafeSpawnPosition(originTile = null, maxRadius = Infinity) {
+        // Breadth-first search visits each map tile at most once: O(width * height).
+        // It explores coordinates regardless of blockage so an isolated start tile
+        // cannot prevent finding a safe region elsewhere in the world.
+        const requestedX = originTile && Number.isInteger(originTile.x) ? originTile.x : PLAYER_START.x;
+        const requestedY = originTile && Number.isInteger(originTile.y) ? originTile.y : PLAYER_START.y;
+        const startX = Math.max(0, Math.min(WORLD_WIDTH_TILES - 1, requestedX));
+        const startY = Math.max(0, Math.min(WORLD_HEIGHT_TILES - 1, requestedY));
+        const total = WORLD_WIDTH_TILES * WORLD_HEIGHT_TILES;
+        const visited = new Uint8Array(total);
+        const queue = new Int32Array(total);
+        const startIndex = startY * WORLD_WIDTH_TILES + startX;
+        let head = 0;
+        let tail = 0;
+        queue[tail++] = startIndex;
+        visited[startIndex] = 1;
+        const directions = [
+          [1, 0], [-1, 0], [0, 1], [0, -1],
+          [1, 1], [1, -1], [-1, 1], [-1, -1]
+        ];
+
+        while (head < tail) {
+          const index = queue[head++];
+          const tile = { x: index % WORLD_WIDTH_TILES, y: Math.floor(index / WORLD_WIDTH_TILES) };
+          if (Math.max(Math.abs(tile.x - startX), Math.abs(tile.y - startY)) > maxRadius) continue;
+          const spriteX = (tile.x + 0.5) * TILE_SIZE;
+          const spriteY = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+          if (this.isPlayerBodyPositionWalkable(spriteX, spriteY)) {
+            // Search is pure: the caller decides whether this result is a normal
+            // spawn, a local save recovery, or a temporary fallback.
+            return { x: spriteX, y: spriteY };
+          }
+
+          for (const [dx, dy] of directions) {
+            const nx = tile.x + dx;
+            const ny = tile.y + dy;
+            if (nx < 0 || ny < 0 || nx >= WORLD_WIDTH_TILES || ny >= WORLD_HEIGHT_TILES) continue;
+            if (Math.max(Math.abs(nx - startX), Math.abs(ny - startY)) > maxRadius) continue;
+            const nextIndex = ny * WORLD_WIDTH_TILES + nx;
+            if (visited[nextIndex]) continue;
+            visited[nextIndex] = 1;
+            queue[tail++] = nextIndex;
+          }
+        }
+
+        // A bounded recovery search must not switch the whole session into
+        // degraded mode merely because no safe tile exists near the old save.
+        if (Number.isFinite(maxRadius)) return null;
+
+        // Last-resort degraded startup: do not strand the user on an error screen.
+        // Collision is disabled only when the entire generated map has no valid
+        // 13x9 body footprint; movement remains available for recovery/testing.
+        this.spawnCollisionDegraded = true;
+        console.error('O mapa não possui nenhuma posição segura para o corpo do jogador. Spawn degradado sem colisão.');
+        return {
+          x: (startX + 0.5) * TILE_SIZE,
+          y: (startY + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y
+        };
       }
 
       getSavedPlayerPosition() {
@@ -1206,7 +1305,7 @@
           this.preserveInvalidSave = true;
           this.invalidSavedPlayerRaw = raw;
           const saved = JSON.parse(raw);
-          if (!saved || ![1, 2].includes(saved.version) || saved.world !== PLAYER_POSITION_WORLD_ID) {
+          if (!saved || ![1, 2, 3].includes(saved.version) || saved.world !== PLAYER_POSITION_WORLD_ID) {
             this.backupInvalidPlayerSave(raw);
             return null;
           }
@@ -1219,10 +1318,34 @@
               return null;
             }
             x = (saved.x + 0.5) * TILE_SIZE;
-            y = (saved.y + 0.5) * TILE_SIZE;
+            y = (saved.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
           } else {
             x = Number(saved.x);
             y = Number(saved.y);
+          }
+
+          if (saved.version === 3 && saved.degraded === true &&
+              Number.isFinite(x) && Number.isFinite(y) &&
+              x >= 0 && y >= 0 && x < WORLD_WIDTH_PIXELS && y < WORLD_HEIGHT_PIXELS) {
+            if (this.isPlayerBodyPositionWalkable(x, y)) {
+              this.spawnCollisionDegraded = false;
+              this.preserveInvalidSave = false;
+              return { x, y };
+            }
+            // Old degraded saves may point inside a wall. Prefer a nearby safe
+            // tile; preserve the old record before falling back elsewhere.
+            this.backupInvalidPlayerSave(raw);
+            const oldBody = this.getPlayerBodyBoundsAt(x, y);
+            const oldTile = core.worldToTile(oldBody.centerX, oldBody.centerY, TILE_SIZE);
+            const nearby = this.getSafeSpawnPosition(oldTile, 6);
+            if (nearby) {
+              this.preserveInvalidSave = true;
+              this.invalidSavedPlayerRaw = raw;
+              return nearby;
+            }
+            this.preserveInvalidSave = true;
+            this.invalidSavedPlayerRaw = raw;
+            return null;
           }
 
           if (this.isPlayerBodyPositionWalkable(x, y)) {
@@ -1242,6 +1365,13 @@
                 this.preserveInvalidSave = false;
                 return { x: centredX, y: centredY };
               }
+              // A tiny edge overlap should not send the player to the world spawn.
+              // Search locally around the saved tile before using the global fallback.
+              const nearby = this.getSafeSpawnPosition(tile, 6);
+              if (nearby && !this.spawnCollisionDegraded) {
+                this.preserveInvalidSave = false;
+                return nearby;
+              }
             }
           }
 
@@ -1259,12 +1389,30 @@
       backupInvalidPlayerSave(raw) {
         if (!raw) return;
         try {
-          if (!window.localStorage.getItem(PLAYER_POSITION_BACKUP_KEY)) {
-            window.localStorage.setItem(PLAYER_POSITION_BACKUP_KEY, raw);
+          const currentBackup = window.localStorage.getItem(PLAYER_POSITION_BACKUP_KEY);
+          if (currentBackup === raw) return;
+          if (currentBackup) {
+            window.localStorage.setItem(PLAYER_POSITION_PREVIOUS_BACKUP_KEY, currentBackup);
           }
+          window.localStorage.setItem(PLAYER_POSITION_BACKUP_KEY, raw);
         } catch (error) {
-          console.warn('Não foi possível criar uma cópia de segurança da posição inválida:', error);
+          console.warn('Não foi possível atualizar o histórico de cópias da posição inválida:', error);
         }
+      }
+
+      releaseInvalidSaveIfSafe() {
+        if (!this.preserveInvalidSave || !this.player || this.spawnCollisionDegraded ||
+            !this.invalidSaveFallbackPosition ||
+            !this.isPlayerBodyPositionWalkable(this.player.x, this.player.y)) return false;
+        const moved = Math.hypot(
+          this.player.x - this.invalidSaveFallbackPosition.x,
+          this.player.y - this.invalidSaveFallbackPosition.y
+        );
+        if (moved <= 2) return false;
+        this.preserveInvalidSave = false;
+        this.invalidSaveRouteActive = false;
+        this.savePlayerPosition(true);
+        return true;
       }
 
       savePlayerPosition(force = false) {
@@ -1273,7 +1421,14 @@
         if (this.preserveInvalidSave) return false;
         const x = this.player.x;
         const y = this.player.y;
-        if (!this.isPlayerBodyPositionWalkable(x, y)) return false;
+        // Never persist a degraded position inside an obstacle. Keep the previous
+        // primary save (and invalid-save backups) until a fully walkable point exists.
+        if (!this.isPlayerBodyPositionWalkable(x, y)) {
+          if (this.spawnCollisionDegraded && this.spawnWarning && this.spawnWarning.active) {
+            this.spawnWarning.setText('SAVE BLOQUEADO: posição sem área segura');
+          }
+          return false;
+        }
 
         const tile = this.getPlayerBodyTile();
         if (!tile) return false;
@@ -1315,42 +1470,76 @@
       }
 
       cancelPlayerDestination() {
+        this.invalidSaveRouteActive = false;
         this.path = [];
+        this.stuckElapsed = 0;
+        this.stuckRepathCount = 0;
         if (this.player && this.player.body) this.player.body.setVelocity(0, 0);
         this.updateDestinationMarker(null);
+        this.releaseInvalidSaveIfSafe();
         this.savePlayerPosition(true);
         if (this.player) {
-          const tile = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
-          this.lastObservedPlayerTileKey = `${tile.x},${tile.y}`;
+          const tile = this.getPlayerBodyTile();
+          this.lastObservedPlayerTileKey = tile ? `${tile.x},${tile.y}` : null;
         }
       }
 
       updateDestinationMarker(tile) {
         if (!this.destinationMarker) return;
+        // Any ordinary marker update supersedes a pending invalid-touch flash.
+        if (this.invalidDestinationMarkerEvent) {
+          this.invalidDestinationMarkerEvent.remove(false);
+          this.invalidDestinationMarkerEvent = null;
+        }
+        this.invalidDestinationMarkerFeedbackId = (this.invalidDestinationMarkerFeedbackId || 0) + 1;
         if (!tile) {
           this.destinationMarker.setVisible(false);
           return;
         }
 
-        // O marcador fica no centro da célula tocada, indicando o destino do jogador.
-        const x = (tile.x + 0.5) * TILE_SIZE;
-        const y = (tile.y + 0.5) * TILE_SIZE;
-        this.destinationMarker.setPosition(x, y);
-        // Keep the destination indicator above tall trees and the player sprite.
+        const waypoint = this.getPlayerWaypoint(tile);
+        this.destinationMarker.setPosition(waypoint.x, waypoint.y);
+        this.drawDestinationMarker(false);
         this.destinationMarker.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 1000);
         this.destinationMarker.setVisible(true);
       }
 
-      createDestinationMarker() {
-        this.destinationMarker = this.add.graphics();
+      drawDestinationMarker(invalid = false) {
+        if (!this.destinationMarker) return;
+        this.destinationMarker.clear();
         this.destinationMarker.fillStyle(0x17251b, 0.88);
         this.destinationMarker.fillCircle(0, 0, 8);
-        this.destinationMarker.lineStyle(2.5, 0xffd34f, 1);
+        this.destinationMarker.lineStyle(2.5, invalid ? 0xff4545 : 0xffd34f, 1);
         this.destinationMarker.strokeCircle(0, 0, 8);
-        this.destinationMarker.fillStyle(0xffe36a, 1);
+        this.destinationMarker.fillStyle(invalid ? 0xff4545 : 0xffe36a, 1);
         this.destinationMarker.fillCircle(0, 0, 4.2);
         this.destinationMarker.fillStyle(0xffffff, 1);
         this.destinationMarker.fillCircle(0, 0, 1.8);
+      }
+
+      showInvalidDestinationFeedback(tile) {
+        this.updateDestinationMarker(tile);
+        this.drawDestinationMarker(true);
+        const feedbackId = this.invalidDestinationMarkerFeedbackId;
+        const feedbackPosition = this.destinationMarker
+          ? { x: this.destinationMarker.x, y: this.destinationMarker.y }
+          : null;
+        this.invalidDestinationMarkerEvent = this.time.delayedCall(200, () => {
+          if (feedbackId !== this.invalidDestinationMarkerFeedbackId || !this.destinationMarker) return;
+          if (feedbackPosition &&
+              (this.destinationMarker.x !== feedbackPosition.x || this.destinationMarker.y !== feedbackPosition.y)) return;
+          this.drawDestinationMarker(false);
+          this.destinationMarker.setVisible(false);
+          this.invalidDestinationMarkerEvent = null;
+        });
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(35);
+        }
+      }
+
+      createDestinationMarker() {
+        this.destinationMarker = this.add.graphics();
+        this.drawDestinationMarker(false);
         this.destinationMarker.setVisible(false);
         this.destinationMarkerTween = this.tweens.add({
           targets: this.destinationMarker,
@@ -1388,11 +1577,27 @@
         this.player.setOrigin(PLAYER_ORIGIN_X, PLAYER_ORIGIN_Y);
         this.player.body.setSize(PLAYER_BODY_WIDTH, PLAYER_BODY_HEIGHT);
         this.player.body.setOffset(PLAYER_BODY_OFFSET_X, PLAYER_BODY_OFFSET_Y);
-        this.player.setCollideWorldBounds(true);
+        if (this.spawnCollisionDegraded) {
+          this.player.body.enable = false;
+        } else {
+          this.player.setCollideWorldBounds(true);
+        }
         this.player.setDepth(y + 12);
 
         this.createDestinationMarker();
         for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
+        if (this.spawnCollisionDegraded) {
+          this.spawnWarning = this.add.text(8, 8,
+            'MODO DE RECUPERAÇÃO: colisões indisponíveis',
+            { fontFamily: 'system-ui, sans-serif', fontSize: '11px', color: '#fff1b8',
+              backgroundColor: '#5a2d20', padding: { x: 7, y: 5 }, align: 'center' }
+          ).setScrollFactor(0).setDepth(1000000);
+          this.degradedWarningEvent = this.time.delayedCall(8000, () => {
+            if (this.spawnCollisionDegraded && this.spawnWarning && this.spawnWarning.active) {
+              this.spawnWarning.setText('MAPA SEM ÁREA SEGURA: é necessário regenerar o mapa');
+            }
+          });
+        }
         this.player.anims.play('idle-0');
         const initialTile = this.getPlayerBodyTile();
         this.lastObservedPlayerTileKey = initialTile ? `${initialTile.x},${initialTile.y}` : null;
@@ -1401,7 +1606,15 @@
         this.stuckElapsed = 0;
         this.stuckRepathCount = 0;
         this.registerPositionSaveHooks();
-        if (!this.preserveInvalidSave) this.savePlayerPosition(true);
+        if (this.preserveInvalidSave && !this.spawnCollisionDegraded &&
+            this.isPlayerBodyPositionWalkable(this.player.x, this.player.y)) {
+          // The invalid original is already preserved in backup keys. Replace the
+          // unusable primary record with a valid fallback so reloads can progress.
+          this.preserveInvalidSave = false;
+          this.savePlayerPosition(true);
+        } else if (!this.preserveInvalidSave) {
+          this.savePlayerPosition(true);
+        }
       }
 
       createPlayerAnimations() {
@@ -1437,8 +1650,6 @@
         // Invalid taps are ignored: they must not cancel a valid route already in progress.
         if (destination.x < 0 || destination.y < 0 ||
             destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
-        if (!this.blocked[destination.y] || this.blocked[destination.y][destination.x]) return;
-
         const start = this.getPlayerBodyTile();
         if (!start) return;
         if (destination.x === start.x && destination.y === start.y) {
@@ -1447,29 +1658,39 @@
           this.stuckRepathCount = 0;
           return;
         }
+        // bodyBlocked is precomputed from the complete 13x9 body footprint;
+        // use it as the single destination-validity source for taps and A*.
+        const navigation = this.getNavigationGrid(start);
+        if (!navigation || !navigation[destination.y] || navigation[destination.y][destination.x]) {
+          this.showInvalidDestinationFeedback(destination);
+          return;
+        }
 
-        const route = core.findPath(this.blocked, start, destination);
-        // A valid but unreachable destination is ignored; preserve the current path.
-        if (!route.length) return;
-        this.path = route.map((tile) => ({
-          x: (tile.x + 0.5) * TILE_SIZE,
-          y: (tile.y + 0.5) * TILE_SIZE
-        }));
+        const route = core.findPath(navigation, start, destination);
+        // An unreachable destination is ignored, but gives a brief visible/tactile cue.
+        if (!route.length) {
+          this.showInvalidDestinationFeedback(destination);
+          return;
+        }
+        this.path = route.map(tile => this.getPlayerWaypoint(tile));
+        if (this.preserveInvalidSave) this.invalidSaveRouteActive = true;
         this.stuckElapsed = 0;
         this.stuckRepathCount = 0;
         this.lastProgressPosition = { x: this.player.x, y: this.player.y };
-        this.lastProgressDistance = null;
         this.updateDestinationMarker(destination);
       }
 
       update(_time, delta) {
         if (!this.player || !this.player.body) return;
         this.updateChunkStreaming();
+        this.updateDegradedCollisionState();
+        this.releaseInvalidSaveIfSafe();
         if (!this.path.length) {
           this.player.body.setVelocity(0, 0);
           this.player.setDepth(this.player.y + 12);
           this.player.anims.play(`idle-${this.facingRow}`, true);
-          this.updateDestinationMarker(null);
+          if (!this.invalidDestinationMarkerEvent) this.updateDestinationMarker(null);
+          this.releaseInvalidSaveIfSafe();
           return;
         }
 
@@ -1478,18 +1699,20 @@
         let dx = target.x - this.player.x;
         let dy = target.y - this.player.y;
         let distance = Math.hypot(dx, dy);
-        const movedFromFallback = this.invalidSaveFallbackPosition
-          ? Math.hypot(this.player.x - this.invalidSaveFallbackPosition.x,
-                       this.player.y - this.invalidSaveFallbackPosition.y)
+        // Count only real body displacement projected toward the current waypoint.
+        // Sliding sideways along a wall therefore does not reset the stuck timer.
+        const progressPosition = this.lastProgressPosition || { x: this.player.x, y: this.player.y };
+        const movedX = this.player.x - progressPosition.x;
+        const movedY = this.player.y - progressPosition.y;
+        const projectedProgress = distance > 0
+          ? (movedX * dx + movedY * dy) / distance
           : 0;
-        if (this.preserveInvalidSave && movedFromFallback > 2) this.preserveInvalidSave = false;
-
-        // Measure actual progress toward the waypoint, not merely any sprite jitter.
-        if (this.lastProgressDistance === null || this.lastProgressDistance === undefined ||
-            distance < this.lastProgressDistance - 0.25) {
-          this.lastProgressDistance = distance;
+        this.lastProgressPosition = { x: this.player.x, y: this.player.y };
+        const meaningfulProgress = projectedProgress >= (this.stuckRepathCount > 0 ? 1.0 : 0.25);
+        if (meaningfulProgress) {
           this.stuckElapsed = 0;
-          this.stuckRepathCount = 0;
+          // Keep the repath budget for this destination. After the first retry,
+          // sub-pixel nudges do not reset the timer or create an endless retry loop.
         } else {
           this.stuckElapsed = (this.stuckElapsed || 0) + elapsed;
         }
@@ -1497,34 +1720,39 @@
         if (this.stuckElapsed >= 500) {
           if ((this.stuckRepathCount || 0) < 2) {
             const finalTarget = this.path[this.path.length - 1];
-            const destination = core.worldToTile(finalTarget.x, finalTarget.y, TILE_SIZE);
+            const destination = core.worldToTile(finalTarget.x, finalTarget.y + PLAYER_BODY_CENTER_OFFSET_Y, TILE_SIZE);
             const start = this.getPlayerBodyTile();
-            const route = start ? core.findPath(this.blocked, start, destination) : [];
+            const navigation = this.getNavigationGrid(start);
+            const route = start && navigation ? core.findPath(navigation, start, destination) : [];
             this.stuckRepathCount = (this.stuckRepathCount || 0) + 1;
             this.stuckElapsed = 0;
             if (route.length) {
-              this.path = route.map(tile => ({
-                x: (tile.x + 0.5) * TILE_SIZE,
-                y: (tile.y + 0.5) * TILE_SIZE
-              }));
+              this.path = route.map(tile => this.getPlayerWaypoint(tile));
               target = this.path[0];
               dx = target.x - this.player.x;
               dy = target.y - this.player.y;
               distance = Math.hypot(dx, dy);
-              this.lastProgressDistance = distance;
             } else {
               this.path = [];
+              this.invalidSaveRouteActive = false;
             }
           } else {
             this.path = [];
+            this.invalidSaveRouteActive = false;
+            this.stuckElapsed = 0;
+            this.stuckRepathCount = 0;
             this.player.body.setVelocity(0, 0);
             this.updateDestinationMarker(null);
+            this.releaseInvalidSaveIfSafe();
             this.savePlayerPosition(true);
             return;
           }
           if (!this.path.length) {
+            this.invalidSaveRouteActive = false;
+            this.stuckElapsed = 0;
             this.player.body.setVelocity(0, 0);
             this.updateDestinationMarker(null);
+            this.releaseInvalidSaveIfSafe();
             this.savePlayerPosition(true);
             return;
           }
@@ -1534,10 +1762,17 @@
           // Never teleport the Arcade body through a collider; accept the small arrival tolerance.
           this.player.body.setVelocity(0, 0);
           this.path.shift();
-          this.lastProgressDistance = null;
-          this.stuckElapsed = 0;
+            this.stuckElapsed = 0;
           if (!this.path.length) {
             this.updateDestinationMarker(null);
+            if (this.preserveInvalidSave && this.invalidSaveRouteActive) {
+              const movedFromFallback = this.invalidSaveFallbackPosition
+                ? Math.hypot(this.player.x - this.invalidSaveFallbackPosition.x,
+                             this.player.y - this.invalidSaveFallbackPosition.y)
+                : 0;
+              if (movedFromFallback > 2) this.preserveInvalidSave = false;
+              this.invalidSaveRouteActive = false;
+            }
             this.savePlayerPosition(true);
             const tile = this.getPlayerBodyTile();
             this.lastObservedPlayerTileKey = tile ? `${tile.x},${tile.y}` : null;
@@ -1548,10 +1783,20 @@
 
         const speed = 76;
         const frameSeconds = Math.max(0.001, elapsed / 1000);
-        const velocity = Math.min(speed, distance / frameSeconds);
+        const velocity = Math.min(speed, Math.max(0, (distance - 2) / frameSeconds));
         const vx = (dx / distance) * velocity;
         const vy = (dy / distance) * velocity;
-        this.player.body.setVelocity(vx, vy);
+        if (this.spawnCollisionDegraded) {
+          // Degraded movement is manual only. Zero Arcade velocity before a
+          // possible same-frame collision re-enable to avoid double movement.
+          this.player.body.setVelocity(0, 0);
+          const nextX = Phaser.Math.Clamp(this.player.x + vx * frameSeconds, 0, WORLD_WIDTH_PIXELS);
+          const nextY = Phaser.Math.Clamp(this.player.y + vy * frameSeconds, 0, WORLD_HEIGHT_PIXELS);
+          this.player.setPosition(nextX, nextY);
+          this.updateDegradedCollisionState();
+        } else {
+          this.player.body.setVelocity(vx, vy);
+        }
         this.facingRow = core.directionRow(vx, vy);
         this.player.anims.play(`walk-${this.facingRow}`, true);
         this.player.setDepth(this.player.y + 12);
