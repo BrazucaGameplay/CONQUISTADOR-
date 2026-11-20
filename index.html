@@ -243,7 +243,103 @@
       };
     }
 
-    function createChunkData(generator, chunkX, chunkY, chunkSize) {
+    // Build only the navigation/collision layer. This deliberately avoids
+    // allocating terrain, structure and upper-object render arrays for every
+    // chunk during world startup.
+    function createChunkBlockedData(generator, chunkX, chunkY, chunkSize) {
+      if (!generator || !Number.isInteger(chunkX) || !Number.isInteger(chunkY)) {
+        throw new Error('Coordenadas inválidas para gerar a colisão do chunk.');
+      }
+      const size = Number(chunkSize);
+      if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
+      const originX = chunkX * size;
+      const originY = chunkY * size;
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+        throw new Error('O chunk solicitado está fora dos limites do mundo.');
+      }
+      const width = Math.min(size, generator.worldTiles - originX);
+      const height = Math.min(size, generator.worldTiles - originY);
+      const blocked = Array.from({ length: height }, () => new Uint8Array(width));
+      const hasRoad = (x, y) => generator.roadCells.has(roadKey(x, y));
+      const isSpawnClearance = (x, y) =>
+        Math.abs(x - generator.playerStart.x) <= 5 && Math.abs(y - generator.playerStart.y) <= 5;
+
+      function isCliffCell(x, y) {
+        if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
+            isOriginalTile(x, y, generator) || hasRoad(x, y) || isSpawnClearance(x, y)) return false;
+        for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
+          const patch = CLIFF_PATCHES[patchIndex];
+          const nx = (x - patch.x) / patch.rx;
+          const ny = (y - patch.y) / patch.ry;
+          const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
+          if (nx * nx + ny * ny < 1 + raggedEdge) return true;
+        }
+        return false;
+      }
+
+      function hasGeneratedTree(x, y, cliff) {
+        if (x < 2 || y < 2 || x >= generator.worldTiles - 2 || y >= generator.worldTiles - 2 ||
+            isOriginalTile(x, y, generator) || hasRoad(x, y) || cliff || isSpawnClearance(x, y)) return false;
+        let density = 0;
+        for (const patch of TREE_PATCHES) {
+          const nx = (x - patch.x) / patch.rx;
+          const ny = (y - patch.y) / patch.ry;
+          if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+        }
+        if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
+        if (!density || stableNoise(x, y, 103) > density) return false;
+        const treeId = TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)];
+        return TREE_IDS.has(treeId);
+      }
+
+      for (let localY = 0; localY < height; localY += 1) {
+        const y = originY + localY;
+        for (let localX = 0; localX < width; localX += 1) {
+          const x = originX + localX;
+          if (hasRoad(x, y)) continue; // Roads always take precedence and are walkable.
+
+          if (isOriginalTile(x, y, generator)) {
+            const sx = x - generator.mapOffset;
+            const sy = y - generator.mapOffset;
+            const groundId = generator.originalGround[sy][sx];
+            const structureId = generator.originalStructures[sy][sx];
+            blocked[localY][localX] = CLIFF_IDS.has(groundId) ||
+              TREE_IDS.has(structureId) || SOLID_IDS.has(structureId) ? 1 : 0;
+            continue;
+          }
+
+          const cliff = isCliffCell(x, y);
+          blocked[localY][localX] = cliff || hasGeneratedTree(x, y, cliff) ? 1 : 0;
+        }
+      }
+
+      return {
+        id: `${chunkX}:${chunkY}`,
+        chunkX,
+        chunkY,
+        tileX: originX,
+        tileY: originY,
+        width,
+        height,
+        blocked
+      };
+    }
+
+    function extractChunkBlocked(globalBlocked, tileX, tileY, width, height) {
+      if (!Array.isArray(globalBlocked) || !globalBlocked.length) {
+        throw new Error('Grade global de colisão indisponível.');
+      }
+      const result = Array.from({ length: height }, (_, localY) => {
+        const sourceRow = globalBlocked[tileY + localY];
+        if (!sourceRow || tileX < 0 || tileX + width > sourceRow.length) {
+          throw new Error('O recorte de colisão do chunk está fora dos limites do mundo.');
+        }
+        return Array.from(sourceRow.slice(tileX, tileX + width), Boolean);
+      });
+      return result;
+    }
+
+    function createChunkData(generator, chunkX, chunkY, chunkSize, options) {
       if (!generator || !Number.isInteger(chunkX) || !Number.isInteger(chunkY)) {
         throw new Error('Coordenadas inválidas para gerar o chunk.');
       }
@@ -285,7 +381,8 @@
       const ground = Array.from({ length: height }, () => Array(width).fill(0));
       const structures = Array.from({ length: height }, () => Array(width).fill(0));
       const upperObjects = Array.from({ length: height }, () => Array(width).fill(0));
-      const blocked = Array.from({ length: height }, () => Array(width).fill(false));
+      const includeBlocked = !options || options.includeBlocked !== false;
+      const blocked = includeBlocked ? Array.from({ length: height }, () => Array(width).fill(false)) : null;
       const treeSprites = TREE_SPRITE_IDS;
 
       for (let ly = 0; ly < height; ly += 1) {
@@ -343,10 +440,12 @@
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
-          blocked[ly][lx] = cliffMask[ly + 1][lx + 1] || CLIFF_IDS.has(ground[ly][lx]) ||
-            TREE_IDS.has(structures[ly][lx]) || SOLID_IDS.has(structures[ly][lx]);
-          // Roads always take precedence over terrain obstacles and are walkable.
-          if (hasRoad(x, y)) blocked[ly][lx] = false;
+          if (blocked) {
+            blocked[ly][lx] = cliffMask[ly + 1][lx + 1] || CLIFF_IDS.has(ground[ly][lx]) ||
+              TREE_IDS.has(structures[ly][lx]) || SOLID_IDS.has(structures[ly][lx]);
+            // Roads always take precedence over terrain obstacles and are walkable.
+            if (hasRoad(x, y)) blocked[ly][lx] = false;
+          }
         }
       }
 
@@ -413,7 +512,7 @@
     }
 
     function toCollisionLayer(blocked) {
-      return blocked.map((row) => row.map((cell) => (cell ? 1 : -1)));
+      return blocked.map((row) => Array.from(row, (cell) => (cell ? 1 : -1)));
     }
 
     function BinaryMinHeap(compare) {
@@ -455,7 +554,9 @@
     };
 
     function findPath(blocked, start, goal) {
-      if (!Array.isArray(blocked) || !blocked.length || !Array.isArray(blocked[0]) || !blocked[0].length) return [];
+      const firstRow = blocked && blocked[0];
+      const validRow = Array.isArray(firstRow) || (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(firstRow));
+      if (!Array.isArray(blocked) || !blocked.length || !validRow || !firstRow.length) return [];
       const width = blocked[0].length;
       const height = blocked.length;
       if (!inBounds(blocked, start.x, start.y) || !inBounds(blocked, goal.x, goal.y)) return [];
@@ -538,6 +639,8 @@
       createGroundBase,
       getTreeScale,
       prepareWorldGenerator,
+      createChunkBlockedData,
+      extractChunkBlocked,
       createChunkData,
       getChunkAtTile,
       getChunkNeighborhood,
@@ -650,38 +753,33 @@
         this.chunkTexture = this.textures.get('tiles');
 
         // Global collision remains available to the current whole-world A*.
-        // Terrain/render arrays are generated one chunk at a time and retained
-        // only for the initial active window; distant chunk arrays are discarded.
-        this.blocked = Array.from({ length: WORLD_TILES }, () => Array(WORLD_TILES).fill(false));
-        const center = core.getChunkAtTile(
-          PLAYER_START.x, PLAYER_START.y, CHUNK_TILES, columns, rows
-        );
-        const initialIds = new Set(core.getChunkNeighborhood(
-          center.chunkX, center.chunkY, columns, rows, CHUNK_LOAD_RADIUS
-        ).map(item => item.id));
-
+        // Each chunk contributes only a compact collision row set here; visual
+        // terrain/object arrays are generated separately for active chunks only.
+        // Uint8Array keeps the persistent navigation grid compact (one byte/tile).
+        this.blocked = Array.from({ length: WORLD_TILES }, () => new Uint8Array(WORLD_TILES));
         for (let chunkY = 0; chunkY < rows; chunkY += 1) {
           for (let chunkX = 0; chunkX < columns; chunkX += 1) {
-            const data = core.createChunkData(this.worldGenerator, chunkX, chunkY, CHUNK_TILES);
-            for (let localY = 0; localY < data.height; localY += 1) {
-              for (let localX = 0; localX < data.width; localX += 1) {
-                this.blocked[data.tileY + localY][data.tileX + localX] = data.blocked[localY][localX];
-              }
+            const collision = core.createChunkBlockedData(
+              this.worldGenerator, chunkX, chunkY, CHUNK_TILES
+            );
+            for (let localY = 0; localY < collision.height; localY += 1) {
+              this.blocked[collision.tileY + localY].set(
+                collision.blocked[localY], collision.tileX
+              );
             }
 
             const chunk = {
-              id: data.id,
+              id: collision.id,
               chunkX,
               chunkY,
-              tileX: data.tileX,
-              tileY: data.tileY,
-              width: data.width,
-              height: data.height,
-              ground: initialIds.has(data.id) ? data.ground : null,
-              structures: initialIds.has(data.id) ? data.structures : null,
-              upperObjects: initialIds.has(data.id) ? data.upperObjects : null,
-              blocked: initialIds.has(data.id) ? data.blocked : null,
-              state: initialIds.has(data.id) ? 'prepared' : 'unloaded'
+              tileX: collision.tileX,
+              tileY: collision.tileY,
+              width: collision.width,
+              height: collision.height,
+              ground: null,
+              structures: null,
+              upperObjects: null,
+              state: 'unloaded'
             };
             this.chunks.set(chunk.id, chunk);
             this.chunkGrid.chunks.push(chunk);
@@ -697,24 +795,23 @@
         chunk.ground = null;
         chunk.structures = null;
         chunk.upperObjects = null;
-        chunk.blocked = null;
         if (chunk.state !== 'loaded') chunk.state = 'unloaded';
       }
 
       rebuildMissingChunkData(chunks) {
         for (const chunk of chunks || []) {
           if (!chunk || (Array.isArray(chunk.ground) && Array.isArray(chunk.structures) &&
-              Array.isArray(chunk.upperObjects) && Array.isArray(chunk.blocked))) continue;
+              Array.isArray(chunk.upperObjects))) continue;
 
-          // Rebuild only this chunk. The generator uses global coordinates and a
-          // fixed seed, so its result is identical without regenerating other areas.
+          // Rebuild only visual layers. Collision is authoritative in the compact
+          // world grid and is never regenerated or copied into render chunk data.
           const data = core.createChunkData(
-            this.worldGenerator, chunk.chunkX, chunk.chunkY, this.chunkGrid.chunkSize
+            this.worldGenerator, chunk.chunkX, chunk.chunkY, this.chunkGrid.chunkSize,
+            { includeBlocked: false }
           );
           chunk.ground = data.ground;
           chunk.structures = data.structures;
           chunk.upperObjects = data.upperObjects;
-          chunk.blocked = data.blocked;
           chunk.state = 'prepared';
         }
       }
@@ -743,8 +840,8 @@
       loadChunk(chunk) {
         if (!chunk || chunk.state === 'loaded') return;
         if (!Array.isArray(chunk.ground) || !Array.isArray(chunk.structures) ||
-            !Array.isArray(chunk.upperObjects) || !Array.isArray(chunk.blocked)) {
-          throw new Error(`Os dados do chunk ${chunk.id} não foram reconstruídos antes do carregamento.`);
+            !Array.isArray(chunk.upperObjects)) {
+          throw new Error(`Os dados visuais do chunk ${chunk.id} não foram reconstruídos antes do carregamento.`);
         }
 
         const worldX = chunk.tileX * TILE_SIZE;
@@ -815,9 +912,12 @@
           }
         }
 
-        // Collision is built from the full world's authoritative grid. Only the
-        // active chunk has a Phaser collider, but navigation still sees every tile.
-        const collisionData = core.toCollisionLayer(chunk.blocked);
+        // Collision is sliced from the compact authoritative world grid. Only
+        // active chunks get a Phaser collider; A* reads the same global data.
+        const localBlocked = core.extractChunkBlocked(
+          this.blocked, chunk.tileX, chunk.tileY, chunk.width, chunk.height
+        );
+        const collisionData = core.toCollisionLayer(localBlocked);
         const collisionMap = this.make.tilemap({
           data: collisionData,
           tileWidth: TILE_SIZE,
@@ -866,7 +966,7 @@
         chunk.visualObjects = [];
         chunk.state = 'unloaded';
         this.activeChunkIds.delete(chunk.id);
-        // Free the tile arrays too; global navigation data remains in this.blocked.
+        // Free visual tile arrays; the compact global navigation grid remains.
         this.releaseChunkData(chunk);
       }
 
