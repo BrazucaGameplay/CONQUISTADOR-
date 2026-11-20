@@ -758,6 +758,9 @@
     const WORLD_HEIGHT_PIXELS = WORLD_HEIGHT_TILES * TILE_SIZE;
     const MAP_OFFSET = 30;
     const PLAYER_START = { x: 45, y: 65 };
+    // A posição é salva no armazenamento local deste navegador/aparelho.
+    const PLAYER_POSITION_STORAGE_KEY = 'conquistador.player-position.v1';
+    const PLAYER_POSITION_WORLD_ID = 'overworld-90x120-v1';
     const TILESET_URL = 'https://cdn.jsdelivr.net/gh/TheBogdichHD/procedural-generation-godot@0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png';
     const PLAYER_URL = 'https://cdn.jsdelivr.net/gh/ASH-CHA/Capstonr_Project_2D_RPG@d682c4c8cc051fd0d7c50c3049d5db8469f5354e/assets/npcs/Warrior-Red.png';
     const SAMPLE_MAP_URL = 'https://raw.githubusercontent.com/series-ai/jam-ready-assets/196b654e3baacbd29d2b1c7903692000ce52113b/shade-puny-world/2D/top-down-rpg/Tiled/samplemap2.tmj';
@@ -1107,17 +1110,115 @@
         return { map, layer };
       }
 
+      getSavedPlayerTile() {
+        try {
+          const raw = window.localStorage.getItem(PLAYER_POSITION_STORAGE_KEY);
+          if (!raw) return null;
+          const saved = JSON.parse(raw);
+          if (!saved || saved.version !== 1 || saved.world !== PLAYER_POSITION_WORLD_ID) return null;
+
+          const x = Number(saved.x);
+          const y = Number(saved.y);
+          if (!Number.isInteger(x) || !Number.isInteger(y) ||
+              x < 0 || y < 0 || x >= WORLD_WIDTH_TILES || y >= WORLD_HEIGHT_TILES) return null;
+          if (!this.blocked || !this.blocked[y] || this.blocked[y][x]) return null;
+          return { x, y };
+        } catch (error) {
+          // O jogo continua normalmente mesmo se o navegador bloquear o armazenamento.
+          console.warn('Não foi possível ler a posição salva:', error);
+          return null;
+        }
+      }
+
+      savePlayerPosition(force = false) {
+        if (!this.player || !this.blocked) return;
+        const tile = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
+        if (tile.x < 0 || tile.y < 0 || tile.x >= WORLD_WIDTH_TILES ||
+            tile.y >= WORLD_HEIGHT_TILES || !this.blocked[tile.y] || this.blocked[tile.y][tile.x]) return;
+
+        const tileKey = `${tile.x},${tile.y}`;
+        const now = Date.now();
+        if (!force && tileKey === this.lastSavedPlayerTileKey) return;
+        // Limita gravações durante a caminhada, mas salva imediatamente ao parar/fechar.
+        if (!force && now - (this.lastPlayerSaveAt || 0) < 500) return;
+
+        const data = {
+          version: 1,
+          world: PLAYER_POSITION_WORLD_ID,
+          x: tile.x,
+          y: tile.y,
+          savedAt: now
+        };
+        try {
+          window.localStorage.setItem(PLAYER_POSITION_STORAGE_KEY, JSON.stringify(data));
+          this.lastSavedPlayerTileKey = tileKey;
+          this.lastPlayerSaveAt = now;
+        } catch (error) {
+          console.warn('Não foi possível salvar a posição do jogador:', error);
+        }
+      }
+
+      updateDestinationMarker(tile) {
+        if (!this.destinationMarker) return;
+        if (!tile) {
+          this.destinationMarker.setVisible(false);
+          return;
+        }
+
+        // O marcador fica no centro da célula tocada, indicando o destino do jogador.
+        const x = (tile.x + 0.5) * TILE_SIZE;
+        const y = (tile.y + 0.5) * TILE_SIZE;
+        this.destinationMarker.setPosition(x, y);
+        this.destinationMarker.setDepth(y + 7);
+        this.destinationMarker.setVisible(true);
+      }
+
+      createDestinationMarker() {
+        this.destinationMarker = this.add.graphics();
+        this.destinationMarker.fillStyle(0x17251b, 0.72);
+        this.destinationMarker.fillCircle(0, 0, 5.5);
+        this.destinationMarker.lineStyle(1.5, 0xffd66b, 1);
+        this.destinationMarker.strokeCircle(0, 0, 5.5);
+        this.destinationMarker.fillStyle(0xfff2bf, 1);
+        this.destinationMarker.fillCircle(0, 0, 1.7);
+        this.destinationMarker.setVisible(false);
+      }
+
+      registerPositionSaveHooks() {
+        this.savePositionOnPageHide = () => this.savePlayerPosition(true);
+        this.savePositionOnVisibilityChange = () => {
+          if (document.visibilityState === 'hidden') this.savePlayerPosition(true);
+        };
+        window.addEventListener('pagehide', this.savePositionOnPageHide);
+        document.addEventListener('visibilitychange', this.savePositionOnVisibilityChange);
+        this.events.once('shutdown', () => {
+          this.savePlayerPosition(true);
+          window.removeEventListener('pagehide', this.savePositionOnPageHide);
+          document.removeEventListener('visibilitychange', this.savePositionOnVisibilityChange);
+        });
+      }
+
       createPlayer() {
-        const x = (PLAYER_START.x + 0.5) * TILE_SIZE;
-        const y = (PLAYER_START.y + 0.5) * TILE_SIZE;
+        const savedTile = this.getSavedPlayerTile();
+        const startTile = savedTile || PLAYER_START;
+        const x = (startTile.x + 0.5) * TILE_SIZE;
+        const y = (startTile.y + 0.5) * TILE_SIZE;
         this.player = this.physics.add.sprite(x, y, 'hero', 0);
         this.player.setOrigin(0.5, 0.86);
         this.player.body.setSize(13, 9);
         this.player.body.setOffset(9.5, 22);
         this.player.setCollideWorldBounds(true);
         this.player.setDepth(y + 12);
+
+        // Marcador do destino: aparece na célula escolhida pelo toque no mapa.
+        this.createDestinationMarker();
+
+        // Reposiciona os chunks ativos em torno da posição restaurada, se houver.
+        this.updateChunkStreaming(true);
         for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
         this.player.anims.play('idle-0');
+        this.registerPositionSaveHooks();
+        this.savePlayerPosition(true);
       }
 
       createPlayerAnimations() {
@@ -1153,11 +1254,20 @@
 
         const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
         const route = core.findPath(this.blocked, start, destination);
-        if (!route.length) return;
+        if (!route.length) {
+          // Tocar na própria célula do jogador cancela o deslocamento atual.
+          if (destination.x === start.x && destination.y === start.y) {
+            this.path = [];
+            this.player.body.setVelocity(0, 0);
+            this.updateDestinationMarker(null);
+          }
+          return;
+        }
         this.path = route.map((tile) => ({
           x: (tile.x + 0.5) * TILE_SIZE,
           y: (tile.y + 0.5) * TILE_SIZE
         }));
+        this.updateDestinationMarker(destination);
       }
 
       update(_time, delta) {
@@ -1167,6 +1277,8 @@
           this.player.body.setVelocity(0, 0);
           this.player.setDepth(this.player.y + 12);
           this.player.anims.play(`idle-${this.facingRow}`, true);
+          this.updateDestinationMarker(null);
+          this.savePlayerPosition();
           return;
         }
 
@@ -1179,6 +1291,8 @@
           this.path.shift();
           if (!this.path.length) this.player.body.setVelocity(0, 0);
           this.player.setDepth(this.player.y + 12);
+          if (!this.path.length) this.updateDestinationMarker(null);
+          this.savePlayerPosition(this.path.length === 0);
           return;
         }
 
@@ -1189,6 +1303,7 @@
         this.facingRow = core.directionRow(vx, vy);
         this.player.anims.play(`walk-${this.facingRow}`, true);
         this.player.setDepth(this.player.y + 12);
+        this.savePlayerPosition();
       }
     }
 
