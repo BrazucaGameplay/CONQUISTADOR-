@@ -15,30 +15,12 @@
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
-    #perf-panel {
-      position: fixed;
-      top: max(8px, env(safe-area-inset-top));
-      left: 8px;
-      z-index: 20;
-      max-width: min(310px, calc(100vw - 16px));
-      padding: 8px 10px;
-      border: 1px solid rgba(230, 227, 200, 0.35);
-      border-radius: 7px;
-      background: rgba(13, 22, 16, 0.88);
-      color: #f1f0df;
-      font: 11px/1.38 ui-monospace, SFMono-Regular, Menlo, monospace;
-      white-space: pre-wrap;
-      pointer-events: none;
-      user-select: none;
-    }
-    #perf-panel[hidden] { display: none; }
   </style>
 </head>
 <body>
   <div id="game-root" aria-label="Mundo explorável do CONQUISTADOR"></div>
   <div id="loading">Carregando o mundo…</div>
   <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span></div></div>
-  <pre id="perf-panel" hidden aria-hidden="true"></pre>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" crossorigin="anonymous"></script>
 
@@ -132,13 +114,17 @@
       { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
-      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
+      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
+      // New southern extension: moderate woodland around the approach to the ridge.
+      { x: 13, y: 96, rx: 8, ry: 5, density: 0.25 },
+      { x: 43, y: 96, rx: 9, ry: 5, density: 0.19 },
+      { x: 76, y: 96, rx: 8, ry: 5, density: 0.25 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }], width: 2 },
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 91 }, { x: 49, y: 97 }, { x: 45, y: 101 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
@@ -162,10 +148,36 @@
         Math.abs(y - generator.playerStart.y) <= 5;
     }
 
+    // The southern mountain wall is generated from global X coordinates, so
+    // every adjacent chunk shares the exact same irregular ridge line.
+    function getSouthernRidgeTop(generator, x) {
+      const wave = Math.sin(x * 0.145) * 1.7 + Math.sin(x * 0.047 + 0.8) * 2.1;
+      const roughness = (stableNoise(x, 0, 991) - 0.5) * 1.6;
+      const base = generator.worldHeight - 15;
+      return Math.max(generator.worldHeight - 21,
+        Math.min(generator.worldHeight - 9, base + Math.round(wave + roughness)));
+    }
+
+    function isSouthernMountainCell(generator, x, y) {
+      return generator.worldHeight > generator.legacyWorldHeight &&
+        x >= 0 && x < generator.worldTiles && y >= 0 && y < generator.worldHeight &&
+        y >= getSouthernRidgeTop(generator, x);
+    }
+
+    // Preserve the exact old southern edge of the original 90x90 world. The
+    // added rows are new terrain; cells y=88 and y=89 keep their previous rules.
+    function isWithinGeneratedArea(generator, x, y) {
+      if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
+      if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
+      return true;
+    }
+
     // Shared terrain predicates are the single source of truth for both the
     // visible chunk generator and the authoritative collision generator.
     function isCliffCell(generator, x, y) {
-      if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldTiles - 1 ||
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      if (isSouthernMountainCell(generator, x, y)) return true;
+      if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldHeight - 1 ||
           isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
           isSpawnClearance(generator, x, y)) return false;
       for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
@@ -179,9 +191,8 @@
     }
 
     function getGeneratedTreeId(generator, x, y, cliff) {
-      if (x < 2 || y < 2 || x >= generator.worldTiles - 2 || y >= generator.worldTiles - 2 ||
-          isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) || cliff ||
-          isSpawnClearance(generator, x, y)) return 0;
+      if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
+          isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
       let density = 0;
       for (const patch of TREE_PATCHES) {
         const nx = (x - patch.x) / patch.rx;
@@ -195,10 +206,10 @@
 
     // Roads are short, fixed world paths. Rasterize them once as a compact set;
     // each chunk can then calculate its own Wang edge mask, including neighbours.
-    function buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight) {
+    function buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight, worldHeight = worldTiles) {
       const cells = new Set();
       const add = (x, y) => {
-        if (x < 0 || y < 0 || x >= worldTiles || y >= worldTiles) return;
+        if (x < 0 || y < 0 || x >= worldTiles || y >= worldHeight) return;
         if (x >= mapOffset && x < mapOffset + sourceWidth && y >= mapOffset && y < mapOffset + sourceHeight) return;
         cells.add(roadKey(x, y));
       };
@@ -225,7 +236,7 @@
       return cells;
     }
 
-    function prepareWorldGenerator(sourceLayers, worldTiles, mapOffset, playerStart) {
+    function prepareWorldGenerator(sourceLayers, worldTiles, mapOffset, playerStart, worldHeight = worldTiles) {
       const layers = sourceLayers.filter(layer => layer.type === 'tilelayer');
       if (layers.length < 3) throw new Error('O mapa-base não contém as três camadas necessárias.');
       const sourceWidth = layers[0].width || 30;
@@ -241,7 +252,7 @@
           sourceUpperObjects.length !== sourceWidth * sourceHeight) {
         throw new Error('As dimensões das camadas do mapa-base não correspondem aos dados recebidos.');
       }
-      if (mapOffset < 0 || mapOffset + sourceWidth > worldTiles || mapOffset + sourceHeight > worldTiles) {
+      if (mapOffset < 0 || mapOffset + sourceWidth > worldTiles || mapOffset + sourceHeight > worldHeight) {
         throw new Error('A área original do mapa está fora dos limites do mundo.');
       }
 
@@ -288,8 +299,11 @@
         }
       }
 
+      const legacyWorldHeight = worldTiles;
       return {
         worldTiles,
+        worldHeight,
+        legacyWorldHeight,
         mapOffset,
         sourceWidth,
         sourceHeight,
@@ -297,7 +311,7 @@
         originalGround,
         originalStructures,
         originalUpperObjects,
-        roadCells: buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight)
+        roadCells: buildRoadCellSet(worldTiles, mapOffset, sourceWidth, sourceHeight, worldHeight)
       };
     }
 
@@ -312,18 +326,22 @@
       if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
       const originX = chunkX * size;
       const originY = chunkY * size;
-      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldHeight) {
         throw new Error('O chunk solicitado está fora dos limites do mundo.');
       }
       const width = Math.min(size, generator.worldTiles - originX);
-      const height = Math.min(size, generator.worldTiles - originY);
+      const height = Math.min(size, generator.worldHeight - originY);
       const blocked = Array.from({ length: height }, () => new Uint8Array(width));
 
       for (let localY = 0; localY < height; localY += 1) {
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          if (isRoadCell(generator, x, y)) continue; // Roads always take precedence and are walkable.
+          if (isSouthernMountainCell(generator, x, y)) {
+            blocked[localY][localX] = 1;
+            continue;
+          }
+          if (isRoadCell(generator, x, y)) continue; // Roads remain walkable outside hard world boundaries.
 
           if (isOriginalTile(x, y, generator)) {
             const sx = x - generator.mapOffset;
@@ -374,11 +392,11 @@
       if (!Number.isInteger(size) || size <= 0) throw new Error('Tamanho de chunk inválido.');
       const originX = chunkX * size;
       const originY = chunkY * size;
-      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldTiles) {
+      if (originX < 0 || originY < 0 || originX >= generator.worldTiles || originY >= generator.worldHeight) {
         throw new Error('O chunk solicitado está fora dos limites do mundo.');
       }
       const width = Math.min(size, generator.worldTiles - originX);
-      const height = Math.min(size, generator.worldTiles - originY);
+      const height = Math.min(size, generator.worldHeight - originY);
       const isOriginal = (x, y) => isOriginalTile(x, y, generator);
       const hasRoad = (x, y) => isRoadCell(generator, x, y);
 
@@ -441,9 +459,9 @@
           );
           if (generatedTreeId) structures[ly][lx] = generatedTreeId;
 
-          if (x >= 2 && y >= 2 && x < generator.worldTiles - 2 && y < generator.worldTiles - 2 &&
-              !isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1] &&
-              !structures[ly][lx] && !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
+          if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
+              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
+              !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
@@ -497,13 +515,14 @@
       };
     }
 
-    function createGroundBase(scene, worldTiles, tileSize, color) {
-      const worldPixels = worldTiles * tileSize;
+    function createGroundBase(scene, worldWidthTiles, worldHeightTiles, tileSize, color) {
+      const worldWidthPixels = worldWidthTiles * tileSize;
+      const worldHeightPixels = worldHeightTiles * tileSize;
       return scene.add.rectangle(
-        worldPixels / 2,
-        worldPixels / 2,
-        worldPixels,
-        worldPixels,
+        worldWidthPixels / 2,
+        worldHeightPixels / 2,
+        worldWidthPixels,
+        worldHeightPixels,
         color === undefined ? 0x8ca450 : color
       ).setDepth(0);
     }
@@ -643,6 +662,9 @@
       createChunkBlockedData,
       extractChunkBlocked,
       createChunkData,
+      isCliffCell,
+      isSouthernMountainCell,
+      getSouthernRidgeTop,
       getChunkAtTile,
       getChunkNeighborhood,
       planChunkStreaming,
@@ -658,12 +680,12 @@
     'use strict';
 
     const TILE_SIZE = 16;
-    const WORLD_TILES = 90;
+    const WORLD_WIDTH_TILES = 90;
+    const WORLD_HEIGHT_TILES = 120;
     const CHUNK_TILES = 30;
     const CHUNK_LOAD_RADIUS = 1;
-    // Diagnostic overlay is enabled only with ?perf=1; normal play is unchanged.
-    const PERF_ENABLED = new URLSearchParams(window.location.search).get('perf') === '1';
-    const WORLD_PIXELS = WORLD_TILES * TILE_SIZE;
+    const WORLD_WIDTH_PIXELS = WORLD_WIDTH_TILES * TILE_SIZE;
+    const WORLD_HEIGHT_PIXELS = WORLD_HEIGHT_TILES * TILE_SIZE;
     const MAP_OFFSET = 30;
     const PLAYER_START = { x: 45, y: 65 };
     const TILESET_URL = 'https://cdn.jsdelivr.net/gh/TheBogdichHD/procedural-generation-godot@0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png';
@@ -699,17 +721,6 @@
         super('WorldScene');
         this.path = [];
         this.facingRow = 0;
-        this.perfPanel = PERF_ENABLED ? document.getElementById('perf-panel') : null;
-        this.perf = {
-          frameSamples: [],
-          lastPanelUpdate: 0,
-          lastStreamMs: 0,
-          lastStreamLoads: 0,
-          lastStreamUnloads: 0,
-          lastStreamCenter: '-',
-          lastPathMs: 0,
-          lastPathLength: 0
-        };
       }
 
       preload() {
@@ -736,8 +747,7 @@
         }
 
         try {
-          if (this.perfPanel) this.perfPanel.hidden = false;
-          this.physics.world.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+          this.physics.world.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
           this.buildWorld(sample.layers);
           this.createPlayerAnimations();
           this.createPlayer();
@@ -752,16 +762,16 @@
       }
 
       buildWorld(sourceLayers) {
-        core.createGroundBase(this, WORLD_TILES, TILE_SIZE, 0x8ca450);
-        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_TILES, MAP_OFFSET, PLAYER_START);
+        core.createGroundBase(this, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES, TILE_SIZE, 0x8ca450);
+        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_WIDTH_TILES, MAP_OFFSET, PLAYER_START, WORLD_HEIGHT_TILES);
 
         this.cliffTileIds = new Set(core.CLIFF_TILE_IDS);
         this.solidStructureTileIds = new Set(core.SOLID_STRUCTURE_TILE_IDS);
         this.treeSpriteIds = new Set(core.TREE_SPRITE_IDS);
 
-        const columns = Math.ceil(WORLD_TILES / CHUNK_TILES);
-        const rows = Math.ceil(WORLD_TILES / CHUNK_TILES);
-        this.chunkGrid = { width: WORLD_TILES, height: WORLD_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
+        const columns = Math.ceil(WORLD_WIDTH_TILES / CHUNK_TILES);
+        const rows = Math.ceil(WORLD_HEIGHT_TILES / CHUNK_TILES);
+        this.chunkGrid = { width: WORLD_WIDTH_TILES, height: WORLD_HEIGHT_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
         this.chunks = new Map();
         this.activeChunkIds = new Set();
         this.streamingCenterId = null;
@@ -771,7 +781,7 @@
         // Each chunk contributes only a compact collision row set here; visual
         // terrain/object arrays are generated separately for active chunks only.
         // Uint8Array keeps the persistent navigation grid compact (one byte/tile).
-        this.blocked = Array.from({ length: WORLD_TILES }, () => new Uint8Array(WORLD_TILES));
+        this.blocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
         for (let chunkY = 0; chunkY < rows; chunkY += 1) {
           for (let chunkX = 0; chunkX < columns; chunkX += 1) {
             const collision = core.createChunkBlockedData(
@@ -801,7 +811,7 @@
           }
         }
 
-        // Load the spawn's 3x3 neighbourhood (clipped by world boundaries).
+        // Load the spawn's 3x3 neighbourhood (clipped by rectangular world boundaries).
         this.updateChunkStreaming(true);
       }
 
@@ -863,7 +873,6 @@
         const worldY = chunk.tileY * TILE_SIZE;
         const drawGround = chunk.ground.map(row => row.slice());
         const visualObjects = [];
-        const renderStats = { cliffs: 0, structures: 0, upperObjects: 0 };
 
         // Cliff tiles are separate depth-sorted objects, preserving their exact cells.
         for (let localY = 0; localY < chunk.height; localY += 1) {
@@ -879,7 +888,6 @@
               this.getTileFrame(tileId)
             ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(cliff);
-            renderStats.cliffs += 1;
             drawGround[localY][localX] = 0;
           }
         }
@@ -901,7 +909,6 @@
               this.getTileFrame(tileId)
             );
             visualObjects.push(image);
-            renderStats.structures += 1;
             if (this.treeSpriteIds.has(tileId)) {
               const scale = core.getTreeScale(worldTileX, worldTileY, tileId);
               image.setOrigin(0.5, 1);
@@ -927,7 +934,6 @@
               this.getTileFrame(tileId)
             ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(image);
-            renderStats.upperObjects += 1;
           }
         }
 
@@ -956,7 +962,6 @@
         chunk.collisionMap = collisionMap;
         chunk.collisionLayer = collisionLayer;
         chunk.visualObjects = visualObjects;
-        chunk.renderStats = renderStats;
         chunk.collider = null;
         chunk.state = 'loaded';
         this.activeChunkIds.add(chunk.id);
@@ -984,7 +989,6 @@
         chunk.collisionMap = null;
         chunk.collisionLayer = null;
         chunk.visualObjects = [];
-        chunk.renderStats = null;
         chunk.state = 'unloaded';
         this.activeChunkIds.delete(chunk.id);
         // Free visual tile arrays; the compact global navigation grid remains.
@@ -1014,7 +1018,6 @@
           this.activeChunkIds
         );
 
-        const streamStartedAt = PERF_ENABLED ? performance.now() : 0;
         // Rebuild only missing data, once for the whole transition. Load first,
         // unload second: the player never crosses a seam before the neighbouring
         // chunk's ground and collider are available.
@@ -1023,12 +1026,6 @@
         for (const chunk of chunksToLoad) this.loadChunk(chunk);
         for (const id of plan.unload) this.unloadChunk(this.chunks.get(id));
         this.streamingCenterId = center.id;
-        if (PERF_ENABLED) {
-          this.perf.lastStreamMs = performance.now() - streamStartedAt;
-          this.perf.lastStreamLoads = plan.load.length;
-          this.perf.lastStreamUnloads = plan.unload.length;
-          this.perf.lastStreamCenter = center.id;
-        }
       }
 
       createTileLayer(data, depth, worldX = 0, worldY = 0) {
@@ -1072,7 +1069,7 @@
 
       setupCamera() {
         const camera = this.cameras.main;
-        camera.setBounds(0, 0, WORLD_PIXELS, WORLD_PIXELS);
+        camera.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
         camera.setLerp(0.12, 0.12);
         camera.startFollow(this.player, true, 0.12, 0.12);
       }
@@ -1081,16 +1078,11 @@
         if (pointer.rightButtonDown()) return;
         pointer.updateWorldPoint(this.cameras.main);
         const destination = core.worldToTile(pointer.worldX, pointer.worldY, TILE_SIZE);
-        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_TILES || destination.y >= WORLD_TILES) return;
+        if (destination.x < 0 || destination.y < 0 || destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
         if (this.blocked[destination.y][destination.x]) return;
 
         const start = core.worldToTile(this.player.x, this.player.y, TILE_SIZE);
-        const pathStartedAt = PERF_ENABLED ? performance.now() : 0;
         const route = core.findPath(this.blocked, start, destination);
-        if (PERF_ENABLED) {
-          this.perf.lastPathMs = performance.now() - pathStartedAt;
-          this.perf.lastPathLength = route.length;
-        }
         if (!route.length) return;
         this.path = route.map((tile) => ({
           x: (tile.x + 0.5) * TILE_SIZE,
@@ -1098,53 +1090,8 @@
         }));
       }
 
-      updatePerformancePanel(time) {
-        if (!PERF_ENABLED || !this.perfPanel) return;
-
-        const rawFrameMs = Number(this.game.loop.rawDelta) || 0;
-        if (rawFrameMs > 0 && rawFrameMs < 1000) {
-          this.perf.frameSamples.push(rawFrameMs);
-          if (this.perf.frameSamples.length > 180) this.perf.frameSamples.shift();
-        }
-        if (time - this.perf.lastPanelUpdate < 300) return;
-        this.perf.lastPanelUpdate = time;
-
-        const samples = this.perf.frameSamples;
-        const sorted = samples.slice().sort((a, b) => a - b);
-        const average = samples.length
-          ? samples.reduce((sum, value) => sum + value, 0) / samples.length
-          : 0;
-        const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] : 0;
-        const maxFrame = samples.length ? Math.max(...samples) : 0;
-
-        let cliffCount = 0;
-        let structureCount = 0;
-        let upperCount = 0;
-        for (const id of this.activeChunkIds) {
-          const stats = this.chunks.get(id)?.renderStats;
-          if (!stats) continue;
-          cliffCount += stats.cliffs;
-          structureCount += stats.structures;
-          upperCount += stats.upperObjects;
-        }
-
-        const fps = Number(this.game.loop.actualFps) || 0;
-        const activeChunks = this.activeChunkIds.size;
-        const gameObjects = this.children.list.length;
-        this.perfPanel.textContent = [
-          'CONQUISTADOR · DIAGNÓSTICO',
-          `FPS médio: ${fps.toFixed(1)}   Objetos: ${gameObjects}`,
-          `Frame ms médio/p95/pico: ${average.toFixed(1)} / ${p95.toFixed(1)} / ${maxFrame.toFixed(1)}`,
-          `Chunks ativos: ${activeChunks}   Centro: ${this.streamingCenterId || '-'}`,
-          `Images: penhascos ${cliffCount} | estruturas ${structureCount} | topo ${upperCount}`,
-          `Última troca de chunk: ${this.perf.lastStreamMs.toFixed(1)} ms (${this.perf.lastStreamLoads} entrou / ${this.perf.lastStreamUnloads} saiu)`,
-          `Último A*: ${this.perf.lastPathMs.toFixed(1)} ms · ${this.perf.lastPathLength} passos`
-        ].join('\n');
-      }
-
       update(_time, delta) {
         if (!this.player || !this.player.body) return;
-        this.updatePerformancePanel(_time);
         this.updateChunkStreaming();
         if (!this.path.length) {
           this.player.body.setVelocity(0, 0);
