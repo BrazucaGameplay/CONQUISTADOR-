@@ -985,6 +985,7 @@
         }
         this.opened = false;
         this.active = true;
+        this.selectedItemId = null;
         this.createUI();
         this.unsubscribers = [
           this.api.events.on('progress:changed', event => {
@@ -1138,7 +1139,48 @@
         empty.textContent = 'A mochila está vazia.';
         content.appendChild(empty);
 
-        panel.append(topRule, header, divider, content);
+        const actionBar = this.el('div', {
+          flex: '0 0 auto',
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '10px 15px max(12px, env(safe-area-inset-bottom))',
+          borderTop: '1px solid rgba(205,183,137,.48)',
+          background: 'linear-gradient(180deg, rgba(38,30,24,.96), rgba(14,13,12,.99))'
+        });
+        const selectedLabel = this.el('div', {
+          minWidth: '0',
+          flex: '1',
+          overflow: 'hidden',
+          color: '#e9d8b7',
+          font: '14px/1.2 Georgia, serif',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        });
+        const deleteButton = this.el('button', {
+          flex: '0 0 auto',
+          minHeight: '42px',
+          padding: '0 18px',
+          border: '1px solid rgba(204,135,113,.9)',
+          borderRadius: '22px',
+          background: 'linear-gradient(180deg, rgba(111,52,42,.98), rgba(59,25,23,.98))',
+          color: '#ffe6dc',
+          font: 'bold 12px/1 Georgia, serif',
+          letterSpacing: '.08em',
+          textShadow: '0 1px 2px #000',
+          boxShadow: '0 2px 8px rgba(0,0,0,.45)',
+          touchAction: 'manipulation',
+          cursor: 'pointer'
+        });
+        deleteButton.type = 'button';
+        deleteButton.textContent = 'EXCLUIR';
+        deleteButton.setAttribute('aria-label', 'Excluir pilha selecionada');
+        this.deleteHandler = () => this.requestDeleteSelected();
+        deleteButton.addEventListener('click', this.deleteHandler);
+        actionBar.append(selectedLabel, deleteButton);
+
+        panel.append(topRule, header, divider, content, actionBar);
         backdrop.appendChild(panel);
         this.document.body.append(openButton, backdrop);
 
@@ -1148,6 +1190,9 @@
         this.panel = panel;
         this.content = content;
         this.emptyState = empty;
+        this.actionBar = actionBar;
+        this.selectedLabel = selectedLabel;
+        this.deleteButton = deleteButton;
         this.backdropHandler = event => {
           if (event.target === backdrop) this.setOpen(false);
         };
@@ -1209,7 +1254,11 @@
         while (this.content.children.length > 1) {
           this.content.removeChild(this.content.lastChild);
         }
+        if (this.selectedItemId && !items.some(item => item.id === this.selectedItemId)) {
+          this.selectedItemId = null;
+        }
         this.emptyState.style.display = items.length ? 'none' : 'block';
+        this.updateSelectionBar(items);
         if (!items.length) return;
 
         const categories = new Map();
@@ -1268,16 +1317,34 @@
             alignItems: 'start'
           });
           for (const item of categoryItems) {
-            const cell = this.el('div', {
+            const isSelected = this.selectedItemId === item.id;
+            const cell = this.el('button', {
               minWidth: '0',
               minHeight: '112px',
-              padding: '1px 2px 4px',
+              padding: '5px 2px 7px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'flex-start',
               textAlign: 'center',
-              color: '#eee6d7'
+              color: '#eee6d7',
+              border: isSelected ? '1px solid rgba(229,196,126,.95)' : '1px solid transparent',
+              borderRadius: '8px',
+              background: isSelected
+                ? 'linear-gradient(180deg, rgba(126,96,51,.32), rgba(64,48,31,.24))'
+                : 'transparent',
+              boxShadow: isSelected ? 'inset 0 0 15px rgba(224,185,112,.14), 0 0 8px rgba(221,190,125,.15)' : 'none',
+              font: 'inherit',
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent'
+            });
+            cell.type = 'button';
+            cell.setAttribute('aria-pressed', String(isSelected));
+            cell.setAttribute('aria-label', `${item.definition.name || item.id}, quantidade ${item.quantity}${isSelected ? ', selecionado' : ''}`);
+            cell.addEventListener('click', () => {
+              this.selectedItemId = this.selectedItemId === item.id ? null : item.id;
+              this.refresh();
             });
             const icon = this.getIcon(item);
             const name = this.el('div', {
@@ -1304,6 +1371,47 @@
         }
       }
 
+      updateSelectionBar(items) {
+        const selected = items.find(item => item.id === this.selectedItemId);
+        this.actionBar.style.display = selected ? 'flex' : 'none';
+        if (!selected) return;
+        this.selectedLabel.textContent = selected.definition.name || selected.id;
+        this.deleteButton.disabled = false;
+        this.deleteButton.style.opacity = '1';
+      }
+
+      requestDeleteSelected() {
+        if (!this.active || !this.selectedItemId) return false;
+        const selectedId = this.selectedItemId;
+        const current = this.getItems();
+        const selected = current.find(item => item && item.id === selectedId);
+        if (!selected) {
+          this.selectedItemId = null;
+          this.refresh();
+          return false;
+        }
+
+        // Confirmation is deliberately native and concise: no custom destructive
+        // modal is added to the inventory's visual language.
+        const definition = this.getItemDefinition(selectedId);
+        const itemName = definition.name || selectedId;
+        const confirmed = typeof root.confirm === 'function'
+          ? root.confirm(`Excluir ${itemName} (${selected.quantity})?`)
+          : false;
+        if (!confirmed) return false;
+
+        const remaining = current
+          .filter(item => item && item.id !== selectedId)
+          .map(item => ({ ...item }));
+        const result = this.api.progress.update('items', remaining);
+        if (result === 'pending' || result === true) {
+          this.selectedItemId = null;
+          this.refresh();
+          return true;
+        }
+        return false;
+      }
+
       setOpen(open) {
         if (!this.active) return;
         this.opened = Boolean(open);
@@ -1319,6 +1427,7 @@
         this.unsubscribers = [];
         if (this.openButton) this.openButton.removeEventListener('click', this.openHandler);
         if (this.closeButton) this.closeButton.removeEventListener('click', this.closeHandler);
+        if (this.deleteButton) this.deleteButton.removeEventListener('click', this.deleteHandler);
         if (this.backdrop) this.backdrop.removeEventListener('click', this.backdropHandler);
         if (this.document && this.keyHandler) this.document.removeEventListener('keydown', this.keyHandler);
         if (this.openButton && this.openButton.remove) this.openButton.remove();
