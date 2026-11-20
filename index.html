@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V18 Respawn por Chunk</title>
+  <title>CONQUISTADOR — V19 Três Monstros</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -523,7 +523,9 @@
           width: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.width || 30)),
           height: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.height || 30))
         });
-        this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 5));
+        this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 6));
+        this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
+        this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 30000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
@@ -540,7 +542,7 @@
         this.active = true;
         this.message = '';
         this.messageUntil = 0;
-        this.createSlimeTexture();
+        this.createMonsterTextures();
         this.createUI();
         this.unsubscribers = [
           this.events.on('status:changed', event => {
@@ -562,26 +564,67 @@
         this.refreshUI();
       }
 
-      createSlimeTexture() {
-        const key = 'conquistador-monster-slime-v1';
-        if (this.scene.textures && this.scene.textures.exists(key)) {
-          this.slimeTextureKey = key;
-          return;
-        }
+      createMonsterTextures() {
+        this.monsterTextureKeys = Object.freeze({
+          slime: this.createMonsterTexture('slime', graphics => {
+            graphics.fillStyle(0x39b88a, 1);
+            graphics.fillEllipse(16, 18, 29, 22);
+            graphics.fillStyle(0x78edbd, 0.9);
+            graphics.fillEllipse(12, 12, 11, 7);
+            graphics.fillStyle(0xffffff, 1);
+            graphics.fillCircle(11, 17, 2.4);
+            graphics.fillCircle(21, 17, 2.4);
+            graphics.fillStyle(0x173b32, 1);
+            graphics.fillCircle(11.5, 17.5, 1.1);
+            graphics.fillCircle(21.5, 17.5, 1.1);
+          }),
+          monkey: this.createMonsterTexture('monkey', graphics => {
+            graphics.fillStyle(0x70452d, 1);
+            graphics.fillEllipse(16, 19, 22, 19);
+            graphics.fillCircle(8, 8, 6);
+            graphics.fillCircle(24, 8, 6);
+            graphics.fillStyle(0xb8794d, 1);
+            graphics.fillEllipse(16, 14, 19, 17);
+            graphics.fillStyle(0xe6b98d, 1);
+            graphics.fillEllipse(16, 19, 13, 9);
+            graphics.fillStyle(0xffffff, 1);
+            graphics.fillCircle(12, 13, 2.2);
+            graphics.fillCircle(20, 13, 2.2);
+            graphics.fillStyle(0x24160f, 1);
+            graphics.fillCircle(12.5, 13.5, 1);
+            graphics.fillCircle(20.5, 13.5, 1);
+            graphics.fillCircle(16, 18, 1.5);
+          }),
+          rat: this.createMonsterTexture('rat', graphics => {
+            graphics.fillStyle(0x85818a, 1);
+            graphics.fillEllipse(16, 19, 24, 16);
+            graphics.fillCircle(8, 8, 6);
+            graphics.fillCircle(24, 8, 6);
+            graphics.fillStyle(0xc7a2a9, 1);
+            graphics.fillCircle(8, 8, 3);
+            graphics.fillCircle(24, 8, 3);
+            graphics.fillStyle(0xb8b1b9, 1);
+            graphics.fillEllipse(16, 14, 17, 13);
+            graphics.fillStyle(0xffffff, 1);
+            graphics.fillCircle(12, 13, 2.2);
+            graphics.fillCircle(20, 13, 2.2);
+            graphics.fillStyle(0x29232b, 1);
+            graphics.fillCircle(12.5, 13.5, 1);
+            graphics.fillCircle(20.5, 13.5, 1);
+            graphics.fillStyle(0xc8798b, 1);
+            graphics.fillCircle(16, 18, 2);
+          })
+        });
+      }
+
+      createMonsterTexture(type, draw) {
+        const key = `conquistador-monster-${type}-v1`;
+        if (this.scene.textures && this.scene.textures.exists(key)) return key;
         const graphics = this.scene.add.graphics();
-        graphics.fillStyle(0x39b88a, 1);
-        graphics.fillEllipse(16, 18, 29, 22);
-        graphics.fillStyle(0x78edbd, 0.9);
-        graphics.fillEllipse(12, 12, 11, 7);
-        graphics.fillStyle(0xffffff, 1);
-        graphics.fillCircle(11, 17, 2.4);
-        graphics.fillCircle(21, 17, 2.4);
-        graphics.fillStyle(0x173b32, 1);
-        graphics.fillCircle(11.5, 17.5, 1.1);
-        graphics.fillCircle(21.5, 17.5, 1.1);
+        draw(graphics);
         graphics.generateTexture(key, 32, 32);
         graphics.destroy();
-        this.slimeTextureKey = key;
+        return key;
       }
 
       createUI() {
@@ -672,10 +715,11 @@
         return state;
       }
 
-      getAliveCountForChunk(chunkId) {
+      getAliveCountForChunk(chunkId, monsterId = null) {
         let count = 0;
         for (const record of this.monsters.values()) {
-          if (record.alive && record.originChunkId === chunkId) count += 1;
+          if (record.alive && record.originChunkId === chunkId &&
+              (!monsterId || record.monsterId === monsterId)) count += 1;
         }
         return count;
       }
@@ -721,19 +765,19 @@
         return candidates;
       }
 
-      spawnOneSlimeForChunk(chunkX, chunkY) {
+      spawnOneMonsterForChunk(chunkX, chunkY, monsterId) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
-
-        const definition = this.data.MONSTERS.slime;
-        if (!definition) throw new Error('GameData.MONSTERS.slime não foi definido.');
+        const definition = this.data.MONSTERS[monsterId];
+        if (!definition || !this.monsterTextureKeys[monsterId]) return false;
+        if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
 
         const candidates = this.getSpawnCandidates(chunkX, chunkY);
         const tile = candidates[0];
         if (!tile) return false;
 
         const sequence = this.nextMonsterSequence++;
-        const id = `monster-slime-${chunkX}-${chunkY}-${String(sequence).padStart(4, '0')}`;
+        const id = `monster-${monsterId}-${chunkX}-${chunkY}-${String(sequence).padStart(4, '0')}`;
         const x = (tile.x + 0.5) * this.tileSize;
         const y = (tile.y + 0.5) * this.tileSize;
 
@@ -743,7 +787,7 @@
           tile,
           statusId: id,
           data: {
-            monsterId: 'slime',
+            monsterId,
             originChunkId: chunkId,
             originChunkX: chunkX,
             originChunkY: chunkY
@@ -755,15 +799,16 @@
           mp: 0,
           maxMp: 0,
           strength: 0,
-          defense: 0,
+          defense: definition.defense || 0,
           speed: definition.speed
         });
 
-        const sprite = this.scene.add.image(x, y, this.slimeTextureKey);
-        sprite.setDisplaySize(27, 23);
+        const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
+        sprite.setDisplaySize(definition.displayWidth || 27, definition.displayHeight || 23);
         sprite.setDepth(y + 10);
         const record = {
           id,
+          monsterId,
           definition,
           tile: { x: tile.x, y: tile.y },
           sprite,
@@ -773,8 +818,7 @@
           nextAttackAt: 0,
           alive: true,
           lastEntityTileKey: `${tile.x},${tile.y}`,
-          // Immutable ownership: never recompute this from the monster's
-          // current tile, even after it crosses a chunk boundary.
+          // Immutable ownership: never recompute from the monster's current tile.
           originChunkId: chunkId,
           originChunkX: chunkX,
           originChunkY: chunkY
@@ -784,7 +828,7 @@
         population.totalSpawned += 1;
         this.events.emit('monster:spawned', {
           entityId: id,
-          monsterId: 'slime',
+          monsterId,
           tile,
           originChunkId: chunkId,
           originChunkX: chunkX,
@@ -800,8 +844,10 @@
             const population = this.getChunkPopulationState(chunkId);
             if (population.initialSpawnAttempted) continue;
             population.initialSpawnAttempted = true;
-            for (let count = 0; count < this.maxMonstersPerChunk; count += 1) {
-              if (!this.spawnOneSlimeForChunk(chunkX, chunkY)) break;
+            for (const monsterId of this.monsterTypes) {
+              for (let count = 0; count < this.maxPerMonsterType; count += 1) {
+                if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
+              }
             }
             if (this.getAliveCountForChunk(chunkId) < this.maxMonstersPerChunk) {
               population.initialFillPending = true;
@@ -816,51 +862,54 @@
           if (!population.initialFillPending || this.now < population.initialRetryAt) continue;
           const [chunkX, chunkY] = chunkId.split(':').map(Number);
           const queue = this.chunkRespawns.get(chunkId);
-          const queuedRespawns = queue ? queue.pending : 0;
-          let availableSlots = this.maxMonstersPerChunk -
-            this.getAliveCountForChunk(chunkId) - queuedRespawns;
+          let needsRetry = false;
 
-          while (availableSlots > 0) {
-            if (!this.spawnOneSlimeForChunk(chunkX, chunkY)) break;
-            availableSlots -= 1;
+          for (const monsterId of this.monsterTypes) {
+            const queued = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
+            let available = this.maxPerMonsterType -
+              this.getAliveCountForChunk(chunkId, monsterId) - queued;
+            while (available > 0) {
+              if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) {
+                needsRetry = true;
+                break;
+              }
+              available -= 1;
+            }
           }
 
-          const remainingSlots = this.maxMonstersPerChunk -
-            this.getAliveCountForChunk(chunkId) - queuedRespawns;
-          if (remainingSlots <= 0) {
+          const totalAlive = this.getAliveCountForChunk(chunkId);
+          const totalQueued = queue ? queue.pending : 0;
+          if (totalAlive + totalQueued >= this.maxMonstersPerChunk) {
             population.initialFillPending = false;
           } else {
-            // Retry only underfilled chunks; a queued death-respawn always
-            // reserves its slot and cannot be bypassed by initial population.
             population.initialRetryAt = this.now + this.spawnRetryDelayMs;
           }
         }
       }
 
       scheduleChunkRespawn(record) {
-        if (!record || !record.originChunkId) return false;
+        if (!record || !record.originChunkId || !this.monsterTypes.includes(record.monsterId)) return false;
         const chunkId = record.originChunkId;
-        const currentAlive = this.getAliveCountForChunk(chunkId);
-        if (currentAlive >= this.maxMonstersPerChunk) return false;
-
         let queue = this.chunkRespawns.get(chunkId);
         if (!queue) {
           queue = {
             chunkX: record.originChunkX,
             chunkY: record.originChunkY,
             pending: 0,
+            pendingByMonster: { slime: 0, monkey: 0, rat: 0 },
             nextAt: this.now + this.respawnDelayMs
           };
           this.chunkRespawns.set(chunkId, queue);
         }
-        queue.pending = Math.min(
-          this.maxMonstersPerChunk - currentAlive,
-          queue.pending + 1
-        );
-        // The first death starts the 30-second clock. Further deaths in this
-        // chunk join the queue and do not reset or accelerate that timer.
+        const currentAlive = this.getAliveCountForChunk(chunkId);
+        const reserved = queue.pending;
+        if (currentAlive + reserved >= this.maxMonstersPerChunk) return false;
+        queue.pending += 1;
+        queue.pendingByMonster[record.monsterId] =
+          (queue.pendingByMonster[record.monsterId] || 0) + 1;
         this.events.emit('monster:respawn-queued', {
           originChunkId: chunkId,
+          monsterId: record.monsterId,
           pending: queue.pending,
           respawnAt: queue.nextAt
         });
@@ -881,15 +930,23 @@
             continue;
           }
 
-          const spawned = this.spawnOneSlimeForChunk(queue.chunkX, queue.chunkY);
+          const monsterId = this.monsterTypes.find(type =>
+            queue.pendingByMonster && queue.pendingByMonster[type] > 0
+          );
+          if (!monsterId) {
+            this.chunkRespawns.delete(chunkId);
+            continue;
+          }
+
+          const spawned = this.spawnOneMonsterForChunk(queue.chunkX, queue.chunkY, monsterId);
           if (!spawned) {
-            // Do not lose a queued respawn if a chunk temporarily has no
-            // safe candidate (e.g. blocked by terrain or nearby entities).
+            // Retain the species reservation and retry later if no safe tile exists.
             queue.nextAt = this.now + this.spawnRetryDelayMs;
             continue;
           }
 
           queue.pending -= 1;
+          queue.pendingByMonster[monsterId] -= 1;
           if (queue.pending <= 0) {
             this.chunkRespawns.delete(chunkId);
           } else {
@@ -897,6 +954,7 @@
           }
           this.events.emit('monster:respawned', {
             originChunkId: chunkId,
+            monsterId,
             pending: queue.pending
           });
         }
@@ -973,11 +1031,11 @@
         this.events.emit('entity:die', {
           entityId: record.id,
           killerId,
-          monsterId: 'slime',
+          monsterId: record.monsterId,
           xp: record.definition.xp,
           tile
         });
-        this.events.emit('monster:died', { entityId: record.id, monsterId: 'slime', killerId, tile });
+        this.events.emit('monster:died', { entityId: record.id, monsterId: record.monsterId, killerId, tile });
         this.createDrop(record);
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
@@ -987,19 +1045,31 @@
       }
 
       createDrop(record) {
-        const dropDefinition = this.data.ITEMS.slime_gel;
+        const itemId = record.definition.dropId;
+        const dropDefinition = itemId && this.data.ITEMS[itemId];
         if (!dropDefinition) return false;
-        const dropId = `drop-${record.id}-slime_gel`;
-        const sprite = this.scene.add.text(record.sprite.x, record.sprite.y - 8, '◆', {
-          fontFamily: 'system-ui, sans-serif', fontSize: '18px', color: '#a8f3d1',
-          stroke: '#174b3a', strokeThickness: 3
-        });
+        const dropId = `drop-${record.id}-${itemId}`;
+        const glyphByMonster = { slime: '◆', monkey: '✦', rat: '●' };
+        const colorByMonster = { slime: '#a8f3d1', monkey: '#e7bd83', rat: '#d2c9d8' };
+        const sprite = this.scene.add.text(
+          record.sprite.x, record.sprite.y - 8, glyphByMonster[record.monsterId] || '◆', {
+            fontFamily: 'system-ui, sans-serif', fontSize: '18px',
+            color: colorByMonster[record.monsterId] || '#ffffff',
+            stroke: '#30251c', strokeThickness: 3
+          }
+        );
         sprite.setDepth(record.sprite.y + 20);
         this.drops.set(dropId, {
-          id: dropId, itemId: 'slime_gel', quantity: 1,
-          x: record.sprite.x, y: record.sprite.y, sprite
+          id: dropId,
+          itemId,
+          quantity: 1,
+          x: record.sprite.x,
+          y: record.sprite.y,
+          sprite
         });
-        this.events.emit('item:dropped', { dropId, itemId: 'slime_gel', quantity: 1, tile: record.tile });
+        this.events.emit('item:dropped', {
+          dropId, itemId, quantity: 1, tile: record.tile, sourceMonsterId: record.monsterId
+        });
         this.collectNearbyDrops();
         return true;
       }
@@ -1057,12 +1127,12 @@
         if (livingMonsters.length) {
           const target = livingMonsters[0];
           const targetHp = this.status.getStat(target.id, 'hp') ?? 0;
-          this.monsterLine.textContent = `SLIMES ${livingMonsters.length}  •  ALVO ${Math.ceil(targetHp)}/${target.definition.hp} HP`;
+          this.monsterLine.textContent = `MONSTROS ${livingMonsters.length}  •  ALVO ${Math.ceil(targetHp)}/${target.definition.hp} HP`;
         } else {
           const pendingDrop = Array.from(this.drops.values()).some(drop => drop.pendingCommit);
           this.monsterLine.textContent = pendingDrop
-            ? 'SEM SLIMES  •  salvando drops…'
-            : 'SEM SLIMES  •  aguardando respawn';
+            ? 'SEM MONSTROS  •  salvando drops…'
+            : 'SEM MONSTROS  •  aguardando respawn';
         }
         this.messageLine.textContent = this.now <= this.messageUntil ? this.message : '';
       }
@@ -1181,13 +1251,26 @@
       MONSTERS: Object.freeze({
         // First end-to-end proof entity. Balance values are intentionally exact
         // to the approved test specification: 30 HP, 5 damage, 10 XP, speed 50.
-        slime: Object.freeze({ id: 'slime', name: 'Slime', hp: 30, damage: 5, xp: 10, speed: 50 })
+        slime: Object.freeze({
+          id: 'slime', name: 'Slime', hp: 30, damage: 5, defense: 0,
+          xp: 10, speed: 50, dropId: 'slime_gel', displayWidth: 27, displayHeight: 23
+        }),
+        monkey: Object.freeze({
+          id: 'monkey', name: 'Macaco', hp: 45, damage: 7, defense: 1,
+          xp: 15, speed: 65, dropId: 'monkey_fur', displayWidth: 29, displayHeight: 27
+        }),
+        rat: Object.freeze({
+          id: 'rat', name: 'Rato', hp: 20, damage: 4, defense: 0,
+          xp: 7, speed: 75, dropId: 'rat_tail', displayWidth: 25, displayHeight: 23
+        })
       }),
       PETS: Object.freeze({}),
       WAIFUS: Object.freeze({}),
       DUNGEONS: Object.freeze({}),
       ITEMS: Object.freeze({
-        slime_gel: Object.freeze({ id: 'slime_gel', name: 'Gel de Slime', category: 'material' })
+        slime_gel: Object.freeze({ id: 'slime_gel', name: 'Gel de Slime', category: 'material' }),
+        monkey_fur: Object.freeze({ id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' }),
+        rat_tail: Object.freeze({ id: 'rat_tail', name: 'Cauda de Rato', category: 'material' })
       }),
       LEVEL_CURVE: Object.freeze({ baseXp: 100, exponent: 1.5 })
     });
@@ -2924,7 +3007,8 @@
               width: this.chunkGrid.width,
               height: this.chunkGrid.height
             },
-            maxMonstersPerChunk: 5,
+            maxMonstersPerChunk: 6,
+            maxPerMonsterType: 2,
             respawnDelayMs: 30000
           });
           this.inventorySystem = new window.CONQUISTADOR_V15_SYSTEMS.InventorySystem(this.extensionAPI, {
@@ -4257,6 +4341,14 @@
         maxMonstersPerChunk: 5,
         respawnDelayMs: 30000,
         chunkGrid: { width: 90, height: 120, chunkSize: 30, columns: 3, rows: 4 }
+      });
+      window.CONQUISTADOR_V19 = Object.freeze({
+        version: 19,
+        game,
+        monsterTypes: ['slime', 'monkey', 'rat'],
+        maxMonstersPerChunk: 6,
+        maxPerMonsterType: 2,
+        respawnDelayMs: 30000
       });
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
