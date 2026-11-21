@@ -6956,7 +6956,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V53';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V55';</script>
 
 <script id="conquistador-v54-runtime-recovery">
 (function () {
@@ -7001,10 +7001,14 @@
     } catch (error) {
       console.warn('[Conquistador] recuperação do ciclo Phaser:', error);
     }
-    state.lastFrame = Date.now();
+    const recoveryStartedAt = Date.now();
+    state.lastFrame = recoveryStartedAt;
     setTimeout(() => {
+      // Só considera a recuperação bem-sucedida se um novo frame tiver sido
+      // observado depois do início desta tentativa.
+      const frameAdvanced = state.lastFrame > recoveryStartedAt;
       state.recovering = false;
-      if (Date.now() - state.lastFrame > 2200 && state.attempts >= 3 && !state.restartUsed) {
+      if (!frameAdvanced && state.attempts >= 3 && !state.restartUsed) {
         state.restartUsed = true;
         try {
           const runtime = window.CONQUISTADOR_V13?.getRuntime?.();
@@ -7059,8 +7063,8 @@
     if (!scene || !scene.sys?.isActive?.()) { bind(); return; }
     if (Date.now() - state.lastFrame > 2600) recover('nenhum frame recebido por 2,6 segundos');
   }, 1200);
-  window.CONQUISTADOR_V54_RECOVERY = Object.freeze({
-    version: 54,
+  window.CONQUISTADOR_V55_RECOVERY = Object.freeze({
+    version: 55,
     status: () => ({ lastFrameAgoMs: Date.now() - state.lastFrame, attempts: state.attempts, sceneActive: !!scene?.sys?.isActive?.() })
   });
 })();
