@@ -2967,6 +2967,18 @@
               filter: entry.known ? 'none' : 'grayscale(1) brightness(.48)'
             });
             art.src = entry.image; art.alt = entry.name || 'Registro desconhecido';
+            if (isWaifu && entry.id === 'slime') {
+              Object.assign(art.style, { border: '2px solid #fff', outline: '2px solid #fff', outlineOffset: '-7px', boxSizing: 'border-box' });
+              card.style.position = 'relative';
+              const namePlate = this.el('div', {
+                position: 'absolute', left: '6%', right: '6%', bottom: '6px', zIndex: '2',
+                padding: '4px 2px', textAlign: 'center', color: '#fff',
+                font: 'bold 11px Georgia,serif', background: 'rgba(5,5,8,.92)',
+                border: '1px solid rgba(255,255,255,.85)', borderRadius: '2px'
+              });
+              namePlate.textContent = entry.name;
+              card.appendChild(namePlate);
+            }
             card.appendChild(art);
           }
           if (!isWaifu) {
@@ -2993,7 +3005,8 @@
               skill.textContent = entry.skillNote; card.appendChild(skill);
             }
           }
-          if (entry.detail && entry.known) card.addEventListener('click', () => this.showEntryDetail(entry));
+          // Waifu conhecida sempre abre o detalhe, mesmo sem o flag detail.
+          if (entry.known && (entry.detail || isWaifu)) card.addEventListener('click', () => this.showEntryDetail(entry));
           else card.disabled = true;
           grid.appendChild(card);
         }
@@ -3070,8 +3083,8 @@
           borderRadius: '8px', background: 'rgba(23,17,24,.88)',
           color: '#f0e4ce', font: '15px/1.6 Georgia,serif'
         });
-        const speciesLabel = { slime: 'Slime', monkey: 'Macaca', rat: 'Rata' }[speciesId] || speciesName;
-        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> ' + speciesLabel + '</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
+        const detailSpecies = { slime: 'Slime', monkey: 'Macaca', rat: 'Rata' }[entry.id] || 'Slime';
+        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> ' + detailSpecies + '</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
         const hint = this.el('div', {
           marginTop: '14px', color: '#e9d5a6',
           font: '13px Georgia,serif', textAlign: 'center'
@@ -3701,6 +3714,20 @@
           });
           art.src = group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : fullResolutionArt;
           art.alt = `Ilustração completa de ${speciesName}`;
+          // Slime no mesmo padrão da Macaca/Rata: a arte delas já vem com
+          // borda dupla branca + plaquinha de nome embutidas na imagem;
+          // a da Slime é chapada, então o acabamento vem por CSS.
+          if (group.speciesId === 'slime') {
+            Object.assign(art.style, { border: '2px solid #fff', outline: '2px solid #fff', outlineOffset: '-7px', boxSizing: 'border-box' });
+            const namePlate = this.el('div', {
+              position: 'absolute', left: '6%', right: '6%', bottom: '8px', zIndex: '2',
+              padding: '4px 2px', textAlign: 'center', color: '#fff',
+              font: 'bold 11px Georgia,serif', background: 'rgba(5,5,8,.92)',
+              border: '1px solid rgba(255,255,255,.85)', borderRadius: '2px'
+            });
+            namePlate.textContent = speciesName;
+            artWindow.appendChild(namePlate);
+          }
           artWindow.appendChild(art);
           const titlePlate = this.el('div', {
             flex: '0 0 auto', minHeight: '23px',
@@ -3809,6 +3836,7 @@
         });
         art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : fullResolutionArt;
         art.alt = `Carta de ${speciesName}`;
+        if (speciesId === 'slime') Object.assign(art.style, { border: '2px solid #fff', outline: '2px solid #fff', outlineOffset: '-7px', boxSizing: 'border-box' });
         const topPlate = this.el('div', {
           position: 'relative', flex: '0 0 auto', padding: '2px 4px',
           textAlign: 'center', color: quality.color,
@@ -5388,6 +5416,7 @@
                 const slotWaifuId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
                 art.src = slotWaifuId === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : slotWaifuId === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
                 art.alt = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[slotWaifuId] || 'Donzela Slime';
+                if (slotWaifuId === 'slime') { art.style.border = '2px solid #fff'; art.style.outline = '2px solid #fff'; art.style.outlineOffset = '-7px'; art.style.boxSizing = 'border-box'; }
                 Object.assign(art.style, {
                   position: 'absolute', left: '7%', top: '19%', width: '86%', height: '62%',
                   display: 'block', objectFit: 'contain', objectPosition: 'center',
@@ -5531,21 +5560,43 @@
                   boxShadow: '0 0 18px #ff2e88cc, 0 0 28px #ffd70088'
                 });
               }
-              const art = statusDoc.createElement('img');
               const pickerWaifuId = waifuTypeOf(card);
+              const pickerSpeciesName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[pickerWaifuId] || 'Donzela Slime';
+              const artWrap = statusDoc.createElement('div');
+              Object.assign(artWrap.style, { position: 'relative', width: '100%' });
+              const art = statusDoc.createElement('img');
               art.src = pickerWaifuId === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : pickerWaifuId === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
-              art.alt = 'Carta completa da ' + ({ slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[pickerWaifuId] || 'Donzela Slime');
+              art.alt = 'Carta completa da ' + pickerSpeciesName;
               Object.assign(art.style, {
                 display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
                 background: '#100d17', borderRadius: '5px'
               });
+              if (pickerWaifuId === 'slime') {
+                Object.assign(art.style, { border: '2px solid #fff', outline: '2px solid #fff', outlineOffset: '-7px', boxSizing: 'border-box' });
+                const namePlate = statusDoc.createElement('div');
+                Object.assign(namePlate.style, {
+                  position: 'absolute', left: '6%', right: '6%', bottom: '6px', zIndex: '2',
+                  padding: '4px 2px', textAlign: 'center', color: '#fff',
+                  font: 'bold 11px Georgia,serif', background: 'rgba(5,5,8,.92)',
+                  border: '1px solid rgba(255,255,255,.85)', borderRadius: '2px'
+                });
+                namePlate.textContent = pickerSpeciesName;
+                artWrap.append(art, namePlate);
+              } else {
+                artWrap.appendChild(art);
+              }
               const label = statusDoc.createElement('span');
-              label.textContent = `${quality.name} ${'★'.repeat(quality.stars)}` + (groupOf(card).length > 1 ? `  ×${groupOf(card).length}` : '');
+              label.textContent = quality.name + (groupOf(card).length > 1 ? `  ×${groupOf(card).length}` : '');
               Object.assign(label.style, {
                 color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center'
               });
+              const starsLabel = statusDoc.createElement('span');
+              starsLabel.textContent = '★'.repeat(quality.stars);
+              Object.assign(starsLabel.style, {
+                color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center', letterSpacing: '1px'
+              });
               const levelLabel = statusDoc.createElement('span');
-              levelLabel.textContent = `Donzela Slime · Nv. ${level}`;
+              levelLabel.textContent = `${pickerSpeciesName} · Nv. ${level}`;
               Object.assign(levelLabel.style, {
                 color: quality.color, font: 'bold 10px Georgia,serif', textAlign: 'center',
                 lineHeight: '1.2'
@@ -5555,7 +5606,7 @@
               Object.assign(stateLabel.style, {
                 color: '#e8d7b4', font: 'bold 9px Georgia,serif', textAlign: 'center', minHeight: '10px'
               });
-              item.append(art, label, levelLabel, stateLabel);
+              item.append(artWrap, label, starsLabel, levelLabel, stateLabel);
               item.addEventListener('click', () => {
                 if (item.disabled) return;
                 selectedWaifuCard = (groupOf(card).find(c => !equipped.includes(c.instanceId)) || card);
