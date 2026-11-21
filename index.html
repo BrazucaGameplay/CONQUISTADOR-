@@ -6797,7 +6797,7 @@
   </script>
   <script id="conquistador-v46">
   window.CONQUISTADOR_V45 = Object.freeze({
-    version: 45,
+    version: 46,
     feature: 'Velocidade de ataque em ataques por segundo: 1 = 1 ataque por segundo',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
@@ -6806,5 +6806,180 @@
     })
   });
   </script>
+  <script id="conquistador-v47">
+  (function () {
+    'use strict';
+    const SKILLS = Object.freeze({ slime: Object.freeze({ id: 'acid_slime', name: 'Gosma Ácida', damage: 12 }) });
+    let runtime = null;
+    let monsterSystem = null;
+    let root = null;
+    let toast = null;
+    let buttons = [];
+    let unsubscribers = [];
+    let refreshQueued = false;
+
+    function getEquippedWaifus() {
+      const data = runtime && runtime.progress ? (runtime.progress.get('waifus') || {}) : {};
+      const cards = Array.isArray(data.cards) ? data.cards : [];
+      const equipped = Array.isArray(data.equipped) ? data.equipped.slice(0, 3) : [];
+      while (equipped.length < 3) equipped.push(null);
+      return equipped.map(instanceId => {
+        const card = instanceId ? cards.find(item => item && item.instanceId === instanceId) : null;
+        return card ? String(card.waifuId || card.waifuType || card.id || 'slime') : null;
+      });
+    }
+
+    function updatePlayerLevelScaling(level) {
+      if (!runtime || !runtime.status || typeof runtime.status.snapshot !== 'function') return false;
+      const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+      const base = runtime.status.snapshot('player');
+      if (!base) return false;
+      const factor = (safeLevel - 1) * 0.01;
+      const stats = {};
+      ['hp','maxHp','energy','maxEnergy','attack','defense','penetration','attackSpeed','moveSpeed','hpRegenOutOfCombat','energyRegen']
+        .forEach(key => {
+          const value = Number(base[key]);
+          if (Number.isFinite(value)) stats[key] = value * factor;
+        });
+      return runtime.status.addModifier('player', { id: 'player:level-scaling', stats });
+    }
+
+    function showToast(message) {
+      if (!toast) return;
+      toast.textContent = message;
+      toast.style.opacity = '1';
+      toast.style.transform = 'translate(-50%,0)';
+      if (toast._hideTimer) clearTimeout(toast._hideTimer);
+      toast._hideTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translate(-50%,8px)';
+      }, 1500);
+    }
+
+    function castSkill(slotIndex) {
+      const equipped = getEquippedWaifus();
+      const waifuId = equipped[slotIndex];
+      const skill = SKILLS[waifuId];
+      if (!skill || !monsterSystem || !monsterSystem.active) return false;
+      const playerPoint = monsterSystem.getPlayerPoint();
+      if (!playerPoint) { showToast('Não foi possível localizar o jogador.'); return false; }
+      const target = monsterSystem.getNearestMonsterInRange(playerPoint);
+      if (!target || !target.alive || !target.sprite || !target.sprite.active) {
+        showToast('Nenhum monstro ao alcance da habilidade.');
+        return false;
+      }
+      const distance = Math.hypot(target.sprite.x - playerPoint.x, target.sprite.y - playerPoint.y);
+      if (distance > monsterSystem.attackRange) {
+        showToast('Aproxime-se do monstro para usar a habilidade.');
+        return false;
+      }
+      const result = runtime.status.applyDamage(target.id, skill.damage, 'player');
+      if (!result) { showToast('Não foi possível aplicar a habilidade.'); return false; }
+      if (typeof monsterSystem.showMonsterHitEffect === 'function') monsterSystem.showMonsterHitEffect(target);
+      runtime.events.emit('combat:hit', {
+        attackerId: 'player', targetId: target.id, damage: skill.damage,
+        remainingHp: result.hp, skillId: skill.id, skillName: skill.name
+      });
+      if (result.defeated) monsterSystem.killMonster(target, 'player');
+      if (typeof monsterSystem.refreshUI === 'function') monsterSystem.refreshUI();
+      showToast(skill.name + ': ' + skill.damage + ' de dano.');
+      return true;
+    }
+
+    function renderSkillSlots() {
+      if (!root) return;
+      const equipped = getEquippedWaifus();
+      buttons.forEach((button, index) => {
+        const skill = SKILLS[equipped[index]];
+        button.disabled = !skill;
+        button.textContent = skill ? `${index + 1} · ${skill.name}` : `${index + 1} · Vazio`;
+        button.style.opacity = skill ? '1' : '.42';
+        button.style.borderColor = skill ? 'rgba(222,185,112,.82)' : 'rgba(150,130,100,.35)';
+        button.style.color = skill ? '#f4dfaa' : '#9e927e';
+      });
+    }
+
+    function createSkillHud() {
+      if (document.getElementById('conquistador-active-skills')) return;
+      root = document.createElement('div');
+      root.id = 'conquistador-active-skills';
+      Object.assign(root.style, {
+        position: 'fixed', left: '50%', bottom: 'max(14px, env(safe-area-inset-bottom))',
+        transform: 'translateX(-50%)', zIndex: '45', display: 'flex', gap: '6px',
+        maxWidth: 'calc(100vw - 18px)', pointerEvents: 'auto',
+        font: 'bold 10px Georgia,serif', touchAction: 'manipulation'
+      });
+      for (let i = 0; i < 3; i += 1) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        Object.assign(button.style, {
+          minWidth: '0', maxWidth: '31vw', padding: '9px 8px', border: '1px solid rgba(150,130,100,.35)',
+          borderRadius: '9px', background: 'linear-gradient(180deg,rgba(55,43,31,.96),rgba(22,19,17,.97))',
+          boxShadow: '0 3px 10px rgba(0,0,0,.55)', textShadow: '0 1px 2px #000',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer'
+        });
+        button.addEventListener('click', () => castSkill(i));
+        buttons.push(button);
+        root.appendChild(button);
+      }
+      toast = document.createElement('div');
+      toast.setAttribute('role', 'status');
+      Object.assign(toast.style, {
+        position: 'fixed', left: '50%', bottom: 'calc(max(14px, env(safe-area-inset-bottom)) + 54px)',
+        transform: 'translate(-50%,8px)', opacity: '0', transition: 'opacity .16s, transform .16s',
+        zIndex: '46', padding: '7px 12px', border: '1px solid rgba(221,196,128,.72)',
+        borderRadius: '8px', background: 'rgba(22,19,17,.96)', color: '#f4dfaa',
+        font: '12px Georgia,serif', pointerEvents: 'none', whiteSpace: 'nowrap'
+      });
+      document.body.append(root, toast);
+      renderSkillSlots();
+    }
+
+    function attach() {
+      const api = window.CONQUISTADOR_V13 && window.CONQUISTADOR_V13.getRuntime
+        ? window.CONQUISTADOR_V13.getRuntime() : null;
+      const combat = window.CONQUISTADOR_V16 && window.CONQUISTADOR_V16.getMonsterSystem
+        ? window.CONQUISTADOR_V16.getMonsterSystem() : null;
+      if (!api || !combat || !api.events || !api.progress || !api.status) return false;
+      runtime = api;
+      monsterSystem = combat;
+      createSkillHud();
+      const level = api.levels && api.levels.snapshot ? api.levels.snapshot('player') : { level: 1 };
+      updatePlayerLevelScaling(level.level);
+      const refresh = () => {
+        if (refreshQueued) return;
+        refreshQueued = true;
+        Promise.resolve().then(() => { refreshQueued = false; renderSkillSlots(); });
+      };
+      unsubscribers.push(api.events.on('level:changed', event => {
+        if (event && event.entityId === 'player') updatePlayerLevelScaling(event.level);
+      }));
+      unsubscribers.push(api.events.on('progress:changed', event => {
+        if (event && event.section === 'waifus') refresh();
+      }));
+      unsubscribers.push(api.events.on('progress:batch-changed', refresh));
+      unsubscribers.push(api.events.on('save:written', refresh));
+      renderSkillSlots();
+      return true;
+    }
+
+    let attempts = 0;
+    const boot = () => {
+      if (attach()) return;
+      attempts += 1;
+      if (attempts < 120) setTimeout(boot, 250);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
+    else boot();
+    window.CONQUISTADOR_V47 = Object.freeze({
+      version: 47,
+      playerLevelScaling: '1% por nível acima do nível 1, aplicado aos atributos base',
+      activeSkillSlots: 3,
+      slimeSkill: SKILLS.slime,
+      castSkill
+    });
+  })();
+  </script>
+
 </body>
 </html>
