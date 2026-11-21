@@ -3869,34 +3869,41 @@
         const houseData = this.api.progress.get('waifus') || {};
         const houseCards = Array.isArray(houseData.house) ? houseData.house : [];
         const equippedIds = Array.isArray(houseData.equipped) ? houseData.equipped : [];
-        const freeCard = matchingCards.find(c => c && c.instanceId && !equippedIds.includes(c.instanceId));
+        // Carta equipada também pode ir para a Casa — ao enviar, ela sai do espaço.
+        const sendableCard = matchingCards[0];
+        const anyEquipped = matchingCards.some(c => c && equippedIds.includes(c.instanceId));
         const houseFull = houseCards.length >= 10;
         const houseCountLabel = this.el('div', {
           marginTop: '4px', color: '#e9d5a6', font: '12px Georgia,serif', textAlign: 'center'
         });
-        houseCountLabel.textContent = `Casa: ${houseCards.length}/10 moradoras`;
+        houseCountLabel.textContent = anyEquipped
+          ? `Casa: ${houseCards.length}/10 moradoras · carta equipada sai do espaço`
+          : `Casa: ${houseCards.length}/10 moradoras`;
         const houseButton = this.el('button', {
           marginTop: '2px', minHeight: '42px', padding: '9px 16px',
           border: '1px solid #b99a64', borderRadius: '12px',
-          background: (houseFull || !freeCard) ? 'rgba(60,50,35,.6)' : 'linear-gradient(180deg,#493727,#17110e)',
-          color: (houseFull || !freeCard) ? '#a99a7d' : '#f4dfaa',
+          background: houseFull ? 'rgba(60,50,35,.6)' : 'linear-gradient(180deg,#493727,#17110e)',
+          color: houseFull ? '#a99a7d' : '#f4dfaa',
           font: 'bold 13px Georgia,serif', letterSpacing: '.04em',
-          cursor: (houseFull || !freeCard) ? 'not-allowed' : 'pointer', touchAction: 'manipulation'
+          cursor: houseFull ? 'not-allowed' : 'pointer', touchAction: 'manipulation'
         });
         houseButton.type = 'button';
-        houseButton.textContent = houseFull ? '🏠 Casa cheia (10/10)' : freeCard ? '🏠 Mandar para a Casa' : '🏠 Sem carta livre (equipada)';
-        houseButton.disabled = houseFull || !freeCard;
+        houseButton.textContent = houseFull ? '🏠 Casa cheia (10/10)' : '🏠 Mandar para a Casa';
+        houseButton.disabled = houseFull;
         houseButton.addEventListener('click', () => {
           const current = this.api.progress.get('waifus') || {};
           const currentHouse = Array.isArray(current.house) ? current.house.slice() : [];
-          const currentEquipped = Array.isArray(current.equipped) ? current.equipped : [];
           if (currentHouse.length >= 10) return;
           const currentCards = Array.isArray(current.cards) ? current.cards.slice() : [];
-          const target = currentCards.find(c => c && matchingCards.some(m => m && m.instanceId === c.instanceId) && !currentEquipped.includes(c.instanceId));
+          const target = currentCards.find(c => c && matchingCards.some(m => m && m.instanceId === c.instanceId));
           if (!target) return;
           const nextCards = currentCards.filter(c => c && c.instanceId !== target.instanceId);
           currentHouse.push(target);
-          this.api.progress.update('waifus', { ...current, cards: nextCards, house: currentHouse });
+          // Carta equipada que vai para a Casa sai do espaço (o espaço lê de cards).
+          const nextEquipped = Array.isArray(current.equipped) ? current.equipped.slice() : [];
+          while (nextEquipped.length < 3) nextEquipped.push(null);
+          for (let s = 0; s < 3; s++) if (nextEquipped[s] === target.instanceId) nextEquipped[s] = null;
+          this.api.progress.update('waifus', { ...current, cards: nextCards, house: currentHouse, equipped: nextEquipped });
           overlay.remove();
           this.refresh();
         });
@@ -5658,6 +5665,13 @@
           const openWaifuPicker = slotIndex => {
             selectedSlotIndex = slotIndex;
             selectedWaifuCard = null;
+            // Equipar agora abre a Casa em vez do seletor da galeria: a carta
+            // sai da Casa e volta para as cartas, já equipada no espaço.
+            if (this.houseSystem) {
+              statusBackdrop.style.display = 'none';
+              this.houseSystem.setOpen(true, { equipSlot: slotIndex });
+              return;
+            }
             pickerTitle.textContent = 'ESCOLHER CARTA';
             renderPicker();
             statusBackdrop.style.display = 'none';
@@ -5877,76 +5891,292 @@
           housePanel.append(houseClose, houseTitle, houseCount, houseGrid);
           houseBackdrop.appendChild(housePanel);
           document.body.appendChild(houseBackdrop);
+          const houseSceneRef = this; // cena: refresh() roda com this = houseSystem
+          const HOUSE_QUALITY = [
+            { id: 'plebeia', name: 'Plebeia', color: '#a9a9a9' },
+            { id: 'dama', name: 'Dama', color: '#55a8e8' },
+            { id: 'condessa', name: 'Condessa', color: '#b16ce2' },
+            { id: 'duquesa', name: 'Duquesa', color: '#e6b84f' },
+            { id: 'rainha', name: 'Rainha', color: '#ff2e88' }
+          ];
+          const HOUSE_WAIFU_META = {
+            slime: { description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.', bonuses: ['Pele de Gosma — +1 Defesa', 'Corpo de Slime — +10 HP máximo'], skill: { icon: '🫧', name: 'Gosma Ácida', meta: '12 de dano  ·  Recarga 5s', desc: 'Causa 12 de dano fixo.' } },
+            monkey: { description: 'Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.', bonuses: ['Agilidade da Macaca — +0,2 Velocidade de ataque', 'Sino Perfurante — +0,5 Penetração'], skill: { icon: '🔔', name: 'Chuva de Sinos', meta: 'Recarga 10s', desc: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' } },
+            rat: { description: 'Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.', bonuses: ['Patas Ligeiras — +0,1 Velocidade de movimento', 'Corpo de Rata — +10 HP máximo'], skill: { icon: '🧼', name: 'Ensaboado', meta: 'Recarga 10s', desc: 'Imune a dano por 3 segundos.' } }
+          };
+          let houseEquipSlot = null; // null = navegando; número = escolhendo carta para o espaço
+          const houseCardQuality = card => HOUSE_QUALITY.find(q => q.id === (card && card.quality)) || HOUSE_QUALITY[0];
+          const houseCardLevel = (card, data) => {
+            const speciesId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+            const legacy = data && data.intimacy && data.intimacy[speciesId] ? data.intimacy[speciesId].level : 1;
+            return Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacy) || 1)));
+          };
+          const houseCardSpecies = card => {
+            const speciesId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+            return { id: speciesId, name: { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[speciesId] || speciesId };
+          };
           const houseSystem = {
             backdrop: houseBackdrop,
+            takeBack(card) {
+              const current = (houseApi && houseApi.progress.get('waifus')) || {};
+              const currentHouse = Array.isArray(current.house) ? current.house.slice() : [];
+              const idx = currentHouse.findIndex(c => c && c.instanceId === card.instanceId);
+              if (idx < 0) return false;
+              currentHouse.splice(idx, 1);
+              const cards = Array.isArray(current.cards) ? current.cards.slice() : [];
+              cards.push(card);
+              houseApi.progress.update('waifus', { ...current, cards, house: currentHouse });
+              houseSystem.refresh();
+              return true;
+            },
+            equipFromHouse(card, slotIndex) {
+              const current = (houseApi && houseApi.progress.get('waifus')) || {};
+              const currentHouse = Array.isArray(current.house) ? current.house.slice() : [];
+              const idx = currentHouse.findIndex(c => c && c.instanceId === card.instanceId);
+              if (idx < 0) return false;
+              currentHouse.splice(idx, 1);
+              const cards = Array.isArray(current.cards) ? current.cards.slice() : [];
+              if (!cards.some(c => c && c.instanceId === card.instanceId)) cards.push(card);
+              const equipped = Array.isArray(current.equipped) ? current.equipped.slice() : [];
+              while (equipped.length < 3) equipped.push(null);
+              const slot = Math.max(0, Math.min(2, Number(slotIndex) || 0));
+              for (let s = 0; s < 3; s++) if (equipped[s] === card.instanceId && s !== slot) equipped[s] = null;
+              equipped[slot] = card.instanceId;
+              houseApi.progress.update('waifus', { ...current, cards, house: currentHouse, equipped });
+              houseEquipSlot = null;
+              houseSystem.setOpen(false);
+              return true;
+            },
+            showCardDetail(card) {
+              const data = (houseApi && houseApi.progress.get('waifus')) || {};
+              const species = houseCardSpecies(card);
+              const meta = HOUSE_WAIFU_META[species.id] || HOUSE_WAIFU_META.slime;
+              const quality = houseCardQuality(card);
+              const level = houseCardLevel(card, data);
+              const inEquipMode = houseEquipSlot !== null;
+              const overlay = document.createElement('div');
+              Object.assign(overlay.style, {
+                position: 'fixed', inset: '0', zIndex: '103', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', padding: '12px',
+                background: 'rgba(0,0,0,.92)', overflowY: 'auto'
+              });
+              const panel = document.createElement('div');
+              Object.assign(panel.style, {
+                width: 'min(100%, 420px)', maxHeight: '86dvh', overflowY: 'auto',
+                padding: '16px', boxSizing: 'border-box', borderRadius: '18px',
+                background: 'linear-gradient(160deg,#211923,#0b0a10)',
+                border: `1px solid ${quality.color}`, boxShadow: `0 18px 45px rgba(0,0,0,.7), 0 0 22px ${quality.color}55`,
+                color: '#f0e4ce', fontFamily: 'Georgia,serif'
+              });
+              const qualityName = document.createElement('div');
+              Object.assign(qualityName.style, { textAlign: 'center', color: quality.color, font: 'bold 14px Georgia,serif' });
+              qualityName.textContent = quality.id === 'rainha' ? '👑 RAINHA · ESPECIAL' : quality.name;
+              const stars = document.createElement('div');
+              Object.assign(stars.style, { textAlign: 'center', color: quality.color, font: 'bold 13px Georgia,serif', letterSpacing: '1px', margin: '3px 0 10px' });
+              stars.textContent = '★'.repeat(HOUSE_QUALITY.indexOf(quality) + 1);
+              const artWrap = document.createElement('div');
+              Object.assign(artWrap.style, { position: 'relative', width: '100%' });
+              const art = document.createElement('img');
+              art.src = species.id === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : species.id === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
+              art.alt = 'Carta de ' + species.name;
+              Object.assign(art.style, { display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain', background: '#080c15', borderRadius: '5px' });
+              artWrap.appendChild(art);
+              if (species.id === 'slime') {
+                art.style.border = '1px solid #fff'; art.style.outline = '1px solid #fff';
+                art.style.outlineOffset = '-4px'; art.style.boxSizing = 'border-box';
+                const namePlate = document.createElement('div');
+                Object.assign(namePlate.style, {
+                  position: 'absolute', left: '6%', right: '6%', bottom: '8px', zIndex: '2',
+                  padding: '2px 1px', textAlign: 'center', color: '#fff',
+                  font: 'bold 8px Georgia,serif', background: 'rgba(5,5,8,.92)',
+                  border: '1px solid rgba(255,255,255,.85)', borderRadius: '2px'
+                });
+                namePlate.textContent = species.name;
+                artWrap.appendChild(namePlate);
+              }
+              const title = document.createElement('div');
+              Object.assign(title.style, { marginTop: '10px', textAlign: 'center', color: quality.color, font: 'bold 14px Georgia,serif' });
+              title.textContent = `${species.name} · Nv. ${level}`;
+              const descLabel = document.createElement('div');
+              Object.assign(descLabel.style, { margin: '18px 0 8px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
+              descLabel.textContent = 'DESCRIÇÃO';
+              const desc = document.createElement('div');
+              Object.assign(desc.style, { font: '15px/1.6 Georgia,serif' });
+              desc.textContent = meta.description;
+              const bonusLabel = document.createElement('div');
+              Object.assign(bonusLabel.style, { margin: '16px 0 8px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
+              bonusLabel.textContent = 'BÔNUS DA CARTA';
+              const bonusList = document.createElement('div');
+              Object.assign(bonusList.style, { display: 'flex', flexDirection: 'column', gap: '6px', font: '15px/1.45 Georgia,serif' });
+              for (const bonus of meta.bonuses) {
+                const line = document.createElement('div');
+                line.textContent = `·  ${bonus}`;
+                bonusList.appendChild(line);
+              }
+              const skillLabel = document.createElement('div');
+              Object.assign(skillLabel.style, { margin: '16px 0 8px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
+              skillLabel.textContent = 'HABILIDADE ATIVA';
+              const skillCard = document.createElement('div');
+              Object.assign(skillCard.style, { padding: '12px 14px', borderRadius: '16px', background: 'linear-gradient(180deg, rgba(120,220,120,.14), rgba(40,90,50,.12))' });
+              const skillName = document.createElement('div');
+              Object.assign(skillName.style, { color: '#d8ffb0', font: 'bold 16px Georgia,serif' });
+              skillName.textContent = `${meta.skill.icon}  ${meta.skill.name}`;
+              const skillMeta = document.createElement('div');
+              Object.assign(skillMeta.style, { marginTop: '4px', color: '#ffe9b0', font: 'bold 12px Georgia,serif' });
+              skillMeta.textContent = meta.skill.meta;
+              const skillDesc = document.createElement('div');
+              Object.assign(skillDesc.style, { marginTop: '4px', font: '14px/1.5 Georgia,serif' });
+              skillDesc.textContent = meta.skill.desc;
+              skillCard.append(skillName, skillMeta, skillDesc);
+              const actions = document.createElement('div');
+              Object.assign(actions.style, { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '18px' });
+              const makeAction = (label, fn, primary) => {
+                const b = document.createElement('button');
+                b.type = 'button'; b.textContent = label;
+                Object.assign(b.style, {
+                  minHeight: '42px', padding: '9px 14px', border: '1px solid #b99a64', borderRadius: '12px',
+                  background: primary ? 'linear-gradient(180deg,#74552e,#302116)' : 'linear-gradient(180deg,#493727,#17110e)',
+                  color: '#f4dfaa', font: 'bold 13px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
+                });
+                b.addEventListener('click', fn);
+                return b;
+              };
+              if (inEquipMode) actions.appendChild(makeAction(`✓  Equipar no Espaço ${houseEquipSlot + 1}`, () => { overlay.remove(); houseSystem.equipFromHouse(card, houseEquipSlot); }, true));
+              actions.appendChild(makeAction('↩  Tirar da Casa', () => { overlay.remove(); houseSystem.takeBack(card); }));
+              actions.appendChild(makeAction('Fechar', () => overlay.remove()));
+              panel.append(qualityName, stars, artWrap, title, descLabel, desc, bonusLabel, bonusList, skillLabel, skillCard, actions);
+              overlay.appendChild(panel);
+              overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+              document.body.appendChild(overlay);
+            },
             refresh() {
               const data = (houseApi && houseApi.progress.get('waifus')) || {};
               const house = Array.isArray(data.house) ? data.house : [];
-              houseCount.textContent = `${house.length}/${HOUSE_MAX_SLOTS} moradoras`;
+              const inEquipMode = houseEquipSlot !== null;
+              houseCount.textContent = inEquipMode
+                ? `Escolha para o Espaço ${houseEquipSlot + 1}  ·  ${house.length}/${HOUSE_MAX_SLOTS} moradoras`
+                : `${house.length}/${HOUSE_MAX_SLOTS} moradoras`;
               houseGrid.replaceChildren();
+              if (!house.length && inEquipMode) {
+                const hint = document.createElement('div');
+                Object.assign(hint.style, {
+                  gridColumn: '1 / -1', padding: '16px', textAlign: 'center',
+                  color: '#e9d5a6', font: '14px/1.5 Georgia,serif'
+                });
+                hint.textContent = 'Casa vazia — mande cartas da Galeria primeiro.';
+                const openGallery = document.createElement('button');
+                openGallery.type = 'button'; openGallery.textContent = '🃏  Abrir Galeria';
+                Object.assign(openGallery.style, {
+                  gridColumn: '1 / -1', minHeight: '42px', padding: '9px 14px',
+                  border: '1px solid #b99a64', borderRadius: '12px',
+                  background: 'linear-gradient(180deg,#493727,#17110e)', color: '#f4dfaa',
+                  font: 'bold 13px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
+                });
+                openGallery.addEventListener('click', () => {
+                  houseSystem.setOpen(false);
+                  if (houseSceneRef.waifuGallerySystem) houseSceneRef.waifuGallerySystem.setOpen(true);
+                });
+                houseGrid.append(hint, openGallery);
+              }
               for (let i = 0; i < HOUSE_MAX_SLOTS; i++) {
                 const card = house[i] || null;
                 const slot = document.createElement('div');
                 Object.assign(slot.style, {
                   position: 'relative', minHeight: card ? '0' : '120px', padding: card ? '7px' : '10px',
                   display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '6px',
-                  boxSizing: 'border-box', borderRadius: '16px',
-                  border: card ? '1px solid rgba(255,215,130,.55)' : '1px dashed rgba(255,215,130,.35)',
-                  background: card ? 'linear-gradient(145deg,rgba(42,35,47,.98),rgba(10,10,16,.99))' : 'rgba(255,235,180,.04)'
+                  boxSizing: 'border-box', borderRadius: '18px',
+                  border: card ? 'none' : '1px dashed rgba(255,215,130,.35)',
+                  background: card ? 'linear-gradient(145deg,rgba(42,35,47,.98),rgba(10,10,16,.99))' : 'rgba(255,235,180,.04)',
+                  boxShadow: card ? `0 10px 24px rgba(0,0,0,.6), 0 0 18px ${houseCardQuality(card).color}55` : 'none',
+                  color: card ? houseCardQuality(card).color : '#e9d5a6', overflow: 'hidden'
                 });
                 if (!card) {
                   const empty = document.createElement('div');
-                  Object.assign(empty.style, {
-                    margin: 'auto', color: 'rgba(233,213,166,.55)',
-                    font: 'bold 12px Georgia,serif', textAlign: 'center'
-                  });
+                  Object.assign(empty.style, { margin: 'auto', color: 'rgba(233,213,166,.55)', font: 'bold 12px Georgia,serif', textAlign: 'center' });
                   empty.textContent = `Espaço ${i + 1} vazio`;
                   slot.appendChild(empty);
                 } else {
-                  const speciesId = String(card.waifuId || card.waifuType || card.id || 'slime');
-                  const speciesName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[speciesId] || speciesId;
-                  const art = document.createElement('img');
-                  art.src = speciesId === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
-                  art.alt = 'Carta de ' + speciesName;
-                  Object.assign(art.style, {
-                    display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
-                    background: '#080c15', borderRadius: '5px'
+                  const quality = houseCardQuality(card);
+                  if (quality.id === 'rainha') {
+                    Object.assign(slot.style, {
+                      background: 'linear-gradient(160deg, rgba(90,10,55,.98), rgba(40,5,30,.98) 55%, rgba(80,10,50,.98))',
+                      boxShadow: '0 0 26px #ff2e88cc, 0 0 38px #ffd70088, 0 10px 22px rgba(0,0,0,.7)'
+                    });
+                  }
+                  const species = houseCardSpecies(card);
+                  const level = houseCardLevel(card, data);
+                  const cardButton = document.createElement('button');
+                  cardButton.type = 'button';
+                  Object.assign(cardButton.style, {
+                    display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px',
+                    padding: '0', border: 'none', background: 'transparent', color: 'inherit',
+                    cursor: 'pointer', touchAction: 'manipulation', textAlign: 'center'
                   });
-                  if (speciesId === 'slime') {
+                  const qualityName = document.createElement('div');
+                  Object.assign(qualityName.style, { color: quality.color, font: 'bold 11px Georgia,serif', textShadow: '0 1px 3px #000' });
+                  qualityName.textContent = quality.id === 'rainha' ? '👑 RAINHA · ESPECIAL' : quality.name;
+                  const stars = document.createElement('div');
+                  Object.assign(stars.style, { color: quality.color, font: 'bold 10px Georgia,serif', letterSpacing: '1px', textShadow: '0 1px 3px #000' });
+                  stars.textContent = '★'.repeat(HOUSE_QUALITY.indexOf(quality) + 1);
+                  const artWrap = document.createElement('div');
+                  Object.assign(artWrap.style, { position: 'relative', width: '100%' });
+                  const art = document.createElement('img');
+                  art.src = species.id === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : species.id === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
+                  art.alt = 'Carta de ' + species.name;
+                  Object.assign(art.style, { display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain', background: '#080c15', borderRadius: '5px' });
+                  artWrap.appendChild(art);
+                  if (species.id === 'slime') {
                     art.style.border = '1px solid #fff'; art.style.outline = '1px solid #fff';
                     art.style.outlineOffset = '-4px'; art.style.boxSizing = 'border-box';
+                    const namePlate = document.createElement('div');
+                    Object.assign(namePlate.style, {
+                      position: 'absolute', left: '6%', right: '6%', bottom: '8px', zIndex: '2',
+                      padding: '2px 1px', textAlign: 'center', color: '#fff',
+                      font: 'bold 8px Georgia,serif', background: 'rgba(5,5,8,.92)',
+                      border: '1px solid rgba(255,255,255,.85)', borderRadius: '2px'
+                    });
+                    namePlate.textContent = species.name;
+                    artWrap.appendChild(namePlate);
                   }
-                  const label = document.createElement('div');
-                  Object.assign(label.style, {
-                    color: '#f2e4c7', font: 'bold 12px Georgia,serif', textAlign: 'center'
-                  });
-                  label.textContent = speciesName;
+                  const titlePlate = document.createElement('div');
+                  Object.assign(titlePlate.style, { color: quality.color, font: 'bold 11px Georgia,serif', textShadow: '0 1px 3px #000' });
+                  titlePlate.textContent = `${species.name} · Nv. ${level}`;
+                  cardButton.append(qualityName, stars, artWrap, titlePlate);
+                  cardButton.addEventListener('click', () => houseSystem.showCardDetail(card));
+                  const actions = document.createElement('div');
+                  Object.assign(actions.style, { display: 'flex', gap: '6px' });
                   const takeBack = document.createElement('button');
                   takeBack.type = 'button'; takeBack.textContent = '↩  Tirar da Casa';
                   Object.assign(takeBack.style, {
-                    minHeight: '34px', padding: '6px 10px', border: '1px solid #b99a64',
+                    flex: '1', minHeight: '34px', padding: '6px 8px', border: '1px solid #b99a64',
                     borderRadius: '10px', background: 'linear-gradient(180deg,#493727,#17110e)',
-                    color: '#f4dfaa', font: 'bold 12px Georgia,serif', cursor: 'pointer',
-                    touchAction: 'manipulation'
+                    color: '#f4dfaa', font: 'bold 12px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
                   });
-                  takeBack.addEventListener('click', () => {
-                    const current = (houseApi && houseApi.progress.get('waifus')) || {};
-                    const currentHouse = Array.isArray(current.house) ? current.house.slice() : [];
-                    const idx = currentHouse.findIndex(c => c && c.instanceId === card.instanceId);
-                    if (idx < 0) return;
-                    currentHouse.splice(idx, 1);
-                    const cards = Array.isArray(current.cards) ? current.cards.slice() : [];
-                    cards.push(card);
-                    houseApi.progress.update('waifus', { ...current, cards, house: currentHouse });
-                    houseSystem.refresh();
-                  });
-                  slot.append(art, label, takeBack);
+                  takeBack.addEventListener('click', () => houseSystem.takeBack(card));
+                  actions.appendChild(takeBack);
+                  if (inEquipMode) {
+                    const equip = document.createElement('button');
+                    equip.type = 'button'; equip.textContent = '✓  Equipar';
+                    Object.assign(equip.style, {
+                      flex: '1', minHeight: '34px', padding: '6px 8px', border: '1px solid #d4b16b',
+                      borderRadius: '10px', background: 'linear-gradient(180deg,#74552e,#302116)',
+                      color: '#fff0c9', font: 'bold 12px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
+                    });
+                    equip.addEventListener('click', () => houseSystem.equipFromHouse(card, houseEquipSlot));
+                    actions.appendChild(equip);
+                  }
+                  slot.append(cardButton, actions);
                 }
                 houseGrid.appendChild(slot);
               }
             },
-            setOpen(open) {
-              if (open) houseSystem.refresh();
+            setOpen(open, options) {
+              if (open) {
+                houseEquipSlot = (options && typeof options.equipSlot === 'number') ? Math.max(0, Math.min(2, options.equipSlot)) : null;
+                houseSystem.refresh();
+              } else {
+                houseEquipSlot = null;
+              }
               houseBackdrop.style.display = open ? 'flex' : 'none';
             },
             destroy() { houseBackdrop.remove(); }
@@ -6009,8 +6239,8 @@
 
           for (const system of [this.inventorySystem, this.bestiarySystem, this.waifuGallerySystem, this.houseSystem]) {
             const originalSetOpen = system.setOpen.bind(system);
-            system.setOpen = open => {
-              originalSetOpen(open);
+            system.setOpen = (...args) => {
+              originalSetOpen(...args);
               syncHudVisibility();
             };
           }
