@@ -2861,7 +2861,7 @@
           borderRadius: '8px', background: 'rgba(23,17,24,.88)',
           color: '#f0e4ce', font: '15px/1.6 Georgia,serif'
         });
-        profileMeta.innerHTML = `<div><span style="color:#e7c987">Espécie:</span> ${String(entry.species || entry.name || 'Desconhecida').replace(/[<>&"]/g, '')}</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>`;
+        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> Slime</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
         const hint = this.el('div', {
           marginTop: '14px', color: '#e9d5a6',
           font: '13px Georgia,serif', textAlign: 'center'
@@ -2908,39 +2908,12 @@
           boxShadow: 'inset 0 0 20px rgba(0,0,0,.35)'
         });
         descText.textContent = entry.description || 'Descrição ainda não disponível.';
-        const skillHeading = this.el('div', {
-          margin: '22px 0 10px', color: '#e7c987',
-          font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
-        });
-        skillHeading.textContent = 'HABILIDADES';
-        const skillList = this.el('div', {
-          display: 'flex', flexDirection: 'column', gap: '10px'
-        });
-        const skills = Array.isArray(entry.abilities) ? entry.abilities : [];
-        if (skills.length) {
-          skills.forEach(skill => {
-            const item = this.el('div', {
-              padding: '13px 15px', border: '1px solid rgba(198,168,108,.45)',
-              borderRadius: '9px', background: 'rgba(49,37,30,.72)',
-              color: '#f0e4ce', font: '15px/1.5 Georgia,serif'
-            });
-            item.textContent = typeof skill === 'string' ? skill : (skill.name || skill.description || '');
-            skillList.appendChild(item);
-          });
-        } else {
-          const item = this.el('div', {
-            padding: '13px 15px', border: '1px solid rgba(198,168,108,.35)',
-            borderRadius: '9px', color: '#cbbda5', font: '14px/1.5 Georgia,serif'
-          });
-          item.textContent = 'Nenhuma habilidade registrada.';
-          skillList.appendChild(item);
-        }
         const pageHint = this.el('div', {
           marginTop: 'auto', paddingTop: '18px',
           color: '#d7c39b', font: '13px Georgia,serif', textAlign: 'center'
         });
         pageHint.textContent = 'Deslize para voltar ao perfil';
-        descriptionPage.append(pageHeader, descLabel, descText, skillHeading, skillList, pageHint);
+        descriptionPage.append(pageHeader, descLabel, descText, pageHint);
         track.append(profile, descriptionPage);
         viewport.appendChild(track);
         overlay.append(close, viewport);
@@ -2987,13 +2960,7 @@
               name: monster.name,
               icon: monster.id === 'slime' ? '◈' : monster.id === 'monkey' ? '♟' : '♧',
               image: (root.CONQUISTADOR_MONSTER_ART || {})[monster.id] || '',
-              known: true, detail: true,
-              description: monster.description || `Registro de ${monster.name}.`,
-              abilities: ({
-                slime: ['Investida gelatinosa'],
-                monkey: ['Golpe físico', 'Perseguição'],
-                rat: ['Mordida rápida', 'Movimentação ágil']
-              })[monster.id] || [],
+              known: true,
               countLabel: `Derrotados: ${(this.killCounts[monster.id] || 0).toLocaleString('pt-BR')}`
             }))
           },
@@ -3003,9 +2970,7 @@
             entries: [{
               id: 'slime', name: 'Donzela Slime', icon: '♥',
               image: root.CONQUISTADOR_WAIFU_ART || '',
-              species: 'Slime',
               description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
-              abilities: ['Gosma Ácida', 'Pele de Gosma', 'Corpo de Slime'],
               known: ((this.api.progress.get('waifus') || {}).cards || []).length > 0,
               qualityColor: '#b65bff', detail: true
             }]
@@ -4872,32 +4837,53 @@
             color: '#fff0c9', font: 'bold 13px Georgia,serif',
             cursor: 'pointer', touchAction: 'manipulation'
           });
-          addWaifuButton.addEventListener('click', () => {
-            if (!selectedWaifuCard) {
-              pickerTitle.textContent = 'ESCOLHA UMA QUALIDADE';
-              return;
+          let addingWaifu = false;
+          addWaifuButton.addEventListener('click', async () => {
+            if (addingWaifu) return;
+            addingWaifu = true;
+            addWaifuButton.disabled = true;
+            try {
+              if (!selectedWaifuCard || !selectedWaifuCard.instanceId) {
+                pickerTitle.textContent = 'ESCOLHA UMA CARTA';
+                return;
+              }
+              const latest = readWaifuData();
+              const ownedCards = Array.isArray(latest.cards) ? latest.cards : [];
+              const selected = ownedCards.find(card => card && card.instanceId === selectedWaifuCard.instanceId);
+              if (!selected) {
+                selectedWaifuCard = null;
+                pickerTitle.textContent = 'CARTA NÃO ENCONTRADA. ATUALIZE A GALERIA.';
+                renderPicker();
+                return;
+              }
+              const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
+              while (equippedNow.length < 3) equippedNow.push(null);
+              const slot = Math.max(0, Math.min(2, Number(selectedSlotIndex) || 0));
+              if (equippedNow.includes(selected.instanceId)) {
+                pickerTitle.textContent = 'ESTA CARTA JÁ ESTÁ EQUIPADA';
+                return;
+              }
+              const selectedType = waifuTypeOf(selected);
+              const equippedCards = equippedNow.map(id => ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
+              if (equippedCards.some(card => waifuTypeOf(card) === selectedType)) {
+                pickerTitle.textContent = 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
+                return;
+              }
+              const next = { ...latest, equipped: equippedNow.map((id, i) => i === slot ? selected.instanceId : id) };
+              const result = writeWaifuData(next);
+              if (result && typeof result.then === 'function') await result;
+              selectedWaifuCard = null;
+              pickerBackdrop.style.display = 'none';
+              statusBackdrop.style.display = 'flex';
+              renderSlots();
+              syncHudVisibility();
+            } catch (error) {
+              console.error('[WaifuEquip] Falha ao equipar carta:', error);
+              pickerTitle.textContent = 'NÃO FOI POSSÍVEL EQUIPAR. TENTE NOVAMENTE.';
+            } finally {
+              addingWaifu = false;
+              addWaifuButton.disabled = false;
             }
-            const latest = readWaifuData();
-            const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
-            while (equippedNow.length < 3) equippedNow.push(null);
-            if (equippedNow.includes(selectedWaifuCard.instanceId)) {
-              pickerTitle.textContent = 'ESTA CARTA JÁ ESTÁ EQUIPADA';
-              return;
-            }
-            const ownedCards = Array.isArray(latest.cards) ? latest.cards : [];
-            const equippedCards = equippedNow.map(id => ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
-            const selectedType = waifuTypeOf(selectedWaifuCard);
-            if (equippedCards.some(card => waifuTypeOf(card) === selectedType)) {
-              pickerTitle.textContent = 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
-              return;
-            }
-            equippedNow[selectedSlotIndex] = selectedWaifuCard.instanceId;
-            writeWaifuData({ ...latest, equipped: equippedNow });
-            selectedWaifuCard = null;
-            pickerBackdrop.style.display = 'none';
-            statusBackdrop.style.display = 'flex';
-            renderSlots();
-            syncHudVisibility();
           });
           const cancelPickerButton = statusDoc.createElement('button');
           cancelPickerButton.type = 'button';
@@ -5071,7 +5057,7 @@
 
             if (!grouped.length) {
               const empty = statusDoc.createElement('div');
-              empty.textContent = 'Nenhuma carta de waifu encontrada.';
+              empty.textContent = 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
               Object.assign(empty.style, {
                 gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center',
                 color: '#d6c8ad', lineHeight: '1.5'
@@ -5115,7 +5101,11 @@
               });
               stack.append(art, count, quality);
               stack.addEventListener('click', () => {
-                selectedWaifuCard = group.cards.find(card => !equipped.includes(card.instanceId)) || group.cards[0];
+                const ownedNow = readWaifuData();
+                const equippedIds = Array.isArray(ownedNow.equipped) ? ownedNow.equipped : [];
+                const equippedTypes = equippedIds.map(id => (ownedNow.cards || []).find(card => card && card.instanceId === id)).filter(Boolean).map(waifuTypeOf);
+                selectedWaifuCard = group.cards.find(card => card && !equippedIds.includes(card.instanceId) && !equippedTypes.includes(waifuTypeOf(card))) || null;
+                pickerTitle.textContent = selectedWaifuCard ? 'ESCOLHER CARTA' : 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
                 pickerGrid.querySelectorAll('button').forEach(button => {
                   button.style.outline = 'none';
                 });
@@ -7107,5 +7097,3 @@
 
 </body>
 </html>
-
-<!-- V56: Galeria geral sem texto de progressão; detalhes deslizáveis com habilidades; bestiário com habilidades sem valores. -->
