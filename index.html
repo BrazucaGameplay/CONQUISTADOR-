@@ -2861,7 +2861,7 @@
           borderRadius: '8px', background: 'rgba(23,17,24,.88)',
           color: '#f0e4ce', font: '15px/1.6 Georgia,serif'
         });
-        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> Slime</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
+        profileMeta.innerHTML = `<div><span style="color:#e7c987">Espécie:</span> ${String(entry.species || entry.name || 'Desconhecida').replace(/[<>&"]/g, '')}</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>`;
         const hint = this.el('div', {
           marginTop: '14px', color: '#e9d5a6',
           font: '13px Georgia,serif', textAlign: 'center'
@@ -2908,12 +2908,39 @@
           boxShadow: 'inset 0 0 20px rgba(0,0,0,.35)'
         });
         descText.textContent = entry.description || 'Descrição ainda não disponível.';
+        const skillHeading = this.el('div', {
+          margin: '22px 0 10px', color: '#e7c987',
+          font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
+        });
+        skillHeading.textContent = 'HABILIDADES';
+        const skillList = this.el('div', {
+          display: 'flex', flexDirection: 'column', gap: '10px'
+        });
+        const skills = Array.isArray(entry.abilities) ? entry.abilities : [];
+        if (skills.length) {
+          skills.forEach(skill => {
+            const item = this.el('div', {
+              padding: '13px 15px', border: '1px solid rgba(198,168,108,.45)',
+              borderRadius: '9px', background: 'rgba(49,37,30,.72)',
+              color: '#f0e4ce', font: '15px/1.5 Georgia,serif'
+            });
+            item.textContent = typeof skill === 'string' ? skill : (skill.name || skill.description || '');
+            skillList.appendChild(item);
+          });
+        } else {
+          const item = this.el('div', {
+            padding: '13px 15px', border: '1px solid rgba(198,168,108,.35)',
+            borderRadius: '9px', color: '#cbbda5', font: '14px/1.5 Georgia,serif'
+          });
+          item.textContent = 'Nenhuma habilidade registrada.';
+          skillList.appendChild(item);
+        }
         const pageHint = this.el('div', {
           marginTop: 'auto', paddingTop: '18px',
           color: '#d7c39b', font: '13px Georgia,serif', textAlign: 'center'
         });
         pageHint.textContent = 'Deslize para voltar ao perfil';
-        descriptionPage.append(pageHeader, descLabel, descText, pageHint);
+        descriptionPage.append(pageHeader, descLabel, descText, skillHeading, skillList, pageHint);
         track.append(profile, descriptionPage);
         viewport.appendChild(track);
         overlay.append(close, viewport);
@@ -2960,7 +2987,13 @@
               name: monster.name,
               icon: monster.id === 'slime' ? '◈' : monster.id === 'monkey' ? '♟' : '♧',
               image: (root.CONQUISTADOR_MONSTER_ART || {})[monster.id] || '',
-              known: true,
+              known: true, detail: true,
+              description: monster.description || `Registro de ${monster.name}.`,
+              abilities: ({
+                slime: ['Investida gelatinosa'],
+                monkey: ['Golpe físico', 'Perseguição'],
+                rat: ['Mordida rápida', 'Movimentação ágil']
+              })[monster.id] || [],
               countLabel: `Derrotados: ${(this.killCounts[monster.id] || 0).toLocaleString('pt-BR')}`
             }))
           },
@@ -2970,7 +3003,9 @@
             entries: [{
               id: 'slime', name: 'Donzela Slime', icon: '♥',
               image: root.CONQUISTADOR_WAIFU_ART || '',
+              species: 'Slime',
               description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
+              abilities: ['Gosma Ácida', 'Pele de Gosma', 'Corpo de Slime'],
               known: ((this.api.progress.get('waifus') || {}).cards || []).length > 0,
               qualityColor: '#b65bff', detail: true
             }]
@@ -5036,7 +5071,7 @@
 
             if (!grouped.length) {
               const empty = statusDoc.createElement('div');
-              empty.textContent = 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
+              empty.textContent = 'Nenhuma carta de waifu encontrada.';
               Object.assign(empty.style, {
                 gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center',
                 color: '#d6c8ad', lineHeight: '1.5'
@@ -7072,3 +7107,5 @@
 
 </body>
 </html>
+
+<!-- V56: Galeria geral sem texto de progressão; detalhes deslizáveis com habilidades; bestiário com habilidades sem valores. -->
