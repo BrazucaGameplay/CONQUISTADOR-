@@ -6957,5 +6957,114 @@
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
 <script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V53';</script>
+
+<script id="conquistador-v54-runtime-recovery">
+(function () {
+  'use strict';
+  const state = { lastFrame: Date.now(), attempts: 0, recovering: false, restartUsed: false, timer: null, updateHandler: null };
+  let game = null, scene = null, statusNode = null;
+
+  function getGame() {
+    return window.CONQUISTADOR_V13?.game || window.CONQUISTADOR_V16?.game || null;
+  }
+  function getScene() {
+    try { return game?.scene?.getScene?.('WorldScene') || null; } catch (_) { return null; }
+  }
+  function markFrame() { state.lastFrame = Date.now(); state.attempts = 0; state.recovering = false; }
+  function showRecoveryError(message) {
+    if (!statusNode) {
+      statusNode = document.createElement('div');
+      Object.assign(statusNode.style, {
+        position:'fixed', left:'10px', right:'10px', top:'10px', zIndex:'100000',
+        padding:'10px 12px', border:'1px solid #c8a96b', borderRadius:'8px',
+        background:'rgba(25,20,14,.94)', color:'#f6e8c6', font:'14px Georgia',
+        textAlign:'center', pointerEvents:'none'
+      });
+      document.body.appendChild(statusNode);
+    }
+    statusNode.textContent = message;
+  }
+  function recover(reason) {
+    if (state.recovering || document.visibilityState === 'hidden') return;
+    state.recovering = true;
+    state.attempts++;
+    game = getGame();
+    scene = getScene();
+    try {
+      if (game?.loop?.wake) game.loop.wake();
+      if (scene?.scene?.isPaused?.()) scene.scene.resume();
+      else if (scene?.sys?.isPaused?.()) scene.scene.resume();
+      if (scene?.physics?.world?.isPaused) scene.physics.world.resume();
+      if (scene?.tweens?.isPaused) scene.tweens.resumeAll?.();
+      if (scene?.anims?.paused) scene.anims.resumeAll?.();
+      if (game?.scale?.refresh) game.scale.refresh();
+    } catch (error) {
+      console.warn('[Conquistador] recuperação do ciclo Phaser:', error);
+    }
+    state.lastFrame = Date.now();
+    setTimeout(() => {
+      state.recovering = false;
+      if (Date.now() - state.lastFrame > 2200 && state.attempts >= 3 && !state.restartUsed) {
+        state.restartUsed = true;
+        try {
+          const runtime = window.CONQUISTADOR_V13?.getRuntime?.();
+          runtime?.save?.();
+          if (scene?.scene?.restart) scene.scene.restart();
+          else if (game?.scene?.restart) game.scene.restart('WorldScene');
+          showRecoveryError('O mundo foi reiniciado para recuperar a simulação. Se continuar parado, recarregue a página.');
+        } catch (error) {
+          showRecoveryError('Não foi possível recuperar a simulação. Recarregue a página.');
+          console.error('[Conquistador] falha ao reiniciar cena:', error);
+        }
+      }
+    }, 900);
+    console.warn('[Conquistador] ciclo de atualização recuperado:', reason, 'tentativa', state.attempts);
+  }
+  function bind() {
+    game = getGame();
+    scene = getScene();
+    if (!game || !scene?.events) return false;
+    if (state.updateHandler && scene.events.off) scene.events.off('update', state.updateHandler);
+    state.updateHandler = markFrame;
+    scene.events.on('update', state.updateHandler);
+    markFrame();
+    return true;
+  }
+  function onVisible() {
+    if (document.visibilityState !== 'visible') return;
+    state.lastFrame = Date.now();
+    state.attempts = 0;
+    game = getGame(); scene = getScene();
+    try {
+      game?.loop?.wake?.();
+      if (scene?.scene?.isPaused?.()) scene.scene.resume();
+      if (scene?.physics?.world?.isPaused) scene.physics.world.resume();
+    } catch (error) { console.warn('[Conquistador] retomada após visibilidade:', error); }
+  }
+  window.addEventListener('pageshow', onVisible);
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('error', event => {
+    console.error('[Conquistador] erro JavaScript:', event.error || event.message);
+  });
+  window.addEventListener('unhandledrejection', event => {
+    console.error('[Conquistador] promessa rejeitada:', event.reason);
+  });
+  let bindAttempts = 0;
+  const binder = setInterval(() => {
+    if (bind()) clearInterval(binder);
+    else if (++bindAttempts > 120) clearInterval(binder);
+  }, 250);
+  state.timer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (!scene || !scene.sys?.isActive?.()) { bind(); return; }
+    if (Date.now() - state.lastFrame > 2600) recover('nenhum frame recebido por 2,6 segundos');
+  }, 1200);
+  window.CONQUISTADOR_V54_RECOVERY = Object.freeze({
+    version: 54,
+    status: () => ({ lastFrameAgoMs: Date.now() - state.lastFrame, attempts: state.attempts, sceneActive: !!scene?.sys?.isActive?.() })
+  });
+})();
+</script>
+
 </body>
 </html>
