@@ -2506,74 +2506,64 @@
       showEntryDetail(entry) {
         if (!entry || !entry.known) return;
         if (this.detailOverlay) this.detailOverlay.remove();
-        const overlay = this.el('div', {
+
+        // A página de detalhes substitui completamente a imagem da carta.
+        const page = this.el('div', {
           position: 'absolute', inset: '0', zIndex: '5', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: '14px',
-          background: 'rgba(0,0,0,.86)', backdropFilter: 'blur(3px)'
+          flexDirection: 'column', padding: '14px',
+          background: 'linear-gradient(180deg, rgba(35,27,22,.99), rgba(10,10,10,.99))',
+          color: '#f0e4ce', overflowY: 'auto'
         });
+        const header = this.el('div', {
+          display: 'flex', alignItems: 'center', gap: '12px',
+          padding: '8px 0 14px', borderBottom: '1px solid rgba(198,168,108,.55)'
+        });
+        const back = this.el('button', {
+          flex: '0 0 42px', width: '42px', height: '42px',
+          border: '1px solid #c6a86c', borderRadius: '50%',
+          background: 'linear-gradient(145deg,#493727,#17110e)',
+          color: '#f4dfaa', font: 'bold 25px Georgia,serif',
+          cursor: 'pointer', touchAction: 'manipulation'
+        });
+        back.type = 'button'; back.textContent = '‹';
+        back.setAttribute('aria-label', 'Voltar à carta');
+        back.addEventListener('click', () => page.remove());
+        const heading = this.el('div', {
+          flex: '1', color: '#f2dfb8', font: 'bold 22px Georgia,serif',
+          textShadow: '0 2px 5px #000'
+        });
+        heading.textContent = entry.name || 'Descrição';
         const close = this.el('button', {
-          position: 'absolute', right: '12px', top: '12px', width: '38px',
-          height: '38px', border: '1px solid #c6a86c', borderRadius: '50%',
-          background: '#211b17', color: '#fff', font: '25px Arial', zIndex: '2'
+          flex: '0 0 38px', width: '38px', height: '38px',
+          border: '1px solid #c6a86c', borderRadius: '50%',
+          background: '#211b17', color: '#fff', font: '24px Arial',
+          cursor: 'pointer'
         });
         close.type = 'button'; close.textContent = '×';
-        close.addEventListener('click', () => overlay.remove());
-        const layout = this.el('div', {
-          position: 'relative', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', gap: '8px', width: 'min(96%, 520px)',
-          maxHeight: '84%', margin: 'auto'
-        });
-        const art = this.el('img', {
-          display: 'block', width: 'auto', height: 'auto',
-          maxWidth: 'calc(100% - 54px)', maxHeight: '78dvh',
-          objectFit: 'contain', margin: '0', border: '2px solid #c6a86c',
-          borderRadius: '9px', boxShadow: '0 14px 44px rgba(0,0,0,.8)'
-        });
-        art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || '';
-        art.alt = 'Carta completa da Donzela Slime';
+        close.setAttribute('aria-label', 'Fechar detalhes');
+        close.addEventListener('click', () => page.remove());
 
-        const side = this.el('div', {
-          position: 'relative', flex: '0 0 42px', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', alignSelf: 'center'
+        const divider = this.el('div', {
+          height: '2px', margin: '16px 0 18px',
+          background: 'linear-gradient(90deg,transparent,#c6a86c,transparent)'
         });
-        const arrow = this.el('button', {
-          width: '40px', height: '48px', border: '1px solid #c6a86c',
-          borderRadius: '22px', background: 'rgba(35,27,20,.96)',
-          color: '#f4dfaa', font: 'bold 28px/1 Georgia,serif',
-          boxShadow: '0 3px 12px rgba(0,0,0,.6)', cursor: 'pointer',
-          touchAction: 'manipulation'
+        const label = this.el('div', {
+          marginBottom: '10px', color: '#e7c987',
+          font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
         });
-        arrow.type = 'button'; arrow.textContent = '›';
-        arrow.setAttribute('aria-label', 'Mostrar descrição');
+        label.textContent = 'DESCRIÇÃO';
         const description = this.el('div', {
-          position: 'fixed', left: '50%', bottom: 'max(22px, env(safe-area-inset-bottom))',
-          transform: 'translateX(-50%)', width: 'min(86vw, 340px)',
-          maxHeight: '30dvh', overflowY: 'auto', padding: '14px 16px',
-          border: '1px solid #c6a86c', borderRadius: '9px',
-          background: 'linear-gradient(180deg, rgba(38,29,23,.99), rgba(16,13,12,.99))',
-          color: '#f0e4ce', font: '14px/1.55 Georgia,serif',
-          boxShadow: '0 8px 26px rgba(0,0,0,.85)', zIndex: '6',
-          display: 'none', textAlign: 'left'
+          padding: '18px', border: '1px solid rgba(198,168,108,.55)',
+          borderRadius: '10px',
+          background: 'linear-gradient(145deg,rgba(49,37,30,.9),rgba(18,15,14,.96))',
+          color: '#f0e4ce', font: '17px/1.65 Georgia,serif',
+          boxShadow: 'inset 0 0 20px rgba(0,0,0,.35)'
         });
         description.textContent = entry.description || 'Descrição ainda não disponível.';
-        const showDescription = () => { description.style.display = 'block'; };
-        const hideDescription = () => { description.style.display = 'none'; };
-        arrow.addEventListener('mouseenter', showDescription);
-        arrow.addEventListener('mouseleave', hideDescription);
-        arrow.addEventListener('focus', showDescription);
-        arrow.addEventListener('blur', hideDescription);
-        arrow.addEventListener('click', event => {
-          event.stopPropagation();
-          const isVisible = description.style.display === 'block';
-          description.style.display = isVisible ? 'none' : 'block';
-          arrow.textContent = isVisible ? '›' : '‹';
-          arrow.setAttribute('aria-label', isVisible ? 'Mostrar descrição' : 'Ocultar descrição');
-        });
-        side.appendChild(arrow);
-        layout.append(art, side);
-        overlay.append(close, layout, description);
-        overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
-        this.backdrop.appendChild(overlay); this.detailOverlay = overlay;
+        header.append(back, heading, close);
+        page.append(header, divider, label, description);
+        this.backdrop.appendChild(page);
+        this.detailOverlay = page;
       }
 
       refresh() {
@@ -2819,9 +2809,9 @@
         close.addEventListener('click', () => this.setOpen(false));
         header.append(title, close);
         this.content = this.el('div', {
-          flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '10px',
-          display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
-          alignContent: 'start', gap: '8px', overscrollBehavior: 'contain'
+          flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '18px 14px 24px',
+          display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))',
+          alignContent: 'start', gap: '18px 12px', overscrollBehavior: 'contain'
         });
         panel.append(header, this.content);
         backdrop.appendChild(panel);
@@ -2849,6 +2839,24 @@
         // são idênticas; qualidades diferentes continuam separadas.
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const grouped = new Map(QUALITY.map(quality => [quality.id, []]));
+        const makeOrnateFrame = color => {
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">
+            <defs>
+              <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="${color}"/><stop offset=".48" stop-color="#fff0bf"/>
+                <stop offset="1" stop-color="${color}"/>
+              </linearGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <path d="M25 3 H175 L197 25 V275 L175 297 H25 L3 275 V25 Z" fill="none" stroke="url(#g)" stroke-width="4" filter="url(#glow)"/>
+            <path d="M29 10 H171 L190 29 V271 L171 290 H29 L10 271 V29 Z" fill="none" stroke="#f5dba4" stroke-opacity=".82" stroke-width="1.5"/>
+            <path d="M12 55 Q12 16 52 12 M148 12 Q188 16 188 55 M12 245 Q12 284 52 288 M148 288 Q188 284 188 245" fill="none" stroke="url(#g)" stroke-width="3"/>
+            <path d="M25 20 Q40 20 42 5 Q55 22 69 12 Q60 32 43 35 Q30 34 25 20 M175 20 Q160 20 158 5 Q145 22 131 12 Q140 32 157 35 Q170 34 175 20 M25 280 Q40 280 42 295 Q55 278 69 288 Q60 268 43 265 Q30 266 25 280 M175 280 Q160 280 158 295 Q145 278 131 288 Q140 268 157 265 Q170 266 175 280" fill="none" stroke="url(#g)" stroke-width="2"/>
+            <path d="M100 4 l7 10 -7 9 -7 -9 Z M100 277 l7 9 -7 10 -7 -10 Z M4 150 l10 -7 9 7 -9 7 Z M177 150 l9 -7 10 7 -10 7 Z" fill="url(#g)" stroke="#fff0bf" stroke-width="1"/>
+            <path d="M17 70 Q25 53 39 54 M183 70 Q175 53 161 54 M17 230 Q25 247 39 246 M183 230 Q175 247 161 246" fill="none" stroke="#fff0bf" stroke-opacity=".65" stroke-width="1.5"/>
+          </svg>`;
+          return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+        };
         for (const card of cards) {
           const qualityId = grouped.has(card && card.quality) ? card.quality : 'plebeia';
           grouped.get(qualityId).push(card);
@@ -2858,26 +2866,31 @@
           const matchingCards = grouped.get(quality.id) || [];
           if (!matchingCards.length) continue;
           const stack = this.el('button', {
-            position: 'relative', width: 'min(100%, 184px)', justifySelf: 'center',
-            padding: '5px', border: `2px solid ${quality.color}`, borderRadius: '13px',
-            background: 'linear-gradient(145deg, rgba(35,29,28,.98), rgba(8,10,15,.98))',
-            boxShadow: `0 0 0 1px rgba(255,255,255,.10), 0 0 18px ${quality.color}44, 0 8px 18px rgba(0,0,0,.5)`,
+            position: 'relative', width: 'min(100%, 184px)', aspectRatio: '2 / 3',
+            justifySelf: 'center', padding: '0', border: '0', borderRadius: '8px',
+            backgroundColor: '#100d17',
+            backgroundImage: makeOrnateFrame(quality.color),
+            backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
+            boxShadow: `0 0 20px ${quality.color}55, 0 8px 20px rgba(0,0,0,.65)`,
             color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation',
             overflow: 'visible'
           });
           stack.type = 'button';
           const art = this.el('img', {
-            display: 'block', width: '100%', height: 'auto',
-            aspectRatio: '2 / 3', objectFit: 'contain', objectPosition: 'center',
-            background: '#10131b', borderRadius: '8px'
+            position: 'absolute', left: '12%', top: '10%', width: '76%',
+            height: '80%', display: 'block', objectFit: 'cover',
+            objectPosition: 'center 20%', borderRadius: '42% 42% 13% 13%',
+            clipPath: 'polygon(50% 0%, 88% 7%, 100% 23%, 96% 78%, 80% 96%, 50% 100%, 20% 96%, 4% 78%, 0% 23%, 12% 7%)',
+            background: '#10131b'
           });
           art.src = fullResolutionArt;
-          art.alt = 'Ilustração completa da Donzela Slime';
+          art.alt = 'Ilustração da Donzela Slime';
           const quantity = this.el('div', {
-            position: 'absolute', top: '9px', right: '9px', minWidth: '29px',
-            padding: '5px 7px', border: `1px solid ${quality.color}`, borderRadius: '14px',
-            background: 'rgba(20,15,10,.94)', color: '#ffe6a8',
-            font: 'bold 13px Georgia,serif', textAlign: 'center'
+            position: 'absolute', top: '8%', right: '9%', minWidth: '30px',
+            padding: '5px 7px', border: `1px solid ${quality.color}`,
+            borderRadius: '15px', background: 'rgba(18,12,22,.96)',
+            color: '#fff0bf', font: 'bold 13px Georgia,serif',
+            textAlign: 'center', boxShadow: `0 0 9px ${quality.color}88`
           });
           quantity.textContent = `×${matchingCards.length}`;
           stack.append(art, quantity);
@@ -5496,10 +5509,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v32">
+  <script id="conquistador-v33">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 32,
-    feature: 'Galeria com arte integral e descrição funcional no bestiário',
+    version: 33,
+    feature: 'Molduras ornamentadas por qualidade e página de descrição no bestiário',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
