@@ -748,9 +748,9 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'auto';
-        autoAttackBadge.style.right = '70px';
-        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 96px))';
+        autoAttackBadge.style.left = 'max(16px, calc(env(safe-area-inset-left) + 16px))';
+        autoAttackBadge.style.right = 'auto';
+        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 104px))';
         autoAttackBadge.style.zIndex = '30';
         autoAttackBadge.style.width = '56px';
         autoAttackBadge.style.height = '56px';
@@ -4924,7 +4924,7 @@
             const slot = statusDoc.createElement('button');
             slot.type = 'button';
             Object.assign(slot.style, {
-              minWidth: '0', flex: '1', height: '92px', padding: '0',
+              minWidth: '0', flex: '1 1 0', maxWidth: '104px', aspectRatio: '2 / 3', height: 'auto', padding: '0',
               border: '0', borderRadius: '0',
               background: 'transparent',
               color: '#e7c987', font: 'bold 28px Georgia,serif',
@@ -5051,14 +5051,14 @@
               const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
               while (equippedNow.length < 3) equippedNow.push(null);
               const slot = Math.max(0, Math.min(2, Number(selectedSlotIndex) || 0));
-              if (equippedNow.includes(selected.instanceId)) {
+              if (equippedNow.some((id, index) => index !== slot && id === selected.instanceId)) {
                 pickerTitle.textContent = 'ESTA CARTA JÁ ESTÁ EQUIPADA';
                 return;
               }
               const selectedType = waifuTypeOf(selected);
-              const equippedCards = equippedNow.map(id => ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
+              const equippedCards = equippedNow.map((id, index) => index === slot ? null : ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
               if (equippedCards.some(card => waifuTypeOf(card) === selectedType)) {
-                pickerTitle.textContent = 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
+                pickerTitle.textContent = 'ESTA WAIFU JÁ ESTÁ EQUIPADA EM OUTRO ESPAÇO';
                 return;
               }
               const next = { ...latest, equipped: equippedNow.map((id, i) => i === slot ? selected.instanceId : id) };
@@ -5142,62 +5142,6 @@
             duquesa: { name: 'Duquesa', color: '#e6b84f', stars: 4 },
             rainha: { name: 'Rainha', color: '#b65bff', stars: 5 }
           };
-          const makeStatusOrnateFrame = (color, qualityId) => {
-                    const queen = qualityId === 'rainha';
-                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360">
-                      <defs>
-                        <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
-                          <stop offset="0" stop-color="#fff4c8"/>
-                          <stop offset=".16" stop-color="${color}"/>
-                          <stop offset=".36" stop-color="#fff0bb"/>
-                          <stop offset=".58" stop-color="#8b5a2b"/>
-                          <stop offset=".78" stop-color="${color}"/>
-                          <stop offset="1" stop-color="#fff0c2"/>
-                        </linearGradient>
-                        <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0" stop-color="#392044"/>
-                          <stop offset=".5" stop-color="#160e20"/>
-                          <stop offset="1" stop-color="#432448"/>
-                        </linearGradient>
-                        <filter id="glow"><feGaussianBlur stdDeviation="2.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                      </defs>
-                      <!-- Outer card silhouette: one single perimeter, with no inner rectangle. -->
-                      <path d="M28 5 Q12 5 8 25 L4 45 L4 315 L8 335 Q12 355 28 355 L212 355 Q228 355 232 335 L236 315 L236 45 L232 25 Q228 5 212 5 Z"
-                        fill="none" stroke="url(#metal)" stroke-width="7" filter="url(#glow)"/>
-                      <path d="M28 9 Q15 9 12 27 L9 46 L9 314 L12 333 Q15 351 28 351 L212 351 Q225 351 228 333 L231 314 L231 46 L228 27 Q225 9 212 9 Z"
-                        fill="none" stroke="#fff0bd" stroke-opacity=".9" stroke-width="1.5"/>
-                      <!-- Ornate curled corners and wing-like gold scrollwork. -->
-                      <g fill="none" stroke="url(#metal)" stroke-linecap="round" stroke-linejoin="round">
-                        <path stroke-width="6" d="M12 48 Q12 17 48 15 Q28 28 42 43 Q54 53 72 33 Q65 61 40 65 Q22 64 12 48Z"/>
-                        <path stroke-width="6" d="M228 48 Q228 17 192 15 Q212 28 198 43 Q186 53 168 33 Q175 61 200 65 Q218 64 228 48Z"/>
-                        <path stroke-width="6" d="M12 312 Q12 343 48 345 Q28 332 42 317 Q54 307 72 327 Q65 299 40 295 Q22 296 12 312Z"/>
-                        <path stroke-width="6" d="M228 312 Q228 343 192 345 Q212 332 198 317 Q186 307 168 327 Q175 299 200 295 Q218 296 228 312Z"/>
-                        <path stroke-width="3" d="M15 88 Q34 66 54 83 Q65 95 49 108 Q31 119 20 103 M225 88 Q206 66 186 83 Q175 95 191 108 Q209 119 220 103"/>
-                        <path stroke-width="3" d="M15 272 Q34 294 54 277 Q65 265 49 252 Q31 241 20 257 M225 272 Q206 294 186 277 Q175 265 191 252 Q209 241 220 257"/>
-                      </g>
-                      <!-- Jewel accents around the outer edge. -->
-                      <g fill="${color}" stroke="#fff0c2" stroke-width="1.5">
-                        <path d="M120 3 L128 15 L120 28 L112 15Z"/>
-                        <path d="M120 332 L128 345 L120 357 L112 345Z"/>
-                        <path d="M4 180 L17 169 L30 180 L17 191Z"/>
-                        <path d="M236 180 L223 169 L210 180 L223 191Z"/>
-                        <circle cx="23" cy="23" r="5"/><circle cx="217" cy="23" r="5"/>
-                        <circle cx="23" cy="337" r="5"/><circle cx="217" cy="337" r="5"/>
-                      </g>
-                      <!-- Raised top quality crest and bottom title ribbon, like the reference. -->
-                      <path d="M50 11 L77 23 L163 23 L190 11 L202 29 L184 51 L56 51 L38 29Z"
-                        fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
-                      <path d="M58 17 L182 17" stroke="#fff0bd" stroke-opacity=".7" stroke-width="1.5"/>
-                      <path d="M50 315 L73 304 L167 304 L190 315 L178 339 L62 339Z"
-                        fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
-                      <path d="M65 310 L175 310" stroke="#fff0bd" stroke-opacity=".65" stroke-width="1.5"/>
-                      ${queen ? `<g fill="url(#metal)" stroke="#fff0bd" stroke-width="1.5">
-                        <path d="M103 5 L94 -3 L101 -1 L108 -9 L120 -1 L132 -9 L139 -1 L146 -3 L137 7Z"/>
-                        <circle cx="120" cy="-2" r="4"/>
-                      </g>` : ''}
-                    </svg>`;
-                    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-                  };
           const renderSlots = () => {
             const data = readWaifuData();
             const equipped = Array.isArray(data.equipped) ? data.equipped.slice(0,3) : [];
@@ -5211,21 +5155,35 @@
                 art.src = window.CONQUISTADOR_WAIFU_ART || '';
                 art.alt = 'Donzela Slime';
                 Object.assign(art.style, {
-                  position: 'absolute', left: '5%', top: '14%', width: '90%', height: '72%',
-                  display: 'block', objectFit: 'cover', objectPosition: 'center 18%',
-                  borderRadius: '3px', background: '#10131b', zIndex: '0',
+                  position: 'absolute', left: '7%', top: '19%', width: '86%', height: '62%',
+                  display: 'block', objectFit: 'contain', objectPosition: 'center',
+                  borderRadius: '5px', background: '#10131b', zIndex: '0',
                   pointerEvents: 'none'
                 });
                 Object.assign(slot.style, {
-                  position: 'relative', overflow: 'visible', padding: '0',
-                  border: '0', borderRadius: '0',
-                  backgroundColor: '#100d17',
-                  backgroundImage: makeStatusOrnateFrame(quality.color, quality.id),
-                  backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
-                  boxShadow: `0 0 14px ${quality.color}66`,
-                  aspectRatio: '2 / 3'
+                  position: 'relative', overflow: 'hidden', padding: '0',
+                  border: `3px solid ${quality.color}`, borderRadius: '12px',
+                  outline: '2px solid rgba(244,224,177,.88)', outlineOffset: '-6px',
+                  background: 'linear-gradient(155deg,#352b3c,#120f18 65%,#302538)',
+                  boxShadow: `0 0 0 2px #17121b, 0 0 12px ${quality.color}77`,
+                  aspectRatio: '2 / 3', height: 'auto', maxHeight: '156px'
                 });
-                slot.appendChild(art);
+                const qualityName = statusDoc.createElement('span');
+                qualityName.textContent = quality.name;
+                Object.assign(qualityName.style, {
+                  position: 'absolute', top: '7%', left: '4%', right: '4%', zIndex: '2',
+                  color: quality.color, font: 'bold 10px Georgia,serif', textAlign: 'center',
+                  textShadow: '0 1px 3px #000'
+                });
+                const cardLevel = Math.max(1, Math.floor(Number(card.intimacy && card.intimacy.level) || 1));
+                const levelName = statusDoc.createElement('span');
+                levelName.textContent = `Nv. ${cardLevel}`;
+                Object.assign(levelName.style, {
+                  position: 'absolute', bottom: '7%', left: '4%', right: '4%', zIndex: '2',
+                  color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center',
+                  textShadow: '0 1px 3px #000'
+                });
+                slot.append(art, qualityName, levelName);
                 const removeMark = statusDoc.createElement('span');
                 removeMark.textContent = '×';
                 removeMark.setAttribute('role', 'button');
@@ -5252,25 +5210,31 @@
                 slot.appendChild(removeMark);
               } else {
                 slot.textContent = '+';
-                slot.style.border = '0'; slot.style.background = 'transparent';
+                Object.assign(slot.style, {
+                  position: 'relative', overflow: 'visible', padding: '0',
+                  border: '0', outline: '0', borderRadius: '0',
+                  background: 'transparent', backgroundImage: 'none',
+                  boxShadow: 'none', aspectRatio: '2 / 3', height: 'auto'
+                });
               }
             });
           };
           const renderPicker = () => {
             pickerGrid.replaceChildren();
             const data = readWaifuData();
-            const cards = Array.isArray(data.cards) ? data.cards : [];
-            // A galeria nunca esconde cartas equipadas: a tentativa de
-            // duplicar um tipo é validada ao confirmar, com aviso explícito.
+            const cards = Array.isArray(data.cards) ? data.cards.filter(Boolean) : [];
             const equipped = Array.isArray(data.equipped) ? data.equipped : [];
-            const available = cards.filter(card => card);
             const qualityOrder = ['plebeia', 'dama', 'condessa', 'duquesa', 'rainha'];
-            const grouped = qualityOrder.map(id => ({
-              id, info: qualityInfo[id],
-              cards: available.filter(card => card.quality === id)
-            })).filter(group => group.cards.length);
+            const qualityRank = card => Math.max(0, qualityOrder.indexOf(card && card.quality));
+            const cardLevel = card => {
+              const species = waifuTypeOf(card);
+              const legacy = data.intimacy && data.intimacy[species] ? data.intimacy[species].level : 1;
+              return Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacy) || 1)));
+            };
+            const orderedCards = cards.slice().sort((a,b) =>
+              qualityRank(b)-qualityRank(a) || cardLevel(b)-cardLevel(a) || String(a.instanceId).localeCompare(String(b.instanceId)));
 
-            if (!grouped.length) {
+            if (!orderedCards.length) {
               const empty = statusDoc.createElement('div');
               empty.textContent = 'Você ainda não possui cartas. Derrote monstros para encontrá-las.';
               Object.assign(empty.style, {
@@ -5282,51 +5246,66 @@
               return;
             }
 
-            grouped.forEach(group => {
-              const stack = statusDoc.createElement('button');
-              stack.type = 'button';
-              Object.assign(stack.style, {
+            orderedCards.forEach(card => {
+              const quality = qualityInfo[card.quality] || qualityInfo.plebeia;
+              const level = cardLevel(card);
+              const equippedIndex = equipped.indexOf(card.instanceId);
+              const equippedInOtherSlot = equippedIndex >= 0 && equippedIndex !== selectedSlotIndex;
+              const sameTypeInOtherSlot = equipped.some((id,index) => {
+                if (!id || index === selectedSlotIndex) return false;
+                const other = cards.find(item => item && item.instanceId === id);
+                return other && waifuTypeOf(other) === waifuTypeOf(card);
+              });
+              const alreadyInSelectedSlot = equippedIndex === selectedSlotIndex;
+              const unavailable = !card.instanceId || equippedInOtherSlot || sameTypeInOtherSlot || alreadyInSelectedSlot;
+              const item = statusDoc.createElement('button');
+              item.type = 'button';
+              item.disabled = unavailable;
+              Object.assign(item.style, {
                 position: 'relative', minWidth: '0', padding: '5px',
-                border: `2px solid ${group.info.color}`, borderRadius: '9px',
-                background: '#100d17', color: '#fff0c9',
-                boxShadow: `0 0 12px ${group.info.color}44`,
-                cursor: 'pointer', touchAction: 'manipulation'
+                border: `2px solid ${quality.color}`, borderRadius: '10px',
+                outline: '2px solid rgba(245,226,184,.75)', outlineOffset: '-5px',
+                background: 'linear-gradient(155deg,#352b3c,#120f18 65%,#302538)',
+                color: quality.color, boxShadow: `0 0 10px ${quality.color}55`,
+                cursor: unavailable ? 'not-allowed' : 'pointer', touchAction: 'manipulation',
+                opacity: unavailable ? '.42' : '1', display: 'flex', flexDirection: 'column', gap: '5px'
               });
               const art = statusDoc.createElement('img');
               art.src = window.CONQUISTADOR_WAIFU_ART || '';
               art.alt = 'Carta completa da Donzela Slime';
               Object.assign(art.style, {
-                display: 'block', width: '100%', height: 'auto',
-                aspectRatio: '2 / 3', objectFit: 'contain',
+                display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
                 background: '#100d17', borderRadius: '5px'
               });
-              const count = statusDoc.createElement('span');
-              count.textContent = `×${group.cards.length}`;
-              Object.assign(count.style, {
-                position: 'absolute', top: '9px', right: '9px',
-                padding: '5px 7px', border: `1px solid ${group.info.color}`,
-                borderRadius: '15px', background: 'rgba(15,12,18,.96)',
-                color: '#fff0bf', font: 'bold 12px Georgia,serif'
+              const label = statusDoc.createElement('span');
+              label.textContent = `${quality.name} ${'★'.repeat(quality.stars)}`;
+              Object.assign(label.style, {
+                color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center'
               });
-              const quality = statusDoc.createElement('div');
-              quality.textContent = `${group.info.name} ${'★'.repeat(group.info.stars)}`;
-              Object.assign(quality.style, {
-                padding: '7px 2px 3px', color: group.info.color,
-                font: 'bold 12px Georgia,serif', textAlign: 'center'
+              const levelLabel = statusDoc.createElement('span');
+              levelLabel.textContent = `Donzela Slime · Nv. ${level}`;
+              Object.assign(levelLabel.style, {
+                color: quality.color, font: 'bold 10px Georgia,serif', textAlign: 'center',
+                lineHeight: '1.2'
               });
-              stack.append(art, count, quality);
-              stack.addEventListener('click', () => {
-                const ownedNow = readWaifuData();
-                const equippedIds = Array.isArray(ownedNow.equipped) ? ownedNow.equipped : [];
-                const equippedTypes = equippedIds.map(id => (ownedNow.cards || []).find(card => card && card.instanceId === id)).filter(Boolean).map(waifuTypeOf);
-                selectedWaifuCard = group.cards.find(card => card && !equippedIds.includes(card.instanceId) && !equippedTypes.includes(waifuTypeOf(card))) || null;
-                pickerTitle.textContent = selectedWaifuCard ? 'ESCOLHER CARTA' : 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
+              const stateLabel = statusDoc.createElement('span');
+              stateLabel.textContent = equippedInOtherSlot || sameTypeInOtherSlot ? 'EQUIPADA EM OUTRO ESPAÇO' : (alreadyInSelectedSlot ? 'NESTE ESPAÇO' : '');
+              Object.assign(stateLabel.style, {
+                color: '#e8d7b4', font: 'bold 9px Georgia,serif', textAlign: 'center', minHeight: '10px'
+              });
+              item.append(art, label, levelLabel, stateLabel);
+              item.addEventListener('click', () => {
+                if (item.disabled) return;
+                selectedWaifuCard = card;
+                pickerTitle.textContent = `SELECIONADA: ${quality.name} · NV. ${level}`;
                 pickerGrid.querySelectorAll('button').forEach(button => {
-                  button.style.outline = 'none';
+                  button.style.outline = '2px solid rgba(245,226,184,.75)';
+                  button.style.outlineOffset = '-5px';
                 });
-                stack.style.outline = '3px solid #f3d58e';
+                item.style.outline = '3px solid #fff0ad';
+                item.style.outlineOffset = '1px';
               });
-              pickerGrid.appendChild(stack);
+              pickerGrid.appendChild(item);
             });
           };
           const openWaifuPicker = slotIndex => {
@@ -7172,7 +7151,7 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;width:max-content;height:38px;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px;width:38px;height:auto;pointer-events:none;overflow:visible;z-index:5}
     #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 36px;width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c;transform:none}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
@@ -7184,7 +7163,7 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Three skills form one centered horizontal row immediately above attack.
+    // Three skills form a vertical column immediately above the lower-left attack control.
     for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
@@ -7202,7 +7181,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V69';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V70';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
