@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V84</title>
+<title>CONQUISTADOR DE WAIFU'S — V85</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -3023,13 +3023,16 @@
           background: 'linear-gradient(160deg,#211923,#0b0a10)',
           boxShadow: '0 18px 55px rgba(0,0,0,.75)'
         });
+        // V85: pagina 2 so existe quando ha o que mostrar (habilidade/bonus da waifu).
+        // Monstro nao tem nenhum dos dois: na V84 a pagina 2 dele ficou vazia.
+        const hasSecondPage = !!(entry.activeSkill || (Array.isArray(entry.bonuses) && entry.bonuses.length));
         const track = this.el('div', {
-          display: 'flex', width: '200%', height: '100%',
+          display: 'flex', width: hasSecondPage ? '200%' : '100%', height: '100%',
           transform: 'translateX(0)', transition: 'transform .28s ease',
           willChange: 'transform'
         });
         const profile = this.el('section', {
-          width: '50%', height: '100%', flex: '0 0 50%',
+          width: hasSecondPage ? '50%' : '100%', height: '100%', flex: hasSecondPage ? '0 0 50%' : '0 0 100%',
           boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           padding: '18px 16px 24px', overflowY: 'auto',
@@ -3084,7 +3087,7 @@
           marginTop: '14px', color: '#e9d5a6',
           font: '13px Georgia,serif', textAlign: 'center'
         });
-        hint.textContent = '‹ Deslize para ver habilidade e bônus ›';
+        hint.textContent = hasSecondPage ? '‹ Deslize para ver habilidade e bônus ›' : '';
         profile.append(artFrame, profileMeta, hint);
 
         const descriptionPage = this.el('section', {
@@ -3160,7 +3163,8 @@
         }
         if (bonusList.childElementCount) descriptionPage.append(bonusLabel, bonusList);
         descriptionPage.append(pageHint);
-        track.append(profile, descriptionPage);
+        track.append(profile);
+        if (hasSecondPage) track.append(descriptionPage);
         viewport.appendChild(track);
         overlay.append(close, viewport);
 
@@ -3170,6 +3174,7 @@
           startX = point.clientX; startY = point.clientY;
         };
         const swipeEnd = event => {
+          if (!hasSecondPage) return;
           const point = event.changedTouches ? event.changedTouches[0] : event;
           const dx = point.clientX - startX, dy = point.clientY - startY;
           if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.25) {
@@ -5096,6 +5101,35 @@
           this.waifuGallerySystem = new window.CONQUISTADOR_WAIFU_SYSTEMS.WaifuGallerySystem(this.extensionAPI, {
             document: window.document
           });
+
+          // V85 — MIGRACAO: cartas antigas nasceram sem intimidade propria e por isso
+          // continuavam dividindo o nivel da especie inteira, mesmo depois da V84.
+          // Aqui cada carta antiga ganha o carimbo dela (nivel atual da especie),
+          // UMA UNICA VEZ, e o save e gravado. Cartas novas ja nascem carimbadas.
+          // Sem isso, a correcao do nivel por carta so aparecia nas cartas futuras.
+          (() => {
+            try {
+              const api = this.extensionAPI;
+              const waifus = api.progress.get('waifus') || {};
+              const legacy = waifus.intimacy && typeof waifus.intimacy === 'object' ? waifus.intimacy : {};
+              let changed = false;
+              const stamp = card => {
+                if (!card || typeof card !== 'object') return;
+                if (card.intimacy && typeof card.intimacy === 'object' && Number(card.intimacy.level) >= 1) return;
+                const species = String(card.waifuId || card.waifuType || card.id || 'slime');
+                const saved = legacy[species] && typeof legacy[species] === 'object' ? legacy[species] : { level: 1, xp: 0, totalXp: 0 };
+                card.intimacy = {
+                  level: Math.max(1, Math.min(100, Math.floor(Number(saved.level) || 1))),
+                  xp: Math.max(0, Number(saved.xp) || 0),
+                  totalXp: Math.max(0, Number(saved.totalXp) || 0)
+                };
+                changed = true;
+              };
+              (Array.isArray(waifus.cards) ? waifus.cards : []).forEach(stamp);
+              (Array.isArray(waifus.house) ? waifus.house : []).forEach(stamp);
+              if (changed && typeof api.progress.updateBatch === 'function') api.progress.updateBatch({ waifus });
+            } catch (error) { /* A migracao nunca pode quebrar o boot do jogo. */ }
+          })();
 
           // ===== SISTEMA DA CASA =====
           // Até 10 cartas moram na Casa. A Casa é a origem das cartas que podem
@@ -7811,7 +7845,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V84';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V85';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
