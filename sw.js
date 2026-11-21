@@ -1,5 +1,5 @@
 // CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
-const CACHE = 'conquistador-v85';
+const CACHE = 'conquistador-v86';
 const FILES = [
   './',
   './index.html',
@@ -28,11 +28,28 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const isPage = event.request.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname === '/' || url.pathname.endsWith('/');
+  // V86: pagina sempre tenta a REDE primeiro. So usa o cache se estiver sem internet.
+  // Antes era cache-first: o app entregava a versao velha antes de olhar a internet,
+  // e a correcao parecia nao ter aplicado. O resto (icones, manifest) continua cache-first.
+  if (isPage) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response && response.ok && url.origin === location.origin) {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        if (response && response.ok && new URL(event.request.url).origin === location.origin) {
+        if (response && response.ok && url.origin === location.origin) {
           const copy = response.clone();
           caches.open(CACHE).then(cache => cache.put(event.request, copy));
         }
