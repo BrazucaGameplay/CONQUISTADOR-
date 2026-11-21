@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR DE WAIFU'S — V44</title>
+  <title>CONQUISTADOR DE WAIFU'S — V45</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -1644,7 +1644,8 @@
       ITEMS: Object.freeze({
         slime_gel: Object.freeze({ id: 'slime_gel', name: 'Gel de Slime', category: 'material' }),
         monkey_fur: Object.freeze({ id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' }),
-        rat_tail: Object.freeze({ id: 'rat_tail', name: 'Cauda de Rato', category: 'material' })
+        rat_tail: Object.freeze({ id: 'rat_tail', name: 'Cauda de Rato', category: 'material' }),
+        rose: Object.freeze({ id: 'rose', name: 'Rosa', category: 'presente' })
       }),
       LEVEL_CURVE: Object.freeze({ baseXp: 100, exponent: 1.5 })
     });
@@ -1656,7 +1657,7 @@
   })(window);
   </script>
 
-  <script id="conquistador-inventory-v15">
+  <script id="conquistador-inventory-v16">
   (function (root) {
     'use strict';
     // InventorySystem: presentation-only module backed by the public progress API.
@@ -1865,7 +1866,37 @@
         deleteButton.setAttribute('aria-label', 'Excluir pilha selecionada');
         this.deleteHandler = () => this.requestDeleteSelected();
         deleteButton.addEventListener('click', this.deleteHandler);
-        actionBar.append(selectedLabel, deleteButton);
+        const giftButton = this.el('button', {
+          flex: '0 0 auto', minHeight: '42px', padding: '0 14px',
+          border: '1px solid rgba(194,126,143,.9)', borderRadius: '22px',
+          background: 'linear-gradient(180deg, rgba(103,42,61,.98), rgba(49,20,32,.98))',
+          color: '#ffe8ed', font: 'bold 11px/1 Georgia, serif',
+          letterSpacing: '.04em', boxShadow: '0 2px 8px rgba(0,0,0,.45)',
+          touchAction: 'manipulation', cursor: 'pointer', display: 'none'
+        });
+        giftButton.type = 'button';
+        giftButton.textContent = 'PRESENTEAR';
+        this.giftHandler = () => {
+          if (this.selectedItemId !== 'rose') return;
+          this.api.events.emit('waifu:gift-use', { itemId: 'rose', waifuId: 'slime' });
+        };
+        giftButton.addEventListener('click', this.giftHandler);
+        actionBar.append(selectedLabel, giftButton, deleteButton);
+        this.giftButton = giftButton;
+        this.giftResultUnsub = this.api.events.on('waifu:gift-result', result => {
+          if (!result) return;
+          this.refresh();
+          if (result.success) {
+            const msg = result.gainedLevels && result.gainedLevels.length
+              ? `A Donzela Slime alcançou intimidade ${result.level}!`
+              : `+${result.xpGained} EXP de intimidade.`;
+            this.showGiftFeedback(msg);
+          } else if (result.reason === 'max-level') {
+            this.showGiftFeedback('A intimidade da Donzela Slime já está no nível máximo.');
+          } else {
+            this.showGiftFeedback('Não há Rosas disponíveis para presentear.');
+          }
+        });
 
         panel.append(topRule, header, divider, content, actionBar);
 
@@ -2049,6 +2080,25 @@
         this.document.addEventListener('keydown', this.keyHandler);
       }
 
+      showGiftFeedback(message) {
+        if (!this.giftFeedback) {
+          this.giftFeedback = this.el('div', {
+            position: 'absolute', left: '14px', right: '14px', bottom: '72px',
+            zIndex: '8', padding: '10px 14px', border: '1px solid rgba(211,184,126,.75)',
+            borderRadius: '18px', background: 'rgba(20,15,14,.94)',
+            color: '#f3dfb5', font: 'bold 13px Georgia,serif', textAlign: 'center',
+            boxShadow: '0 4px 18px rgba(0,0,0,.55)', pointerEvents: 'none'
+          });
+          this.panel.appendChild(this.giftFeedback);
+        }
+        this.giftFeedback.textContent = message;
+        this.giftFeedback.style.display = 'block';
+        if (this.giftFeedbackTimer) clearTimeout(this.giftFeedbackTimer);
+        this.giftFeedbackTimer = setTimeout(() => {
+          if (this.giftFeedback) this.giftFeedback.style.display = 'none';
+        }, 2200);
+      }
+
       getItems() {
         const items = this.api.progress.get('items');
         return Array.isArray(items) ? items : [];
@@ -2066,14 +2116,14 @@
           margin: '0 auto 7px',
           display: 'grid',
           placeItems: 'center',
-          color: item.id === 'slime_gel' ? '#9df4dc' : '#e8d5a9',
+          color: item.id === 'rose' ? '#f29aaa' : (item.id === 'slime_gel' ? '#9df4dc' : '#e8d5a9'),
           font: '42px/1 "Arial Unicode MS", "DejaVu Sans", sans-serif',
           textShadow: item.id === 'slime_gel'
             ? '0 0 5px #48bda7, 0 0 12px rgba(53,225,192,.6), 2px 3px 2px #000'
             : '0 2px 3px #000, 0 0 8px rgba(230,203,150,.35)',
           filter: 'drop-shadow(0 3px 2px rgba(0,0,0,.85))'
         });
-        icon.textContent = item.id === 'slime_gel' ? '◆' : '✦';
+        icon.textContent = item.id === 'rose' ? '🌹' : (item.id === 'slime_gel' ? '◆' : '✦');
         return icon;
       }
 
@@ -2294,8 +2344,12 @@
       updateSelectionBar(items) {
         const selected = items.find(item => item.id === this.selectedItemId);
         this.actionBar.style.display = selected ? 'flex' : 'none';
-        if (!selected) return;
-        this.selectedLabel.textContent = selected.definition.name || selected.id;
+        if (!selected) {
+          if (this.giftButton) this.giftButton.style.display = 'none';
+          return;
+        }
+        this.selectedLabel.textContent = `${selected.definition.name || selected.id} ×${selected.quantity}`;
+        if (this.giftButton) this.giftButton.style.display = selected.id === 'rose' ? 'inline-flex' : 'none';
         this.deleteButton.disabled = false;
         this.deleteButton.style.opacity = '1';
       }
@@ -2895,7 +2949,7 @@
   </script>
 
 
-  <script id="conquistador-waifu-collection-v1">
+  <script id="conquistador-waifu-collection-v2">
   (function (root) {
     'use strict';
     const QUALITY = [
@@ -2921,6 +2975,8 @@
         this.onUpdate = () => this.collectNearby();
         this.onShutdown = () => this.destroy();
         this.api.events.on('monster:died', this.onDeath);
+        this.onGiftUse = event => this.useGift(event);
+        this.api.events.on('waifu:gift-use', this.onGiftUse);
         this.scene.events.on('update', this.onUpdate);
         this.scene.events.once('shutdown', this.onShutdown);
       }
@@ -2936,45 +2992,131 @@
       }
 
       handleMonsterDeath(event) {
-        if (!this.active || !event || event.killerId !== 'player' || event.monsterId !== 'slime') return false;
-        if (Math.random() >= 0.20) return false;
-        const quality = this.rollQuality();
+        if (!this.active || !event || event.killerId !== 'player' ||
+            !event.tile || !Number.isFinite(event.tile.x) || !Number.isFinite(event.tile.y)) return false;
+        let dropped = false;
         const x = (event.tile.x + 0.5) * this.tileSize;
         const y = (event.tile.y + 0.5) * this.tileSize;
-        const id = `waifu-drop-${Date.now()}-${this.sequence++}`;
-        const sprite = this.scene.add.text(x, y - 15, '♥', {
-          fontFamily: 'Georgia, serif', fontSize: '23px', color: quality.color,
-          stroke: '#24152f', strokeThickness: 4
-        }).setOrigin(0.5).setDepth(y + 45);
-        this.scene.tweens.add({
-          targets: sprite, y: y - 24, duration: 520, yoyo: true, repeat: -1,
-          ease: 'Sine.InOut'
+
+        // Rosa: item universal de presente, 5% por monstro derrotado pelo jogador.
+        if (Math.random() < 0.05) {
+          const roseId = `rose-drop-${Date.now()}-${this.sequence++}`;
+          const roseSprite = this.scene.add.text(x + 8, y - 17, '🌹', {
+            fontFamily: 'Arial, sans-serif', fontSize: '23px',
+            stroke: '#32121d', strokeThickness: 3
+          }).setOrigin(0.5).setDepth(y + 46);
+          this.scene.tweens.add({
+            targets: roseSprite, y: y - 27, duration: 560, yoyo: true,
+            repeat: -1, ease: 'Sine.InOut'
+          });
+          this.drops.set(roseId, { id: roseId, type: 'rose', x: x + 8, y, sprite: roseSprite });
+          this.api.events.emit('item:dropped', { id: roseId, itemId: 'rose', monsterId: event.monsterId });
+          dropped = true;
+        }
+
+        // Cartas continuam exclusivas dos Slimes; probabilidades de qualidade preservadas.
+        if (event.monsterId === 'slime' && Math.random() < 0.20) {
+          const quality = this.rollQuality();
+          const cardId = `waifu-drop-${Date.now()}-${this.sequence++}`;
+          const cardSprite = this.scene.add.text(x - 8, y - 15, '♥', {
+            fontFamily: 'Georgia, serif', fontSize: '23px', color: quality.color,
+            stroke: '#24152f', strokeThickness: 4
+          }).setOrigin(0.5).setDepth(y + 45);
+          this.scene.tweens.add({
+            targets: cardSprite, y: y - 24, duration: 520, yoyo: true, repeat: -1,
+            ease: 'Sine.InOut'
+          });
+          this.drops.set(cardId, { id: cardId, type: 'waifu-card', quality: quality.id, x: x - 8, y, sprite: cardSprite });
+          this.api.events.emit('waifu:card-dropped', { id: cardId, waifuId: 'slime', quality: quality.id });
+          dropped = true;
+        }
+        return dropped;
+      }
+
+      useGift(event) {
+        if (!this.active || !event || event.itemId !== 'rose' || event.waifuId !== 'slime') return false;
+        const currentItems = this.api.progress.get('items');
+        const items = Array.isArray(currentItems) ? currentItems.map(item => ({ ...item })) : [];
+        const rose = items.find(item => item && item.id === 'rose' && Number(item.quantity) > 0);
+        if (!rose) {
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'no-gift', waifuId: 'slime' });
+          return false;
+        }
+
+        const current = this.api.progress.get('waifus') || {};
+        const waifus = current && typeof current === 'object' ? { ...current } : {};
+        const intimacy = waifus.intimacy && typeof waifus.intimacy === 'object'
+          ? { ...waifus.intimacy } : {};
+        const slime = intimacy.slime && typeof intimacy.slime === 'object'
+          ? { ...intimacy.slime } : { level: 1, xp: 0, totalXp: 0 };
+        let level = Math.max(1, Math.min(100, Math.floor(Number(slime.level) || 1)));
+        let xp = Math.max(0, Number(slime.xp) || 0);
+        let totalXp = Math.max(0, Number(slime.totalXp) || 0);
+        if (level >= 100) {
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'max-level', waifuId: 'slime', level, xp });
+          return false;
+        }
+
+        rose.quantity = Math.max(0, Math.floor(Number(rose.quantity) || 0) - 1);
+        const remainingItems = items.filter(item => item && (item.id !== 'rose' || item.quantity > 0));
+        xp += 10;
+        totalXp += 10;
+        const gainedLevels = [];
+        while (level < 100 && xp >= level * 10) {
+          xp -= level * 10;
+          level += 1;
+          gainedLevels.push(level);
+        }
+        slime.level = level;
+        slime.xp = xp;
+        slime.totalXp = totalXp;
+        intimacy.slime = slime;
+        waifus.intimacy = intimacy;
+
+        const itemResult = this.api.progress.update('items', remainingItems);
+        const waifuResult = this.api.progress.update('waifus', waifus);
+        const success = (itemResult === 'pending' || itemResult === true) &&
+          (waifuResult === 'pending' || waifuResult === true);
+        this.api.events.emit('waifu:gift-result', {
+          success, waifuId: 'slime', itemId: 'rose', xpGained: 10,
+          level, xp, totalXp, gainedLevels
         });
-        this.drops.set(id, { id, quality: quality.id, x, y, sprite });
-        this.api.events.emit('waifu:card-dropped', { id, waifuId: 'slime', quality: quality.id });
-        return true;
+        return success;
       }
 
       collectNearby() {
         if (!this.active || !this.drops.size || !this.scene.player || !this.scene.player.active) return;
         for (const [id, drop] of Array.from(this.drops.entries())) {
           if (Math.hypot(this.scene.player.x - drop.x, this.scene.player.y - drop.y) > 48) continue;
-          const current = this.api.progress.get('waifus') || {};
-          const waifus = current && typeof current === 'object' ? { ...current } : {};
-          const cards = Array.isArray(waifus.cards) ? waifus.cards.slice() : [];
-          const card = {
-            instanceId: id,
-            waifuId: 'slime',
-            quality: drop.quality,
-            obtainedAt: Date.now()
-          };
-          cards.push(card);
-          waifus.cards = cards;
-          const result = this.api.progress.update('waifus', waifus);
+          let result = false;
+          let collectedData = null;
+          if (drop.type === 'rose') {
+            const currentItems = this.api.progress.get('items');
+            const items = Array.isArray(currentItems) ? currentItems.map(item => ({ ...item })) : [];
+            const rose = items.find(item => item && item.id === 'rose');
+            if (rose) rose.quantity = Math.max(0, Math.floor(Number(rose.quantity) || 0)) + 1;
+            else items.push({ id: 'rose', quantity: 1 });
+            result = this.api.progress.update('items', items);
+            collectedData = { id: 'rose', quantity: rose ? rose.quantity : 1 };
+          } else {
+            const current = this.api.progress.get('waifus') || {};
+            const waifus = current && typeof current === 'object' ? { ...current } : {};
+            const cards = Array.isArray(waifus.cards) ? waifus.cards.slice() : [];
+            const card = {
+              instanceId: id,
+              waifuId: 'slime',
+              quality: drop.quality,
+              obtainedAt: Date.now()
+            };
+            cards.push(card);
+            waifus.cards = cards;
+            result = this.api.progress.update('waifus', waifus);
+            collectedData = card;
+          }
           if (result === 'pending' || result === true) {
             if (drop.sprite && drop.sprite.destroy) drop.sprite.destroy();
             this.drops.delete(id);
-            this.api.events.emit('waifu:card-collected', card);
+            this.api.events.emit(drop.type === 'rose' ? 'item:collected' : 'waifu:card-collected', collectedData);
           }
         }
       }
@@ -2983,6 +3125,7 @@
         if (!this.active) return;
         this.active = false;
         this.api.events.off('monster:died', this.onDeath);
+        this.api.events.off('waifu:gift-use', this.onGiftUse);
         if (this.scene && this.scene.events) {
           this.scene.events.off('update', this.onUpdate);
           this.scene.events.off('shutdown', this.onShutdown);
@@ -6542,9 +6685,9 @@
     }
   })();
   </script>
-  <script id="conquistador-v44">
-  window.CONQUISTADOR_V44 = Object.freeze({
-    version: 44,
+  <script id="conquistador-v45">
+  window.CONQUISTADOR_V45 = Object.freeze({
+    version: 45,
     feature: 'Velocidade de ataque em ataques por segundo: 1 = 1 ataque por segundo',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
