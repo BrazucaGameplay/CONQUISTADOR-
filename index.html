@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V69</title>
+<title>CONQUISTADOR DE WAIFU'S — V72</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -748,12 +748,12 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'max(16px, calc(env(safe-area-inset-left) + 16px))';
+        autoAttackBadge.style.left = 'max(14px, calc(env(safe-area-inset-left) + 14px))';
         autoAttackBadge.style.right = 'auto';
-        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 104px))';
+        autoAttackBadge.style.bottom = 'max(14px, calc(env(safe-area-inset-bottom) + 14px))';
         autoAttackBadge.style.zIndex = '30';
-        autoAttackBadge.style.width = '56px';
-        autoAttackBadge.style.height = '56px';
+        autoAttackBadge.style.width = '72px';
+        autoAttackBadge.style.height = '72px';
         autoAttackBadge.style.padding = '4px';
         autoAttackBadge.style.display = 'grid';
         autoAttackBadge.style.placeItems = 'center';
@@ -6102,17 +6102,22 @@
         const raw = loaded.raw;
         this.invalidSavedPlayerRaw = raw;
         if (loaded.status === 'invalid') {
-          this.saveSystem.lockPrimaryReplacement(raw);
-          this.invalidSavePreserved = true;
-          this.invalidSaveNeedsBackup = !this.backupInvalidPlayerSave(raw);
+          // V71 - usuario nao liga p/ save: save invalido = apagar e nascer zerado, nunca travar em tela preta.
+          try { if (this.saveSystem && this.saveSystem.primaryKey) localStorage.removeItem(this.saveSystem.primaryKey); } catch (_) {}
+          try { if (this.saveSystem && this.saveSystem.backupKey) localStorage.removeItem(this.saveSystem.backupKey); } catch (_) {}
+          try { if (this.saveSystem && this.saveSystem.previousBackupKey) localStorage.removeItem(this.saveSystem.previousBackupKey); } catch (_) {}
+          this.invalidSavePreserved = false;
+          this.invalidSaveNeedsBackup = false;
           return null;
         }
         this.restoreProgressFromSave(loaded.data);
         const saved = loaded.positionRecord;
         if (!saved || ![1, 2, 3, 4].includes(saved.version) || saved.world !== PLAYER_POSITION_WORLD_ID) {
-          this.saveSystem.lockPrimaryReplacement(raw);
-          this.invalidSavePreserved = true;
-          this.invalidSaveNeedsBackup = !this.backupInvalidPlayerSave(raw);
+          // V71: versao/mundo invalido = apagar e nascer zerado.
+          try { if (this.saveSystem && this.saveSystem.primaryKey) localStorage.removeItem(this.saveSystem.primaryKey); } catch (_) {}
+          try { if (this.saveSystem && this.saveSystem.backupKey) localStorage.removeItem(this.saveSystem.backupKey); } catch (_) {}
+          this.invalidSavePreserved = false;
+          this.invalidSaveNeedsBackup = false;
           return null;
         }
         this.invalidSavePreserved = true;
@@ -7077,7 +7082,7 @@
   </script>
 <script id="conquistador-v52">(function () {
   'use strict';
-  const SKILLS = Object.freeze({ slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, cooldownMs:5000, icon:'🟢' }) });
+  const SKILLS = Object.freeze({ slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, cooldownMs:5000, icon:'🫧' }) });
   let runtime=null, monsterSystem=null, hud=null, toast=null, buttons=[], nextCastAt=[0,0,0], pendingCast=[false,false,false], autoTimer=null, refreshQueued=false, unsubscribers=[], bootTimer=null;
   const PASSIVE_ID='waifu:slime:intimacy', LEVEL_ID='player:level-scaling';
   function equippedWaifus(){
@@ -7151,8 +7156,8 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px;width:38px;height:auto;pointer-events:none;overflow:visible;z-index:5}
-    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 36px;width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c;transform:none}
+    #conquistador-active-skills-v53{position:absolute;left:0;bottom:calc(100% + 10px);transform:none;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;width:max-content;height:auto;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 52px;width:52px;height:52px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #7ee8ff;color:#eafcff;box-shadow:0 3px 10px #000c,inset 0 0 0 2px #12303a,0 0 12px #38c8ff66;pointer-events:auto;touch-action:manipulation;font:24px Georgia;background:radial-gradient(circle at 35% 30%,#2a6b7a,#122a33 70%);transform:none}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
     @keyframes cw53gel{0%,100%{transform:translateY(1px) scale(.92)}50%{transform:translateY(-2px) scale(1.12)}}
@@ -7163,7 +7168,7 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Three skills form a vertical column immediately above the lower-left attack control.
+    // V72: tres skills em fileira horizontal no canto inferior esquerdo, acima do ataque.
     for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
@@ -7181,7 +7186,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V70';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V72';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7219,11 +7224,10 @@
     try{
       // Do not restart WorldScene while the invalid-save lock is active:
       // create() would reload the same rejected save and repeat the deadlock.
+      // V71: nunca suspender restart por save invalido - o save ja foi limpo em getSavedPlayerPosition e o jogo nasce zerado.
       if(scene?.invalidSavePreserved){
-        console.warn('[CW60] reinício suspenso: salvamento inválido ainda preservado');
-        recoveryInProgress=false;
-        notice('O salvamento original está protegido. O jogo tentará gravar automaticamente após confirmar uma posição segura.');
-        return;
+        console.warn('[CW71] save invalido ignorado, reiniciando zerado');
+        try{ scene.invalidSavePreserved=false; }catch(_){}
       }
       if(game?.loop?.wake)game.loop.wake();
       if(game?.loop?.start&&!game.loop.running)game.loop.start();
@@ -7268,5 +7272,37 @@
 
 
 <!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
+
+<script id="conquistador-v72-hud">
+(function(){
+  'use strict';
+  function apply(){
+    var style=document.getElementById('cw72-hud');
+    if(!style){
+      style=document.createElement('style'); style.id='cw72-hud';
+      style.textContent=[
+        '#conquistador-active-skills-v53{left:0 !important;bottom:calc(100% + 10px) !important;transform:none !important;flex-direction:row !important;gap:10px !important;}',
+        '#conquistador-active-skills-v53 button{width:52px !important;height:52px !important;font-size:24px !important;}',
+        '#conquistador-active-skills-v53 button.cw53-ready .cw53-icon{filter:drop-shadow(0 0 6px #7ee8ff) !important;}'
+      ].join('\n');
+      document.head.appendChild(style);
+    }
+    // Marca visual novo do ataque sem quebrar o cooldown: procura o badge pelo aria-label
+    var badge=document.querySelector('[aria-label="Ataque automático — recarga"]');
+    if(badge){
+      badge.style.left='max(14px, calc(env(safe-area-inset-left) + 14px))';
+      badge.style.bottom='max(14px, calc(env(safe-area-inset-bottom) + 14px))';
+      badge.style.width='72px'; badge.style.height='72px';
+      badge.style.background='radial-gradient(circle at 35% 30%, #5a2e12, #241108 70%)';
+      badge.style.border='2px solid #ffb347';
+      badge.style.boxShadow='0 4px 14px #000c, 0 0 16px #ff8c1a55';
+      badge.style.borderRadius='50%';
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ apply(); setInterval(apply, 1000); }, {once:true});
+  else { apply(); setInterval(apply, 1000); }
+  window.CONQUISTADOR_V72_HUD={version:72, apply:apply};
+})();
+</script>
 </body>
 </html>
