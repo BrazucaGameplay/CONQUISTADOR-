@@ -1878,7 +1878,7 @@
         giftButton.textContent = 'PRESENTEAR';
         this.giftHandler = () => {
           if (this.selectedItemId !== 'rose') return;
-          this.api.events.emit('waifu:gift-use', { itemId: 'rose', waifuId: 'slime' });
+          this.openWaifuGiftPicker();
         };
         giftButton.addEventListener('click', this.giftHandler);
         actionBar.append(selectedLabel, giftButton, deleteButton);
@@ -2080,6 +2080,63 @@
           if (this.opened && event.key === 'Escape') this.setOpen(false);
         };
         this.document.addEventListener('keydown', this.keyHandler);
+      }
+
+      openWaifuGiftPicker() {
+        if (this.giftPicker) this.giftPicker.remove();
+        const data = this.api.progress.get('waifus') || {};
+        const cards = Array.isArray(data.cards) ? data.cards : [];
+        const unlocked = Array.isArray(data.unlocked) ? data.unlocked : [];
+        const owned = cards.filter(card => card && unlocked.includes(card.waifuId || card.waifuType || card.id));
+        if (!owned.length) {
+          this.showGiftFeedback('Conquiste uma waifu e obtenha sua carta antes de presenteá-la.');
+          return;
+        }
+        const shade = this.el('div', {
+          position: 'absolute', inset: '0', zIndex: '20', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: '18px',
+          background: 'rgba(0,0,0,.78)', backdropFilter: 'blur(3px)'
+        });
+        const dialog = this.el('section', {
+          width: 'min(100%,360px)', maxHeight: '70%', overflowY: 'auto',
+          padding: '18px', border: '1px solid rgba(211,184,126,.85)',
+          borderRadius: '12px', background: 'linear-gradient(180deg,#30241f,#151211)',
+          color: '#f3dfb5', boxShadow: '0 12px 35px rgba(0,0,0,.8)',
+          font: '14px Georgia,serif'
+        });
+        const heading = this.el('div', { font: 'bold 17px Georgia,serif', textAlign: 'center', marginBottom: '14px' });
+        heading.textContent = 'ESCOLHA A WAIFU';
+        dialog.appendChild(heading);
+        const definitions = this.api.data.WAIFUS || {};
+        owned.forEach(card => {
+          const id = String(card.waifuId || card.waifuType || card.id || '');
+          const name = (definitions[id] && definitions[id].name) || (id === 'slime' ? 'Donzela Slime' : id);
+          const choice = this.el('button', {
+            display: 'block', width: '100%', minHeight: '44px', margin: '7px 0',
+            border: '1px solid rgba(211,184,126,.7)', borderRadius: '8px',
+            background: 'rgba(74,49,42,.8)', color: '#ffebca',
+            font: 'bold 14px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
+          });
+          choice.type = 'button';
+          const legacy = data.intimacy && data.intimacy[id] ? data.intimacy[id] : null;
+          const level = card.intimacy && card.intimacy.level ? card.intimacy.level : (legacy && legacy.level ? legacy.level : 1);
+          choice.textContent = `${name} · Nível ${level}`;
+          choice.addEventListener('click', () => {
+            shade.remove(); this.giftPicker = null;
+            this.api.events.emit('waifu:gift-use', { itemId: 'rose', waifuId: id, targetInstanceId: card.instanceId });
+          });
+          dialog.appendChild(choice);
+        });
+        const cancel = this.el('button', {
+          display: 'block', width: '100%', minHeight: '40px', marginTop: '12px',
+          border: '1px solid rgba(190,170,140,.55)', borderRadius: '8px',
+          background: 'rgba(25,22,20,.9)', color: '#e6d8c2', font: 'bold 12px Georgia,serif'
+        });
+        cancel.type = 'button'; cancel.textContent = 'CANCELAR';
+        cancel.addEventListener('click', () => { shade.remove(); this.giftPicker = null; });
+        dialog.appendChild(cancel); shade.appendChild(dialog);
+        shade.addEventListener('click', event => { if (event.target === shade) { shade.remove(); this.giftPicker = null; } });
+        this.panel.appendChild(shade); this.giftPicker = shade;
       }
 
       showGiftFeedback(message) {
@@ -3007,7 +3064,9 @@
         this.onGiftUse = event => this.useGift(event);
         this.api.events.on('waifu:gift-use', this.onGiftUse);
         this.onProgressChanged = event => {
-          if (event && event.section === 'waifus') this.applyWaifuPassives();
+          const waifuChanged = !!(event && (event.section === 'waifus' ||
+            (event.data && Object.prototype.hasOwnProperty.call(event.data, 'waifus'))));
+          if (waifuChanged) this.applyWaifuPassives();
         };
         this.api.events.on('progress:changed', this.onProgressChanged);
         this.api.events.on('progress:batch-changed', this.onProgressChanged);
@@ -3035,14 +3094,19 @@
           this.api.status.removeModifier('player', 'waifu:slime:intimacy');
           return false;
         }
-        const intimacy = this.getIntimacy('slime');
         const stats = {};
-        // Habilidades passivas informadas pelo usuário: valores fixos, sem escalonamento inventado.
+        // Bônus fixos definidos pelo usuário; não dependem de nível de intimidade.
         for (const passive of definition.passives) {
           for (const [key, value] of Object.entries(passive.stats)) stats[key] = (stats[key] || 0) + value;
         }
-        if (intimacy.level < 1) return false;
-        return this.api.status.addModifier('player', { id: 'waifu:slime:intimacy', stats });
+        const before = this.api.status.getStat('player', 'maxHp');
+        const applied = this.api.status.addModifier('player', { id: 'waifu:slime:intimacy', stats });
+        const after = this.api.status.getStat('player', 'maxHp');
+        // Ao conquistar a passiva de +10 HP máximo, concede também os 10 HP atuais
+        // sem ultrapassar o novo máximo. A substituição do modificador não acumula bônus.
+        if (applied && Number.isFinite(before) && Number.isFinite(after) && after > before &&
+            typeof this.api.status.heal === 'function') this.api.status.heal('player', after - before);
+        return applied;
       }
 
       rollQuality(randomValue = Math.random()) {
@@ -3116,10 +3180,17 @@
 
         const current = this.api.progress.get('waifus') || {};
         const waifus = current && typeof current === 'object' ? { ...current } : {};
-        const intimacy = waifus.intimacy && typeof waifus.intimacy === 'object'
-          ? { ...waifus.intimacy } : {};
-        const saved = intimacy[definition.id] && typeof intimacy[definition.id] === 'object'
-          ? intimacy[definition.id] : { level: 1, xp: 0, totalXp: 0 };
+        const cards = Array.isArray(waifus.cards) ? waifus.cards.map(card => ({ ...card })) : [];
+        const targetCard = event.targetInstanceId ? cards.find(card => card.instanceId === event.targetInstanceId) : null;
+        if (event.targetInstanceId && (!targetCard || String(targetCard.waifuId || targetCard.waifuType || targetCard.id) !== definition.id)) {
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'invalid-target', waifuId: definition.id });
+          return false;
+        }
+        const legacyIntimacy = waifus.intimacy && typeof waifus.intimacy === 'object' ? waifus.intimacy : {};
+        const saved = targetCard && targetCard.intimacy && typeof targetCard.intimacy === 'object'
+          ? { ...targetCard.intimacy }
+          : (legacyIntimacy[definition.id] && typeof legacyIntimacy[definition.id] === 'object'
+            ? { ...legacyIntimacy[definition.id] } : { level: 1, xp: 0, totalXp: 0 });
         let level = Math.max(1, Math.min(100, Math.floor(Number(saved.level) || 1)));
         let xp = Math.max(0, Number(saved.xp) || 0);
         let totalXp = Math.max(0, Number(saved.totalXp) || 0);
@@ -3142,17 +3213,22 @@
         saved.level = level;
         saved.xp = xp;
         saved.totalXp = totalXp;
-        intimacy[definition.id] = saved;
-        waifus.intimacy = intimacy;
+        if (targetCard) {
+          targetCard.intimacy = saved;
+          waifus.cards = cards;
+        } else {
+          const intimacy = { ...legacyIntimacy, [definition.id]: saved };
+          waifus.intimacy = intimacy;
+        }
 
-        // Commit inventário + intimidade em uma única atualização do save.
+        // Commit inventário + intimidade da instância em uma única atualização do save.
         const batchResult = typeof this.api.progress.updateBatch === 'function'
           ? this.api.progress.updateBatch({ items: remainingItems, waifus }) : false;
         const success = batchResult === 'pending' || batchResult === true;
         if (success) this.applyWaifuPassives();
         this.api.events.emit('waifu:gift-result', {
           success, waifuId: definition.id, itemId: definition.gift, xpGained,
-          level, xp, totalXp, gainedLevels
+          level, xp, totalXp, gainedLevels, targetInstanceId: event.targetInstanceId || null
         });
         return success;
       }
@@ -3303,14 +3379,14 @@
           background: 'rgba(20,16,14,.24)', color: '#f3e4c5', font: '13px/1.45 Georgia,serif'
         });
         const intimacyTitle = this.el('div', { display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 'bold' });
-        const intimacyName = this.el('span'); intimacyName.textContent = `Donzela Slime · Intimidade ${intimacyLevel}`;
-        const intimacyValue = this.el('span', { color: '#e9c77d' }); intimacyValue.textContent = intimacyLevel >= 100 ? 'MÁXIMO' : `${intimacyXp}/${intimacyThreshold} EXP`;
+        const intimacyName = this.el('span'); intimacyName.textContent = 'Intimidade individual por carta';
+        const intimacyValue = this.el('span', { color: '#e9c77d' }); intimacyValue.textContent = 'Nível 1–100';
         intimacyTitle.append(intimacyName, intimacyValue);
         const intimacyTrack = this.el('div', { height: '7px', margin: '7px 0 9px', borderRadius: '8px', overflow: 'hidden', background: 'rgba(0,0,0,.55)', border: '1px solid rgba(205,183,137,.4)' });
-        const intimacyFill = this.el('div', { width: `${progress * 100}%`, height: '100%', background: 'linear-gradient(90deg,#9c4560,#e7b978)', boxShadow: '0 0 8px rgba(231,185,120,.45)' });
+        const intimacyFill = this.el('div', { width: '100%', height: '100%', background: 'linear-gradient(90deg,#9c4560,#e7b978)', boxShadow: '0 0 8px rgba(231,185,120,.45)' });
         intimacyTrack.appendChild(intimacyFill);
         const skillInfo = this.el('div', { color: 'rgba(240,225,198,.9)', font: '12px/1.55 Georgia,serif' });
-        skillInfo.textContent = 'Ativa: Gosma Ácida — 12 de dano fixo.  Passivas: Pele de Gosma (+1 Defesa) · Corpo de Slime (+10 HP máximo).';
+        skillInfo.textContent = 'Cada carta evolui separadamente. Pilhas reúnem apenas waifus da mesma espécie, nível de intimidade e qualidade. Ativa: Gosma Ácida — 12 de dano fixo. Passivas: Pele de Gosma (+1 Defesa) · Corpo de Slime (+10 HP máximo).';
         intimacyPanel.append(intimacyTitle, intimacyTrack, skillInfo);
         this.content.appendChild(intimacyPanel);
         if (!cards.length) {
@@ -3326,7 +3402,7 @@
         // Cada pilha representa uma qualidade. Cartas da mesma qualidade
         // são idênticas; qualidades diferentes continuam separadas.
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
-        const grouped = new Map(QUALITY.map(quality => [quality.id, []]));
+        const grouped = new Map();
         const makeOrnateFrame = (color, qualityId) => {
           const queen = qualityId === 'rainha';
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360">
@@ -3384,13 +3460,20 @@
           return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
         };
         for (const card of cards) {
-          const qualityId = grouped.has(card && card.quality) ? card.quality : 'plebeia';
-          grouped.get(qualityId).push(card);
+          const qualityId = QUALITY.some(q => q.id === (card && card.quality)) ? card.quality : 'plebeia';
+          const speciesId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+          const legacyLevel = data.intimacy && data.intimacy[speciesId] ? data.intimacy[speciesId].level : 1;
+          const level = Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacyLevel) || 1)));
+          const key = `${speciesId}|${level}|${qualityId}`;
+          if (!grouped.has(key)) grouped.set(key, { key, speciesId, level, qualityId, cards: [] });
+          grouped.get(key).cards.push(card);
         }
 
-        for (const quality of QUALITY) {
-          const matchingCards = grouped.get(quality.id) || [];
-          if (!matchingCards.length) continue;
+        for (const group of grouped.values()) {
+          const quality = QUALITY.find(item => item.id === group.qualityId) || QUALITY[0];
+          const matchingCards = group.cards;
+          const speciesName = group.speciesId === 'slime' ? 'Donzela Slime' : group.speciesId;
+
           const stack = this.el('button', {
             position: 'relative', width: 'min(100%, 184px)', aspectRatio: '2 / 3',
             justifySelf: 'center', padding: '0', border: '0', borderRadius: '9px',
@@ -3409,7 +3492,7 @@
             background: '#10131b', zIndex: '0'
           });
           art.src = fullResolutionArt;
-          art.alt = 'Ilustração da Donzela Slime';
+          art.alt = `Ilustração de ${speciesName}`;
           const qualityName = this.el('div', {
             position: 'absolute', left: '22%', right: '22%', top: '3.5%',
             zIndex: '2', textAlign: 'center', color: '#fff1c9',
@@ -3430,7 +3513,7 @@
             color: '#fff0c9', font: 'bold 10px Georgia,serif',
             textShadow: '0 2px 4px #000'
           });
-          titlePlate.textContent = 'Donzela Slime';
+          titlePlate.textContent = `${speciesName} · Nv. ${group.level}`;
           const quantity = this.el('div', {
             position: 'absolute', top: '18%', right: '10%', zIndex: '3',
             minWidth: '27px', padding: '4px 6px',
@@ -3441,14 +3524,15 @@
           });
           quantity.textContent = `×${matchingCards.length}`;
           stack.append(art, qualityName, stars, titlePlate, quantity);
-          stack.addEventListener('click', () => this.showFullCard(quality.id));
+          stack.addEventListener('click', () => this.showFullCard(group.key));
           this.content.appendChild(stack);
         }
       }
 
-      showFullCard(qualityId = 'plebeia') {
+      showFullCard(stackKey = 'slime|1|plebeia') {
         if (this.cardOverlay) this.cardOverlay.remove();
-        const quality = QUALITY.find(item => item.id === qualityId) || QUALITY[0];
+        const parts = String(stackKey).split('|');
+        const quality = QUALITY.find(item => item.id === parts[2]) || QUALITY[0];
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const overlay = this.el('div', {
           position: 'fixed', inset: '0', zIndex: '104', display: 'flex',
@@ -3469,7 +3553,7 @@
           boxShadow: `0 14px 44px rgba(0,0,0,.8), 0 0 16px ${quality.color}66`
         });
         full.src = fullResolutionArt;
-        full.alt = 'Ilustração completa da Donzela Slime';
+        full.alt = `Ilustração completa de ${parts[0] === 'slime' ? 'Donzela Slime' : parts[0]} nível ${parts[1] || 1}`;
         overlay.append(close, full);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
         this.document.body.appendChild(overlay); this.cardOverlay = overlay;
@@ -6806,17 +6890,20 @@
     })
   });
   </script>
-  <script id="conquistador-v47">
+  <script id="conquistador-v49">
   (function () {
     'use strict';
-    const SKILLS = Object.freeze({ slime: Object.freeze({ id: 'acid_slime', name: 'Gosma Ácida', damage: 12 }) });
+    const SKILLS = Object.freeze({ slime: Object.freeze({
+      id: 'acid_slime', name: 'Gosma Ácida', damage: 12, cooldownMs: 5000, icon: '💧'
+    }) });
     let runtime = null;
     let monsterSystem = null;
     let root = null;
     let toast = null;
     let buttons = [];
-    let unsubscribers = [];
+    let nextCastAt = [0, 0, 0];
     let refreshQueued = false;
+    let autoTimer = null;
 
     function getEquippedWaifus() {
       const data = runtime && runtime.progress ? (runtime.progress.get('waifus') || {}) : {};
@@ -6856,25 +6943,34 @@
       }, 1500);
     }
 
-    function castSkill(slotIndex) {
+    function getSkillTarget() {
+      if (!monsterSystem || !monsterSystem.active) return null;
+      const playerPoint = monsterSystem.getPlayerPoint();
+      if (!playerPoint) return null;
+      const target = monsterSystem.getNearestMonsterInRange(playerPoint);
+      if (!target || !target.alive || !target.sprite || !target.sprite.active) return null;
+      const distance = Math.hypot(target.sprite.x - playerPoint.x, target.sprite.y - playerPoint.y);
+      return distance <= monsterSystem.attackRange ? target : null;
+    }
+
+    function castSkill(slotIndex, silent) {
       const equipped = getEquippedWaifus();
       const waifuId = equipped[slotIndex];
       const skill = SKILLS[waifuId];
       if (!skill || !monsterSystem || !monsterSystem.active) return false;
-      const playerPoint = monsterSystem.getPlayerPoint();
-      if (!playerPoint) { showToast('Não foi possível localizar o jogador.'); return false; }
-      const target = monsterSystem.getNearestMonsterInRange(playerPoint);
-      if (!target || !target.alive || !target.sprite || !target.sprite.active) {
-        showToast('Nenhum monstro ao alcance da habilidade.');
-        return false;
-      }
-      const distance = Math.hypot(target.sprite.x - playerPoint.x, target.sprite.y - playerPoint.y);
-      if (distance > monsterSystem.attackRange) {
-        showToast('Aproxime-se do monstro para usar a habilidade.');
+      const now = Date.now();
+      if (now < nextCastAt[slotIndex]) return false;
+      const target = getSkillTarget();
+      if (!target) {
+        if (!silent) showToast('Aproxime-se de um monstro para usar a habilidade.');
         return false;
       }
       const result = runtime.status.applyDamage(target.id, skill.damage, 'player');
-      if (!result) { showToast('Não foi possível aplicar a habilidade.'); return false; }
+      if (!result) {
+        if (!silent) showToast('Não foi possível aplicar a habilidade.');
+        return false;
+      }
+      nextCastAt[slotIndex] = now + skill.cooldownMs;
       if (typeof monsterSystem.showMonsterHitEffect === 'function') monsterSystem.showMonsterHitEffect(target);
       runtime.events.emit('combat:hit', {
         attackerId: 'player', targetId: target.id, damage: skill.damage,
@@ -6882,21 +6978,39 @@
       });
       if (result.defeated) monsterSystem.killMonster(target, 'player');
       if (typeof monsterSystem.refreshUI === 'function') monsterSystem.refreshUI();
-      showToast(skill.name + ': ' + skill.damage + ' de dano.');
+      if (!silent) showToast(skill.name + ': ' + skill.damage + ' de dano.');
+      renderSkillSlots();
       return true;
     }
 
     function renderSkillSlots() {
       if (!root) return;
       const equipped = getEquippedWaifus();
+      const now = Date.now();
       buttons.forEach((button, index) => {
         const skill = SKILLS[equipped[index]];
-        button.disabled = !skill;
-        button.textContent = skill ? `${index + 1} · ${skill.name}` : `${index + 1} · Vazio`;
-        button.style.opacity = skill ? '1' : '.42';
-        button.style.borderColor = skill ? 'rgba(222,185,112,.82)' : 'rgba(150,130,100,.35)';
-        button.style.color = skill ? '#f4dfaa' : '#9e927e';
+        const remaining = Math.max(0, nextCastAt[index] - now);
+        const progress = skill ? 1 - remaining / skill.cooldownMs : 0;
+        const pct = Math.max(0, Math.min(100, progress * 100));
+        button.disabled = !skill || remaining > 0;
+        button.title = skill ? `${skill.name} — ${skill.damage} de dano; recarga de 5 segundos` : 'Nenhuma waifu equipada';
+        button.setAttribute('aria-label', button.title);
+        button.textContent = skill ? skill.icon : '·';
+        button.style.display = 'grid';
+        button.style.opacity = skill ? (remaining > 0 ? '.78' : '1') : '.36';
+        button.style.background = `conic-gradient(from -90deg, #dfc47d ${pct}%, rgba(90,78,57,.42) ${pct}% 100%)`;
+        button.style.borderColor = skill ? 'rgba(222,185,112,.9)' : 'rgba(150,130,100,.35)';
+        button.style.color = '#f4dfaa';
+        button.dataset.skill = skill ? skill.id : '';
       });
+    }
+
+    function autoUseEquippedSkills() {
+      const equipped = getEquippedWaifus();
+      for (let i = 0; i < equipped.length; i += 1) {
+        if (SKILLS[equipped[i]]) castSkill(i, true);
+      }
+      renderSkillSlots();
     }
 
     function createSkillHud() {
@@ -6904,28 +7018,36 @@
       root = document.createElement('div');
       root.id = 'conquistador-active-skills';
       Object.assign(root.style, {
-        position: 'fixed', left: '50%', bottom: 'max(14px, env(safe-area-inset-bottom))',
-        transform: 'translateX(-50%)', zIndex: '45', display: 'flex', gap: '6px',
-        maxWidth: 'calc(100vw - 18px)', pointerEvents: 'auto',
-        font: 'bold 10px Georgia,serif', touchAction: 'manipulation'
+        position: 'fixed', left: 'max(16px, env(safe-area-inset-left))',
+        bottom: 'max(18px, env(safe-area-inset-bottom))',
+        width: '150px', height: '126px', zIndex: '45', pointerEvents: 'none',
+        touchAction: 'manipulation'
       });
+      // Três círculos em arco ao redor do botão de ataque automático.
+      const positions = [
+        { left: '62px', bottom: '67px' },
+        { left: '91px', bottom: '29px' },
+        { left: '62px', bottom: '-9px' }
+      ];
       for (let i = 0; i < 3; i += 1) {
         const button = document.createElement('button');
         button.type = 'button';
         Object.assign(button.style, {
-          minWidth: '0', maxWidth: '31vw', padding: '9px 8px', border: '1px solid rgba(150,130,100,.35)',
-          borderRadius: '9px', background: 'linear-gradient(180deg,rgba(55,43,31,.96),rgba(22,19,17,.97))',
-          boxShadow: '0 3px 10px rgba(0,0,0,.55)', textShadow: '0 1px 2px #000',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer'
+          position: 'absolute', ...positions[i], width: '42px', height: '42px', padding: '0',
+          display: 'grid', placeItems: 'center', border: '1px solid rgba(150,130,100,.35)',
+          borderRadius: '50%', background: 'rgba(35,29,23,.96)',
+          boxShadow: '0 2px 8px rgba(0,0,0,.62), inset 0 0 0 2px rgba(25,20,16,.8)',
+          font: 'bold 20px Georgia,serif', textShadow: '0 1px 3px #000',
+          cursor: 'pointer', pointerEvents: 'auto', touchAction: 'manipulation'
         });
-        button.addEventListener('click', () => castSkill(i));
+        button.addEventListener('click', () => castSkill(i, false));
         buttons.push(button);
         root.appendChild(button);
       }
       toast = document.createElement('div');
       toast.setAttribute('role', 'status');
       Object.assign(toast.style, {
-        position: 'fixed', left: '50%', bottom: 'calc(max(14px, env(safe-area-inset-bottom)) + 54px)',
+        position: 'fixed', left: '50%', bottom: 'calc(max(18px, env(safe-area-inset-bottom)) + 62px)',
         transform: 'translate(-50%,8px)', opacity: '0', transition: 'opacity .16s, transform .16s',
         zIndex: '46', padding: '7px 12px', border: '1px solid rgba(221,196,128,.72)',
         borderRadius: '8px', background: 'rgba(22,19,17,.96)', color: '#f4dfaa',
@@ -6951,15 +7073,16 @@
         refreshQueued = true;
         Promise.resolve().then(() => { refreshQueued = false; renderSkillSlots(); });
       };
-      unsubscribers.push(api.events.on('level:changed', event => {
+      api.events.on('level:changed', event => {
         if (event && event.entityId === 'player') updatePlayerLevelScaling(event.level);
-      }));
-      unsubscribers.push(api.events.on('progress:changed', event => {
+      });
+      api.events.on('progress:changed', event => {
         if (event && event.section === 'waifus') refresh();
-      }));
-      unsubscribers.push(api.events.on('progress:batch-changed', refresh));
-      unsubscribers.push(api.events.on('save:written', refresh));
+      });
+      api.events.on('progress:batch-changed', refresh);
+      api.events.on('save:written', refresh);
       renderSkillSlots();
+      if (!autoTimer) autoTimer = setInterval(autoUseEquippedSkills, 200);
       return true;
     }
 
@@ -6971,9 +7094,11 @@
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
     else boot();
-    window.CONQUISTADOR_V47 = Object.freeze({
-      version: 47,
-      playerLevelScaling: '1% por nível acima do nível 1, aplicado aos atributos base',
+    window.CONQUISTADOR_V49 = Object.freeze({
+      version: 49,
+      skillHud: 'three-circular-buttons-around-auto-attack',
+      automaticSkillUse: true,
+      slimeSkillCooldownMs: 5000,
       activeSkillSlots: 3,
       slimeSkill: SKILLS.slime,
       castSkill
@@ -6981,5 +7106,8 @@
   })();
   </script>
 
+<script id="conquistador-v49-metadata">
+  window.CONQUISTADOR_VERSION = 'V49';
+  </script>
 </body>
 </html>
