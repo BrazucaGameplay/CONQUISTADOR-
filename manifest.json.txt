@@ -3,7 +3,7 @@
   "short_name": "CONQUISTADOR",
   "description": "Conquiste waifus, derrote monstros e construa sua casa.",
   "lang": "pt-BR",
-  "start_url": "./CONQUISTADOR_V80.html",
+  "start_url": "./Index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
