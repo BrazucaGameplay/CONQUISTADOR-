@@ -2518,14 +2518,55 @@
         });
         close.type = 'button'; close.textContent = '×';
         close.addEventListener('click', () => overlay.remove());
+        const layout = this.el('div', {
+          position: 'relative', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', gap: '8px', width: 'min(96%, 520px)',
+          maxHeight: '84%', margin: 'auto'
+        });
         const art = this.el('img', {
-          display: 'block', width: 'min(88vw, 390px)', maxHeight: '82%',
-          objectFit: 'contain', margin: 'auto', border: '2px solid #c6a86c',
+          display: 'block', width: 'auto', height: 'auto',
+          maxWidth: 'calc(100% - 54px)', maxHeight: '78dvh',
+          objectFit: 'contain', margin: '0', border: '2px solid #c6a86c',
           borderRadius: '9px', boxShadow: '0 14px 44px rgba(0,0,0,.8)'
         });
         art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || '';
         art.alt = 'Carta completa da Donzela Slime';
-        overlay.append(close, art);
+
+        const side = this.el('div', {
+          position: 'relative', flex: '0 0 42px', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', alignSelf: 'center'
+        });
+        const arrow = this.el('button', {
+          width: '40px', height: '48px', border: '1px solid #c6a86c',
+          borderRadius: '22px', background: 'rgba(35,27,20,.96)',
+          color: '#f4dfaa', font: 'bold 28px/1 Georgia,serif',
+          boxShadow: '0 3px 12px rgba(0,0,0,.6)', cursor: 'pointer',
+          touchAction: 'manipulation'
+        });
+        arrow.type = 'button'; arrow.textContent = '›';
+        arrow.setAttribute('aria-label', 'Mostrar descrição');
+        const description = this.el('div', {
+          position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
+          transform: 'translateY(-50%)', width: 'min(58vw, 230px)',
+          padding: '13px 14px', border: '1px solid #c6a86c',
+          borderRadius: '8px', background: 'rgba(25,19,15,.98)',
+          color: '#f0e4ce', font: '14px/1.5 Georgia,serif',
+          boxShadow: '0 8px 26px rgba(0,0,0,.8)', zIndex: '3',
+          display: 'none'
+        });
+        description.textContent = entry.description || 'Descrição ainda não disponível.';
+        const showDescription = () => { description.style.display = 'block'; };
+        const hideDescription = () => { description.style.display = 'none'; };
+        arrow.addEventListener('mouseenter', showDescription);
+        arrow.addEventListener('mouseleave', hideDescription);
+        arrow.addEventListener('focus', showDescription);
+        arrow.addEventListener('blur', hideDescription);
+        arrow.addEventListener('click', () => {
+          description.style.display = description.style.display === 'block' ? 'none' : 'block';
+        });
+        side.appendChild(arrow);
+        layout.append(art, side);
+        overlay.append(close, layout);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
         this.backdrop.appendChild(overlay); this.detailOverlay = overlay;
       }
@@ -2813,32 +2854,28 @@
           if (!matchingCards.length) continue;
           const stack = this.el('button', {
             position: 'relative', width: 'min(100%, 150px)', justifySelf: 'center',
-            padding: '7px', border: `2px solid ${quality.color}`, borderRadius: '9px',
-            background: 'linear-gradient(180deg,#30251e,#100e0d)',
-            boxShadow: '0 0 12px rgba(198,168,108,.22), inset 0 0 12px #000',
-            color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation'
+            padding: '0', border: `3px solid ${quality.color}`, borderRadius: '9px',
+            background: 'transparent',
+            boxShadow: `0 0 12px ${quality.color}55, 0 3px 12px rgba(0,0,0,.45)`,
+            color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation',
+            overflow: 'visible'
           });
           stack.type = 'button';
           const art = this.el('img', {
-            display: 'block', width: '100%', height: '164px', aspectRatio: '0.72',
-            objectFit: 'cover', objectPosition: 'center 24%', background: '#15101d',
+            display: 'block', width: '100%', height: 'auto',
+            objectFit: 'contain', objectPosition: 'center', background: 'transparent',
             borderRadius: '5px'
           });
           art.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
-          art.alt = `Carta da Donzela Slime — ${quality.name}`;
-          const name = this.el('div', {
-            padding: '8px 2px 2px', textAlign: 'center',
-            font: 'bold 14px Georgia,serif', color: quality.color
-          });
-          name.textContent = quality.name;
+          art.alt = `Carta completa da Donzela Slime`;
           const quantity = this.el('div', {
-            position: 'absolute', top: '12px', right: '12px', minWidth: '29px',
-            padding: '5px 7px', border: '1px solid #f1d99e', borderRadius: '14px',
+            position: 'absolute', top: '9px', right: '9px', minWidth: '29px',
+            padding: '5px 7px', border: `1px solid ${quality.color}`, borderRadius: '14px',
             background: 'rgba(20,15,10,.94)', color: '#ffe6a8',
             font: 'bold 13px Georgia,serif', textAlign: 'center'
           });
           quantity.textContent = `×${matchingCards.length}`;
-          stack.append(art, name, quantity);
+          stack.append(art, quantity);
           stack.addEventListener('click', () => this.showFullCard(quality.id));
           this.content.appendChild(stack);
         }
@@ -2861,9 +2898,10 @@
         close.type = 'button'; close.textContent = '×';
         close.addEventListener('click', () => overlay.remove());
         const full = this.el('img', {
-          display: 'block', width: 'min(88vw, 420px)', maxHeight: '82dvh',
-          objectFit: 'contain', border: `2px solid ${quality.color}`, borderRadius: '9px',
-          boxShadow: '0 14px 44px rgba(0,0,0,.8)'
+          display: 'block', width: 'auto', height: 'auto',
+          maxWidth: 'min(88vw, 440px)', maxHeight: '84dvh',
+          objectFit: 'contain', border: `3px solid ${quality.color}`, borderRadius: '9px',
+          boxShadow: `0 14px 44px rgba(0,0,0,.8), 0 0 16px ${quality.color}66`
         });
         full.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
         full.alt = `Carta completa da Donzela Slime — ${quality.name}`;
@@ -5453,10 +5491,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v30">
+  <script id="conquistador-v31">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 30,
-    feature: 'Pilha de cartas por qualidade',
+    version: 31,
+    feature: 'Cartas completas e descrição lateral no bestiário',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
