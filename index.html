@@ -1893,6 +1893,8 @@
             this.showGiftFeedback(msg);
           } else if (result.reason === 'max-level') {
             this.showGiftFeedback('A intimidade da Donzela Slime já está no nível máximo.');
+          } else if (result.reason === 'locked') {
+            this.showGiftFeedback('Derrote 20 Slimes para conquistar a Donzela Slime.');
           } else {
             this.showGiftFeedback('Não há Rosas disponíveis para presentear.');
           }
@@ -2458,7 +2460,22 @@
           ...oldBestiary,
           monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
         };
-        this.api.progress.update('flags', flags);
+        if (event.monsterId === 'slime' && this.killCounts.slime >= 20) {
+          const currentWaifus = this.api.progress.get('waifus') || {};
+          const waifus = currentWaifus && typeof currentWaifus === 'object' ? { ...currentWaifus } : {};
+          const unlocked = Array.isArray(waifus.unlocked) ? waifus.unlocked.slice() : [];
+          if (!unlocked.includes('slime')) {
+            unlocked.push('slime');
+            waifus.unlocked = unlocked;
+            if (typeof this.api.progress.updateBatch === 'function') {
+              this.api.progress.updateBatch({ flags, waifus });
+              this.api.events.emit('waifu:unlocked', { waifuId: 'slime', name: 'Donzela Slime' });
+            } else {
+              this.api.progress.update('flags', flags);
+              this.api.progress.update('waifus', waifus);
+            }
+          } else this.api.progress.update('flags', flags);
+        } else this.api.progress.update('flags', flags);
         this.refresh();
       }
 
@@ -2960,6 +2977,18 @@
       { id: 'rainha', name: 'Rainha', chance: 0.01, color: '#b65bff' }
     ];
 
+    // Catálogo extensível: presentes, curva e habilidades ficam declarados por waifu.
+    const WAIFU_DEFINITIONS = Object.freeze({
+      slime: Object.freeze({
+        id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
+        activeSkill: Object.freeze({ id: 'acid_slime', name: 'Gosma Ácida', damage: 12, description: 'Causa 12 de dano fixo.' }),
+        passives: Object.freeze([
+          Object.freeze({ id: 'slime_skin', name: 'Pele de Gosma', description: '+1 Defesa', stats: Object.freeze({ defense: 1 }) }),
+          Object.freeze({ id: 'slime_body', name: 'Corpo de Slime', description: '+10 HP máximo', stats: Object.freeze({ maxHp: 10 }) })
+        ])
+      })
+    });
+
     class WaifuDropSystem {
       constructor(api, options = {}) {
         if (!api || !api.events || !api.progress || !api.data || !options.scene) {
@@ -2977,8 +3006,43 @@
         this.api.events.on('monster:died', this.onDeath);
         this.onGiftUse = event => this.useGift(event);
         this.api.events.on('waifu:gift-use', this.onGiftUse);
+        this.onProgressChanged = event => {
+          if (event && event.section === 'waifus') this.applyWaifuPassives();
+        };
+        this.api.events.on('progress:changed', this.onProgressChanged);
+        this.api.events.on('progress:batch-changed', this.onProgressChanged);
+        this.applyWaifuPassives();
         this.scene.events.on('update', this.onUpdate);
         this.scene.events.once('shutdown', this.onShutdown);
+      }
+
+      getWaifuDefinition(waifuId) { return WAIFU_DEFINITIONS[waifuId] || null; }
+
+      getIntimacy(waifuId) {
+        const data = this.api.progress.get('waifus') || {};
+        const saved = data.intimacy && data.intimacy[waifuId];
+        return saved && typeof saved === 'object'
+          ? { level: Math.max(1, Math.min(100, Math.floor(Number(saved.level) || 1))), xp: Math.max(0, Number(saved.xp) || 0), totalXp: Math.max(0, Number(saved.totalXp) || 0) }
+          : { level: 1, xp: 0, totalXp: 0 };
+      }
+
+      applyWaifuPassives() {
+        const definition = WAIFU_DEFINITIONS.slime;
+        if (!definition || !this.api.status || typeof this.api.status.addModifier !== 'function') return false;
+        const waifuData = this.api.progress.get('waifus') || {};
+        const unlocked = Array.isArray(waifuData.unlocked) && waifuData.unlocked.includes('slime');
+        if (!unlocked) {
+          this.api.status.removeModifier('player', 'waifu:slime:intimacy');
+          return false;
+        }
+        const intimacy = this.getIntimacy('slime');
+        const stats = {};
+        // Habilidades passivas informadas pelo usuário: valores fixos, sem escalonamento inventado.
+        for (const passive of definition.passives) {
+          for (const [key, value] of Object.entries(passive.stats)) stats[key] = (stats[key] || 0) + value;
+        }
+        if (intimacy.level < 1) return false;
+        return this.api.status.addModifier('player', { id: 'waifu:slime:intimacy', stats });
       }
 
       rollQuality(randomValue = Math.random()) {
@@ -3034,7 +3098,14 @@
       }
 
       useGift(event) {
-        if (!this.active || !event || event.itemId !== 'rose' || event.waifuId !== 'slime') return false;
+        if (!this.active || !event) return false;
+        const definition = this.getWaifuDefinition(event.waifuId);
+        if (!definition || event.itemId !== definition.gift) return false;
+        const currentWaifuData = this.api.progress.get('waifus') || {};
+        if (!Array.isArray(currentWaifuData.unlocked) || !currentWaifuData.unlocked.includes(definition.id)) {
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'locked', waifuId: definition.id });
+          return false;
+        }
         const currentItems = this.api.progress.get('items');
         const items = Array.isArray(currentItems) ? currentItems.map(item => ({ ...item })) : [];
         const rose = items.find(item => item && item.id === 'rose' && Number(item.quantity) > 0);
@@ -3047,38 +3118,40 @@
         const waifus = current && typeof current === 'object' ? { ...current } : {};
         const intimacy = waifus.intimacy && typeof waifus.intimacy === 'object'
           ? { ...waifus.intimacy } : {};
-        const slime = intimacy.slime && typeof intimacy.slime === 'object'
-          ? { ...intimacy.slime } : { level: 1, xp: 0, totalXp: 0 };
-        let level = Math.max(1, Math.min(100, Math.floor(Number(slime.level) || 1)));
-        let xp = Math.max(0, Number(slime.xp) || 0);
-        let totalXp = Math.max(0, Number(slime.totalXp) || 0);
+        const saved = intimacy[definition.id] && typeof intimacy[definition.id] === 'object'
+          ? intimacy[definition.id] : { level: 1, xp: 0, totalXp: 0 };
+        let level = Math.max(1, Math.min(100, Math.floor(Number(saved.level) || 1)));
+        let xp = Math.max(0, Number(saved.xp) || 0);
+        let totalXp = Math.max(0, Number(saved.totalXp) || 0);
         if (level >= 100) {
-          this.api.events.emit('waifu:gift-result', { success: false, reason: 'max-level', waifuId: 'slime', level, xp });
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'max-level', waifuId: definition.id, level, xp });
           return false;
         }
 
         rose.quantity = Math.max(0, Math.floor(Number(rose.quantity) || 0) - 1);
         const remainingItems = items.filter(item => item && (item.id !== 'rose' || item.quantity > 0));
-        xp += 10;
-        totalXp += 10;
+        const xpGained = definition.xpPerGift;
+        xp += xpGained;
+        totalXp += xpGained;
         const gainedLevels = [];
         while (level < 100 && xp >= level * 10) {
           xp -= level * 10;
           level += 1;
           gainedLevels.push(level);
         }
-        slime.level = level;
-        slime.xp = xp;
-        slime.totalXp = totalXp;
-        intimacy.slime = slime;
+        saved.level = level;
+        saved.xp = xp;
+        saved.totalXp = totalXp;
+        intimacy[definition.id] = saved;
         waifus.intimacy = intimacy;
 
-        const itemResult = this.api.progress.update('items', remainingItems);
-        const waifuResult = this.api.progress.update('waifus', waifus);
-        const success = (itemResult === 'pending' || itemResult === true) &&
-          (waifuResult === 'pending' || waifuResult === true);
+        // Commit inventário + intimidade em uma única atualização do save.
+        const batchResult = typeof this.api.progress.updateBatch === 'function'
+          ? this.api.progress.updateBatch({ items: remainingItems, waifus }) : false;
+        const success = batchResult === 'pending' || batchResult === true;
+        if (success) this.applyWaifuPassives();
         this.api.events.emit('waifu:gift-result', {
-          success, waifuId: 'slime', itemId: 'rose', xpGained: 10,
+          success, waifuId: definition.id, itemId: definition.gift, xpGained,
           level, xp, totalXp, gainedLevels
         });
         return success;
@@ -3126,6 +3199,8 @@
         this.active = false;
         this.api.events.off('monster:died', this.onDeath);
         this.api.events.off('waifu:gift-use', this.onGiftUse);
+        this.api.events.off('progress:changed', this.onProgressChanged);
+        this.api.events.off('progress:batch-changed', this.onProgressChanged);
         if (this.scene && this.scene.events) {
           this.scene.events.off('update', this.onUpdate);
           this.scene.events.off('shutdown', this.onShutdown);
@@ -3147,6 +3222,7 @@
         this.createUI();
         this.unsubs = [
           api.events.on('progress:changed', event => { if (event && event.section === 'waifus') this.refresh(); }),
+          api.events.on('progress:batch-changed', event => { if (event && event.data && event.data.waifus) this.refresh(); }),
           api.events.on('save:written', () => this.refresh()),
           api.events.on('waifu:card-collected', () => this.refresh())
         ];
@@ -3216,6 +3292,27 @@
         this.content.replaceChildren();
         const data = this.api.progress.get('waifus') || {};
         const cards = Array.isArray(data.cards) ? data.cards : [];
+        const intimacy = data.intimacy && data.intimacy.slime ? data.intimacy.slime : { level: 1, xp: 0, totalXp: 0 };
+        const intimacyLevel = Math.max(1, Math.min(100, Math.floor(Number(intimacy.level) || 1)));
+        const intimacyXp = Math.max(0, Number(intimacy.xp) || 0);
+        const intimacyThreshold = intimacyLevel >= 100 ? 1 : intimacyLevel * 10;
+        const progress = intimacyLevel >= 100 ? 1 : Math.max(0, Math.min(1, intimacyXp / intimacyThreshold));
+        const intimacyPanel = this.el('section', {
+          gridColumn: '1/-1', padding: '12px 14px', marginBottom: '2px',
+          borderTop: '1px solid rgba(205,183,137,.55)', borderBottom: '1px solid rgba(205,183,137,.35)',
+          background: 'rgba(20,16,14,.24)', color: '#f3e4c5', font: '13px/1.45 Georgia,serif'
+        });
+        const intimacyTitle = this.el('div', { display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 'bold' });
+        const intimacyName = this.el('span'); intimacyName.textContent = `Donzela Slime · Intimidade ${intimacyLevel}`;
+        const intimacyValue = this.el('span', { color: '#e9c77d' }); intimacyValue.textContent = intimacyLevel >= 100 ? 'MÁXIMO' : `${intimacyXp}/${intimacyThreshold} EXP`;
+        intimacyTitle.append(intimacyName, intimacyValue);
+        const intimacyTrack = this.el('div', { height: '7px', margin: '7px 0 9px', borderRadius: '8px', overflow: 'hidden', background: 'rgba(0,0,0,.55)', border: '1px solid rgba(205,183,137,.4)' });
+        const intimacyFill = this.el('div', { width: `${progress * 100}%`, height: '100%', background: 'linear-gradient(90deg,#9c4560,#e7b978)', boxShadow: '0 0 8px rgba(231,185,120,.45)' });
+        intimacyTrack.appendChild(intimacyFill);
+        const skillInfo = this.el('div', { color: 'rgba(240,225,198,.9)', font: '12px/1.55 Georgia,serif' });
+        skillInfo.textContent = 'Ativa: Gosma Ácida — 12 de dano fixo.  Passivas: Pele de Gosma (+1 Defesa) · Corpo de Slime (+10 HP máximo).';
+        intimacyPanel.append(intimacyTitle, intimacyTrack, skillInfo);
+        this.content.appendChild(intimacyPanel);
         if (!cards.length) {
           const empty = this.el('div', {
             gridColumn: '1/-1', padding: '50px 18px', color: 'rgba(221,208,185,.75)',
@@ -4332,6 +4429,11 @@
             if (!event || !['pets', 'waifus', 'flags', 'dungeons', 'items'].includes(event.section)) return;
             this.saveSystem.setProgressData({ [event.section]: event.data });
             this.scheduleExtensionSave();
+          }),
+          this.eventBus.on('progress:batch-changed', event => {
+            if (!event || !event.data || typeof event.data !== 'object') return;
+            this.saveSystem.setProgressData(event.data);
+            this.scheduleExtensionSave();
           })
         ];
         this.events.once('shutdown', () => {
@@ -4371,6 +4473,14 @@
               const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items'];
               if (!allowed.includes(section)) return false;
               const delivered = this.eventBus.emit('progress:changed', { section, data });
+              return delivered > 0 ? 'pending' : false;
+            },
+            updateBatch: data => {
+              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items'];
+              if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+              const entries = Object.entries(data);
+              if (!entries.length || entries.some(([section]) => !allowed.includes(section))) return false;
+              const delivered = this.eventBus.emit('progress:batch-changed', { data });
               return delivered > 0 ? 'pending' : false;
             }
           }),
@@ -6685,7 +6795,7 @@
     }
   })();
   </script>
-  <script id="conquistador-v45">
+  <script id="conquistador-v46">
   window.CONQUISTADOR_V45 = Object.freeze({
     version: 45,
     feature: 'Velocidade de ataque em ataques por segundo: 1 = 1 ataque por segundo',
