@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V45</title>
+<title>CONQUISTADOR DE WAIFU'S — V60</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -6047,7 +6047,11 @@
             this.player.x - spawnReference.x,
             this.player.y - spawnReference.y
           );
-          if (moved <= 2) return false;
+          // A confirmed walkable spawn is already safe. Requiring movement
+          // creates a deadlock when input or the update loop is stalled.
+          const safeAtCurrentPosition =
+            this.isPlayerBodyPositionWalkable(this.player.x, this.player.y);
+          if (moved <= 2 && !safeAtCurrentPosition) return false;
         }
         // Malformed records have no usable original coordinate. One completed
         // frame at a confirmed walkable position is the minimum release gate.
@@ -7004,7 +7008,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V59';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V60';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7040,6 +7044,14 @@
     recoveryInProgress=true;recoveries++;lastRecovery=Date.now();saveSafely();game=getGame();scene=getScene();
     console.warn('[CW59] recuperação do mundo:',reason,'tentativa',recoveries);
     try{
+      // Do not restart WorldScene while the invalid-save lock is active:
+      // create() would reload the same rejected save and repeat the deadlock.
+      if(scene?.invalidSavePreserved){
+        console.warn('[CW60] reinício suspenso: salvamento inválido ainda preservado');
+        recoveryInProgress=false;
+        notice('O salvamento está protegido. Use RECUPERAR SALVAMENTO para confirmar um ponto seguro.');
+        return;
+      }
       if(game?.loop?.wake)game.loop.wake();
       if(game?.loop?.start&&!game.loop.running)game.loop.start();
       if(scene?.physics?.world?.isPaused)scene.physics.world.resume();
@@ -7079,5 +7091,50 @@
 })();
 </script>
 
+
+<script id="conquistador-v60-save-unlock">
+(function(){
+  'use strict';
+  function addControl(){
+    if(document.getElementById('cw60-save-unlock')) return;
+    const btn=document.createElement('button');
+    btn.id='cw60-save-unlock';
+    btn.type='button';
+    btn.textContent='RECUPERAR SALVAMENTO';
+    Object.assign(btn.style,{position:'fixed',left:'12px',bottom:'calc(env(safe-area-inset-bottom) + 12px)',zIndex:'2147483646',padding:'12px 14px',background:'#40331f',color:'#fff0c8',border:'1px solid #d4b66f',borderRadius:'9px',font:'bold 12px Georgia',boxShadow:'0 3px 12px #0009',touchAction:'manipulation'});
+    const panel=document.createElement('div');
+    Object.assign(panel.style,{position:'fixed',left:'12px',bottom:'calc(env(safe-area-inset-bottom) + 62px)',zIndex:'2147483646',maxWidth:'min(330px, calc(100vw - 24px))',padding:'10px 12px',display:'none',background:'#211d18',color:'#f5e8c8',border:'1px solid #b99a5d',borderRadius:'8px',font:'12px/1.45 Georgia'});
+    function report(message,ok){panel.textContent=message;panel.style.display='block';panel.style.borderColor=ok?'#8caf70':'#d4b66f';}
+    btn.addEventListener('click',function(){
+      btn.disabled=true;
+      try{
+        const game=window.CONQUISTADOR_V13?.game;
+        const scene=game?.scene?.getScene?.('WorldScene');
+        if(!scene||!scene.player||!scene.saveSystem){report('A cena ainda não está pronta. Aguarde e tente novamente.',false);btn.disabled=false;return;}
+        if(!scene.isPlayerBodyPositionWalkable(scene.player.x,scene.player.y)){report('A posição atual não é segura. O salvamento original foi preservado.',false);btn.disabled=false;return;}
+        if(scene.invalidSavePreserved){
+          if(scene.invalidSaveNeedsBackup||!scene.saveSystem.backupConfirmed){
+            const raw=scene.invalidSavedPlayerRaw;
+            const backedUp=raw!=null&&scene.backupInvalidPlayerSave(raw);
+            if(!backedUp){report('Não foi possível confirmar o backup. O bloqueio foi mantido; nenhum dado foi apagado.',false);btn.disabled=false;return;}
+            scene.invalidSaveNeedsBackup=false;
+          }
+          scene._hasCompletedPostSpawnFrame=true;
+          scene.invalidSaveReleaseRetryAt=0;
+          if(!scene.releaseInvalidSaveIfSafe()){report('Backup preservado, mas a gravação segura não foi confirmada. O save original continua protegido.',false);btn.disabled=false;return;}
+        }else{
+          scene._hasCompletedPostSpawnFrame=true;
+          const result=scene.savePlayerPositionSafely(true);
+          if(result!==true&&result!=='already-saved'){report('A gravação não foi confirmada. Nenhum dado foi removido.',false);btn.disabled=false;return;}
+        }
+        report('Salvamento recuperado em posição segura. Recarregue a página uma vez para iniciar com o save corrigido.',true);
+        btn.textContent='SALVAMENTO RECUPERADO';btn.disabled=true;
+      }catch(error){console.error('[CW60] recuperação do save falhou',error);report('Falha na recuperação. O salvamento original foi mantido.',false);btn.disabled=false;}
+    });
+    document.body.append(panel,btn);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addControl,{once:true});else addControl();
+})();
+</script>
 </body>
 </html>
