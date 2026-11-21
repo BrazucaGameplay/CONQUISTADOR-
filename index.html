@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V65</title>
+<title>CONQUISTADOR DE WAIFU'S — V67</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -313,9 +313,17 @@
       addModifier(entityId, modifier) {
         const record = this.records.get(entityId);
         if (!record || !modifier || typeof modifier.id !== 'string' || !modifier.id) return false;
-        record.modifiers = record.modifiers.filter(item => item.id !== modifier.id);
         const stats = {};
-        for (const key of STATUS_KEYS) if (Number.isFinite(modifier.stats && modifier.stats[key])) stats[key] = modifier.stats[key];
+        for (const key of STATUS_KEYS) {
+          if (Number.isFinite(modifier.stats && modifier.stats[key])) stats[key] = modifier.stats[key];
+        }
+        const existing = record.modifiers.find(item => item.id === modifier.id);
+        const same = !!existing && STATUS_KEYS.every(key =>
+          (Number.isFinite(existing.stats && existing.stats[key]) ? existing.stats[key] : 0) ===
+          (Number.isFinite(stats[key]) ? stats[key] : 0)
+        );
+        if (same) return false;
+        record.modifiers = record.modifiers.filter(item => item.id !== modifier.id);
         record.modifiers.push({ id: modifier.id, stats });
         this.emitChanged(entityId, 'modifier-added');
         return true;
@@ -740,8 +748,9 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'max(16px, env(safe-area-inset-left))';
-        autoAttackBadge.style.bottom = 'max(18px, env(safe-area-inset-bottom))';
+        autoAttackBadge.style.left = 'auto';
+        autoAttackBadge.style.right = '70px';
+        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 96px))';
         autoAttackBadge.style.zIndex = '30';
         autoAttackBadge.style.width = '56px';
         autoAttackBadge.style.height = '56px';
@@ -1006,8 +1015,8 @@
         const levelLabel = this.scene.add.text(x, y - (definition.displayHeight || 24) * 0.86 - 4, String(level), {
           fontFamily: 'system-ui, sans-serif',
           fontSize: '8px',
-          fontStyle: 'bold',
-          color: level === 2 ? '#ffd27a' : '#f1f4ed',
+          fontStyle: 'normal',
+          color: '#f1f4ed',
           stroke: '#17251b',
           strokeThickness: 2,
           align: 'center'
@@ -3402,7 +3411,7 @@
             gridColumn: '1/-1', padding: '50px 18px', color: 'rgba(221,208,185,.75)',
             textAlign: 'center', font: 'italic 15px/1.5 Georgia,serif'
           });
-          empty.textContent = 'Sua coleção ainda está vazia. Derrote Slimes para encontrar a primeira carta.';
+          empty.textContent = 'Sua coleção ainda está vazia. Derrote monstros para encontrar cartas.';
           this.content.appendChild(empty);
           return;
         }
@@ -4507,7 +4516,7 @@
         this._systemSaveUnsubs = [
           this.eventBus.on('save:request', () => this.scheduleExtensionSave()),
           this.eventBus.on('status:changed', event => {
-            if (event && event.entityId === 'player' && event.reason !== 'regeneration') {
+            if (event && event.entityId === 'player' && event.reason !== 'regeneration' && event.reason !== 'modifier-added') {
               this.scheduleExtensionSave();
             }
           }),
@@ -5128,7 +5137,7 @@
 
             if (!grouped.length) {
               const empty = statusDoc.createElement('div');
-              empty.textContent = 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
+              empty.textContent = 'Você ainda não possui cartas. Derrote monstros para encontrá-las.';
               Object.assign(empty.style, {
                 gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center',
                 color: '#d6c8ad', lineHeight: '1.5'
@@ -7028,8 +7037,8 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 9px);transform:translateX(-50%);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;width:max-content;height:38px;pointer-events:none;overflow:visible;z-index:5}
-    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 38px;width:38px;height:38px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c}
+    #conquistador-active-skills-v53{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53 button{position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c;transform:translate(-50%,-50%) translate(var(--skill-x),var(--skill-y))}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
     @keyframes cw53gel{0%,100%{transform:translateY(1px) scale(.92)}50%{transform:translateY(-2px) scale(1.12)}}
@@ -7040,8 +7049,9 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Three skills form a centered row directly above the auto-attack control.
-    for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
+    // Three skills are evenly distributed around the attack control; the attack anchor is inset from screen edges.
+    const radial=[[0,-50],[43,25],[-43,25]];
+    for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';b.style.setProperty('--skill-x',radial[i][0]+'px');b.style.setProperty('--skill-y',radial[i][1]+'px');const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
   function cleanup(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}if(bootTimer){clearTimeout(bootTimer);bootTimer=null;}unsubscribers.forEach(fn=>{try{fn();}catch(_){}});unsubscribers=[];}
@@ -7050,7 +7060,7 @@
     cleanup();runtime=api;monsterSystem=combat;createHud();const level=api.levels?.snapshot?.('player')||{level:1};updateLevelScaling(level.level);refreshPassives();
     const refresh=()=>{if(refreshQueued)return;refreshQueued=true;Promise.resolve().then(()=>{refreshQueued=false;refreshPassives();render();});};
     unsubscribers.push(api.events.on('level:changed',e=>{if(e?.entityId==='player')updateLevelScaling(e.level);}));
-    ['progress:changed','progress:batch-changed','save:written','entity:removed','waifu:passives-updated'].forEach(name=>unsubscribers.push(api.events.on(name,refresh)));
+    ['progress:changed','progress:batch-changed','entity:removed','waifu:passives-updated'].forEach(name=>unsubscribers.push(api.events.on(name,refresh)));
     unsubscribers.push(api.events.on('status:changed',e=>{if(e?.entityId==='player')api.events.emit('player:status-ui-refresh',{status:api.status.getEffectiveSnapshot?.('player')||api.status.snapshot('player')});}));
     autoTimer=setInterval(()=>{const target=targetInRange();if(target){const eq=equippedWaifus();eq.forEach((w,i)=>{if(SKILLS[w]&&Date.now()>=nextCastAt[i])cast(i,false);});}render();},180);return true;
   }
@@ -7058,7 +7068,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V65';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V67';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
