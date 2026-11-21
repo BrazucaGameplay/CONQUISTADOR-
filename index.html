@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V74</title>
+<title>CONQUISTADOR DE WAIFU'S — V75</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -2186,6 +2186,14 @@
           nm.textContent = name;
           const meta = this.el('div', { font:'bold 11px Georgia,serif', textAlign:'center' });
           meta.textContent = qinfo.name + ' · Nv. ' + g.level + (g.cards.length > 1 ? ' · x' + g.cards.length : '');
+          if (g.quality === 'rainha') {
+            Object.assign(choice.style, {
+              border: '3px solid #ff2e88', outline: '2px solid #ffd700', outlineOffset: '-6px',
+              background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)',
+              boxShadow: '0 0 18px #ff2e88cc, 0 0 26px #ffd70088'
+            });
+            nm.textContent = '👑 ' + name;
+          }
           choice.append(art, nm, meta);
           choice.addEventListener('click', () => {
             shade.remove(); this.giftPicker = null;
@@ -3478,12 +3486,20 @@
             overflow: 'hidden'
           });
           stack.type = 'button';
+          // V75 RAINHA ESPECIAL: borda dupla rosa + ouro, brilho forte, faixa 👑
+          if (quality.id === 'rainha') {
+            Object.assign(stack.style, {
+              border: '3px solid #ff2e88', outline: '2px solid #ffd700', outlineOffset: '-7px',
+              background: 'linear-gradient(160deg, rgba(90,10,55,.98), rgba(40,5,30,.98) 55%, rgba(80,10,50,.98))',
+              boxShadow: '0 0 0 2px #ff2e88, 0 0 22px #ff2e88cc, 0 0 32px #ffd70088, 0 8px 18px rgba(0,0,0,.7)'
+            });
+          }
           const qualityName = this.el('div', {
             flex: '0 0 auto', minHeight: '15px', textAlign: 'center',
             color: quality.color, font: 'bold 11px/1.2 Georgia,serif',
             textShadow: '0 1px 3px #000'
           });
-          qualityName.textContent = quality.name;
+          qualityName.textContent = quality.id === 'rainha' ? '👑 RAINHA · ESPECIAL' : quality.name;
           const stars = this.el('div', {
             flex: '0 0 auto', minHeight: '12px', textAlign: 'center',
             color: quality.color, font: 'bold 10px/1 Georgia,serif',
@@ -3628,6 +3644,15 @@
           textShadow: '0 2px 4px #000'
         });
         titlePlate.textContent = `${speciesName} · Nv. ${level}`;
+        // V75 RAINHA ESPECIAL na carta grande
+        if (quality.id === 'rainha') {
+          Object.assign(cardFrame.style, {
+            border: '4px solid #ff2e88', outline: '2px solid #ffd700', outlineOffset: '3px',
+            background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)',
+            boxShadow: '0 0 0 3px #ff2e88, 0 0 28px #ff2e88dd, 0 0 44px #ffd70099, 0 16px 40px rgba(0,0,0,.85)'
+          });
+          topPlate.textContent = '👑 RAINHA · ESPECIAL 👑 · ' + '★'.repeat(5);
+        }
         cardFrame.append(topPlate, art, titlePlate);
         const quantity = this.el('div', {
           color: '#e9d8b7', font: '14px Georgia,serif', textAlign: 'center'
@@ -4841,19 +4866,21 @@
           const statusEntry = statusDoc.createElement('button');
           statusEntry.type = 'button';
           statusEntry.setAttribute('aria-label', 'Abrir status do jogador');
+          // V75: sem circulo, sem borda, sem fundo — so a silhueta do personagem.
           Object.assign(statusEntry.style, {
-            width: '72px', height: '72px', padding: '3px',
-            border: '2px solid #d4b16b', borderRadius: '50%',
-            background: 'linear-gradient(145deg,#493727,#151018)',
-            boxShadow: '0 0 12px rgba(214,174,94,.55), 0 4px 12px rgba(0,0,0,.65)',
-            overflow: 'hidden', pointerEvents: 'auto', cursor: 'pointer',
+            width: '72px', height: '72px', padding: '0',
+            border: '0', borderRadius: '0',
+            background: 'transparent',
+            boxShadow: 'none',
+            overflow: 'visible', pointerEvents: 'auto', cursor: 'pointer',
             touchAction: 'manipulation'
           });
           const portrait = statusDoc.createElement('canvas');
           portrait.width = 96; portrait.height = 96;
           Object.assign(portrait.style, {
             width: '100%', height: '100%', display: 'block',
-            imageRendering: 'pixelated', borderRadius: '50%'
+            imageRendering: 'pixelated', borderRadius: '0',
+            filter: 'drop-shadow(0 3px 3px rgba(0,0,0,.7))'
           });
           statusEntry.appendChild(portrait);
           const hpTrack = statusDoc.createElement('div');
@@ -5196,6 +5223,15 @@
                   color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center',
                   textShadow: '0 1px 3px #000'
                 });
+                // V75 RAINHA ESPECIAL no slot equipado
+                if (card.quality === 'rainha') {
+                  Object.assign(slot.style, {
+                    border: '3px solid #ff2e88', outline: '2px solid #ffd700', outlineOffset: '-6px',
+                    background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)',
+                    boxShadow: '0 0 0 2px #ff2e88, 0 0 20px #ff2e88cc, 0 0 30px #ffd70088'
+                  });
+                  qualityName.textContent = '👑 RAINHA';
+                }
                 slot.append(art, qualityName, levelName);
                 const removeMark = statusDoc.createElement('span');
                 removeMark.textContent = '×';
@@ -5293,6 +5329,14 @@
                 cursor: unavailable ? 'not-allowed' : 'pointer', touchAction: 'manipulation',
                 opacity: unavailable ? '.42' : '1', display: 'flex', flexDirection: 'column', gap: '5px'
               });
+              // V75 RAINHA ESPECIAL no picker
+              if (card.quality === 'rainha') {
+                Object.assign(item.style, {
+                  border: '3px solid #ff2e88', outline: '2px solid #ffd700', outlineOffset: '-7px',
+                  background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)',
+                  boxShadow: '0 0 18px #ff2e88cc, 0 0 28px #ffd70088'
+                });
+              }
               const art = statusDoc.createElement('img');
               art.src = window.CONQUISTADOR_WAIFU_ART || '';
               art.alt = 'Carta completa da Donzela Slime';
@@ -7209,7 +7253,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V74';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V75';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7296,7 +7340,7 @@
 
 <!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
 
-<script id="conquistador-v74-hud">
+<script id="conquistador-v75-hud">
 (function(){
   'use strict';
   function apply(){
@@ -7324,7 +7368,7 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ apply(); setInterval(apply, 1000); }, {once:true});
   else { apply(); setInterval(apply, 1000); }
-  window.CONQUISTADOR_V74_HUD={version:74, apply:apply};
+  window.CONQUISTADOR_V75_HUD={version:75, apply:apply};
 })();
 </script>
 </body>
