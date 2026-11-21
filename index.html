@@ -2509,55 +2509,23 @@
         const overlay = this.el('div', {
           position: 'absolute', inset: '0', zIndex: '5', display: 'flex',
           alignItems: 'center', justifyContent: 'center', padding: '14px',
-          background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(3px)'
-        });
-        const panel = this.el('section', {
-          position: 'relative', width: 'min(100%, 420px)', maxHeight: '100%',
-          overflowY: 'auto', padding: '14px', border: '2px solid #b65bff',
-          borderRadius: '10px', background: 'linear-gradient(180deg, #30213c, #110f16)',
-          boxShadow: '0 12px 40px rgba(0,0,0,.8)', color: '#f2e4c7',
-          font: '14px/1.45 Georgia,serif'
+          background: 'rgba(0,0,0,.86)', backdropFilter: 'blur(3px)'
         });
         const close = this.el('button', {
-          position: 'absolute', right: '9px', top: '8px', width: '34px',
-          height: '34px', border: '1px solid #bda0d0', borderRadius: '50%',
-          background: '#211728', color: '#fff', font: '23px Arial', cursor: 'pointer'
+          position: 'absolute', right: '12px', top: '12px', width: '38px',
+          height: '38px', border: '1px solid #c6a86c', borderRadius: '50%',
+          background: '#211b17', color: '#fff', font: '25px Arial', zIndex: '2'
         });
         close.type = 'button'; close.textContent = '×';
         close.addEventListener('click', () => overlay.remove());
-        const title = this.el('div', {
-          padding: '3px 40px 12px 0', color: '#f5d9ff',
-          font: 'bold 22px Georgia,serif', textAlign: 'center'
-        });
-        title.textContent = 'Donzela Slime';
         const art = this.el('img', {
-          display: 'block', width: 'min(100%, 260px)', maxHeight: '34vh',
-          objectFit: 'cover', objectPosition: 'center 18%', margin: '0 auto 12px',
-          border: '2px solid #b65bff', borderRadius: '7px'
+          display: 'block', width: 'min(88vw, 390px)', maxHeight: '82%',
+          objectFit: 'contain', margin: 'auto', border: '2px solid #c6a86c',
+          borderRadius: '9px', boxShadow: '0 14px 44px rgba(0,0,0,.8)'
         });
-        art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || ''; art.alt = 'Donzela Slime';
-        const addSection = (headingText, bodyText) => {
-          const heading = this.el('div', {
-            color: '#d9b5f2', font: 'bold 15px Georgia,serif', margin: '12px 0 3px'
-          });
-          heading.textContent = headingText;
-          const body = this.el('div', { color: '#eee2f5' });
-          body.textContent = bodyText;
-          panel.append(heading, body);
-        };
-        panel.append(close, title, art);
-        addSection('Descrição', entry.description || 'Uma donzela de slime que habita as cavernas.');
-        addSection('Habilidade Ativa', entry.activeSkill || 'Fusão Viscosa');
-        const passiveTitle = this.el('div', {
-          color: '#d9b5f2', font: 'bold 15px Georgia,serif', margin: '12px 0 3px'
-        });
-        passiveTitle.textContent = 'Bônus Passivos';
-        const passives = this.el('ul', { margin: '3px 0 4px', paddingLeft: '22px', color: '#eee2f5' });
-        for (const bonus of entry.passiveBonuses || []) {
-          const li = this.el('li', { marginBottom: '3px' }); li.textContent = bonus; passives.appendChild(li);
-        }
-        panel.append(passiveTitle, passives);
-        overlay.appendChild(panel);
+        art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || '';
+        art.alt = 'Carta completa da Donzela Slime';
+        overlay.append(close, art);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
         this.backdrop.appendChild(overlay); this.detailOverlay = overlay;
       }
@@ -2594,8 +2562,6 @@
               id: 'slime', name: 'Donzela Slime', icon: '♥',
               image: root.CONQUISTADOR_WAIFU_ART || '',
               description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
-              activeSkill: 'Fusão Viscosa — envolve os inimigos em uma massa gelatinosa, causando dano e reduzindo sua mobilidade.',
-              passiveBonuses: ['Vitalidade aprimorada', 'Força viscosa', 'Resistência gelatinosa', 'Agilidade fluida'],
               known: ((this.api.progress.get('waifus') || {}).cards || []).length > 0,
               qualityColor: '#b65bff', detail: true
             }]
@@ -2688,7 +2654,7 @@
       handleMonsterDeath(event) {
         if (!this.active || !event || event.killerId !== 'player' || event.monsterId !== 'slime') return false;
         if (Math.random() >= 0.20) return false;
-        const quality = this.rollQuality(Math.random());
+        const quality = this.rollQuality();
         const x = (event.tile.x + 0.5) * this.tileSize;
         const y = (event.tile.y + 0.5) * this.tileSize;
         const id = `waifu-drop-${Date.now()}-${this.sequence++}`;
@@ -2832,31 +2798,78 @@
           this.content.appendChild(empty);
           return;
         }
-        const colors = { plebeia: '#a9a9a9', dama: '#55a8e8', condessa: '#b16ce2', duquesa: '#e6b84f', rainha: '#b65bff' };
-        const names = { plebeia: 'Plebeia', dama: 'Dama', condessa: 'Condessa', duquesa: 'Duquesa', rainha: 'Rainha' };
-        for (let reverseIndex = cards.length - 1; reverseIndex >= 0; reverseIndex--) {
-          const cardData = cards[reverseIndex];
-          const color = colors[cardData.quality] || colors.plebeia;
-          const card = this.el('article', {
-            minWidth: '0', maxWidth: '118px', justifySelf: 'center', overflow: 'hidden', border: `2px solid ${color}`,
-            borderRadius: '9px', background: 'linear-gradient(180deg,#30251e,#100e0d)',
-            boxShadow: `0 0 12px ${color}55, inset 0 0 12px #000`
-          });
-          const art = this.el('img', {
-            display: 'block', width: '100%', height: '130px', aspectRatio: '0.72', objectFit: 'cover',
-            objectPosition: 'center 24%', background: '#15101d'
-          });
-          art.src = (root.CONQUISTADOR_WAIFU_DROP_ART && root.CONQUISTADOR_WAIFU_DROP_ART[cardData.quality]) || root.CONQUISTADOR_WAIFU_ART || '';
-          art.alt = 'Carta ilustrada da Slime Waifu';
-          const label = this.el('div', { padding: '8px 5px 10px', textAlign: 'center' });
-          const name = this.el('div', { color: '#f2e4c7', font: 'bold 14px Georgia,serif' });
-          name.textContent = 'Slime Waifu';
-          const quality = this.el('div', { color, font: 'bold 12px Georgia,serif', marginTop: '4px' });
-          quality.textContent = names[cardData.quality] || 'Plebeia';
-          const serial = this.el('div', { color: '#a99b84', font: '10px Georgia,serif', marginTop: '3px' });
-          serial.textContent = `Carta ${reverseIndex + 1}`;
-          label.append(name, quality, serial); card.append(art, label); this.content.appendChild(card);
+
+        // Cada pilha representa uma qualidade. Cartas da mesma qualidade
+        // são idênticas; qualidades diferentes continuam separadas.
+        const artByQuality = root.CONQUISTADOR_WAIFU_DROP_ART || {};
+        const grouped = new Map(QUALITY.map(quality => [quality.id, []]));
+        for (const card of cards) {
+          const qualityId = grouped.has(card && card.quality) ? card.quality : 'plebeia';
+          grouped.get(qualityId).push(card);
         }
+
+        for (const quality of QUALITY) {
+          const matchingCards = grouped.get(quality.id) || [];
+          if (!matchingCards.length) continue;
+          const stack = this.el('button', {
+            position: 'relative', width: 'min(100%, 150px)', justifySelf: 'center',
+            padding: '7px', border: `2px solid ${quality.color}`, borderRadius: '9px',
+            background: 'linear-gradient(180deg,#30251e,#100e0d)',
+            boxShadow: '0 0 12px rgba(198,168,108,.22), inset 0 0 12px #000',
+            color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation'
+          });
+          stack.type = 'button';
+          const art = this.el('img', {
+            display: 'block', width: '100%', height: '164px', aspectRatio: '0.72',
+            objectFit: 'cover', objectPosition: 'center 24%', background: '#15101d',
+            borderRadius: '5px'
+          });
+          art.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
+          art.alt = `Carta da Donzela Slime — ${quality.name}`;
+          const name = this.el('div', {
+            padding: '8px 2px 2px', textAlign: 'center',
+            font: 'bold 14px Georgia,serif', color: quality.color
+          });
+          name.textContent = quality.name;
+          const quantity = this.el('div', {
+            position: 'absolute', top: '12px', right: '12px', minWidth: '29px',
+            padding: '5px 7px', border: '1px solid #f1d99e', borderRadius: '14px',
+            background: 'rgba(20,15,10,.94)', color: '#ffe6a8',
+            font: 'bold 13px Georgia,serif', textAlign: 'center'
+          });
+          quantity.textContent = `×${matchingCards.length}`;
+          stack.append(art, name, quantity);
+          stack.addEventListener('click', () => this.showFullCard(quality.id));
+          this.content.appendChild(stack);
+        }
+      }
+
+      showFullCard(qualityId = 'plebeia') {
+        if (this.cardOverlay) this.cardOverlay.remove();
+        const quality = QUALITY.find(item => item.id === qualityId) || QUALITY[0];
+        const artByQuality = root.CONQUISTADOR_WAIFU_DROP_ART || {};
+        const overlay = this.el('div', {
+          position: 'fixed', inset: '0', zIndex: '104', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: '16px',
+          background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(3px)'
+        });
+        const close = this.el('button', {
+          position: 'absolute', top: 'max(14px, env(safe-area-inset-top))',
+          right: '14px', width: '40px', height: '40px', border: '1px solid #c6a86c',
+          borderRadius: '50%', background: '#211b17', color: '#fff', font: '26px Arial'
+        });
+        close.type = 'button'; close.textContent = '×';
+        close.addEventListener('click', () => overlay.remove());
+        const full = this.el('img', {
+          display: 'block', width: 'min(88vw, 420px)', maxHeight: '82dvh',
+          objectFit: 'contain', border: `2px solid ${quality.color}`, borderRadius: '9px',
+          boxShadow: '0 14px 44px rgba(0,0,0,.8)'
+        });
+        full.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
+        full.alt = `Carta completa da Donzela Slime — ${quality.name}`;
+        overlay.append(close, full);
+        overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+        this.document.body.appendChild(overlay); this.cardOverlay = overlay;
       }
 
       setOpen(open) {
@@ -2871,6 +2884,7 @@
         for (const unsub of this.unsubs || []) unsub();
         if (this.openButton) this.openButton.remove();
         if (this.backdrop) this.backdrop.remove();
+        if (this.cardOverlay) this.cardOverlay.remove();
       }
     }
 
@@ -5439,10 +5453,11 @@
     }
   })();
   </script>
-  <script id="conquistador-v28">
-  window.CONQUISTADOR_V27 = Object.freeze({
-    version: 28,
-    feature: 'Galeria de Waifus e drops de cartas',
+  <script id="conquistador-v30">
+  window.CONQUISTADOR_V30 = Object.freeze({
+    version: 30,
+    feature: 'Pilha de cartas por qualidade',
+    gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
       qualities: Object.freeze({ plebeia: 0.90, dama: 0.04, condessa: 0.03, duquesa: 0.02, rainha: 0.01 })
