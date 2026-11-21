@@ -1,5 +1,5 @@
 // CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
-const CACHE = 'conquistador-v81';
+const CACHE = 'conquistador-v82';
 const FILES = [
   './',
   './index.html',
@@ -8,9 +8,13 @@ const FILES = [
   './icon-512.png'
 ];
 
+// Cacheia cada arquivo sozinho: se um falhar, os outros continuam
+// e o service worker ATIVA mesmo assim (o erro antigo era travar tudo aqui).
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(cache =>
+      Promise.all(FILES.map(url => cache.add(url).catch(() => null)))
+    ).then(() => self.skipWaiting())
   );
 });
 

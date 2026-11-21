@@ -37,12 +37,25 @@
     <p>Instala o jogo no celular e joga sem a barra do navegador:</p>
     <ol>
       <li>Toca no botão abaixo pra abrir o jogo.</li>
-      <li>No Chrome, toca no menu <b>⋮</b>.</li>
-      <li>Toca em <b>Adicionar à tela inicial</b> (ou <b>Instalar app</b>).</li>
-      <li>Abre o jogo pelo ícone novo, com a Slime.</li>
+      <li>Dentro do jogo, toca no botão <b>INSTALAR APP</b>.</li>
+      <li>Confirma a instalação e abre o jogo pelo ícone novo, com a Slime.</li>
     </ol>
-    <a class="btn" href="index.html">▶ Abrir o jogo</a>
+    <a class="btn" href="index.html?v=82">▶ Abrir o jogo</a>
     <small>Depois de instalado, o jogo abre em tela cheia, sem barra.</small>
   </div>
+<script>
+// Limpa o service worker e o cache velhos (que guardavam o index.html com erro)
+// antes de abrir o jogo, para o celular buscar o arquivo novo do zero.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function (regs) {
+    regs.forEach(function (r) { r.unregister(); });
+  });
+}
+if ('caches' in window) {
+  caches.keys().then(function (keys) {
+    keys.forEach(function (k) { caches.delete(k); });
+  });
+}
+</script>
 </body>
 </html>

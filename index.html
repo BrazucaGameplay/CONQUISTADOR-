@@ -7887,6 +7887,26 @@
   window.CONQUISTADOR_V80_HUD={version:80, apply:apply};
 })();
 </script>
+<script>
+(function () {
+  var deferredPrompt = null;
+  var btn = document.createElement('button');
+  btn.textContent = 'INSTALAR APP';
+  btn.style.cssText = 'display:none;position:fixed;right:12px;bottom:12px;z-index:999999;padding:12px 18px;border:2px solid #ff2e88;border-radius:999px;background:#0d0b10;color:#fff;font-weight:bold;font-size:14px;letter-spacing:1px;box-shadow:0 4px 18px rgba(0,0,0,.6);touch-action:auto;cursor:pointer;';
+  btn.addEventListener('click', function () {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(function () { deferredPrompt = null; btn.style.display = 'none'; });
+  });
+  document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(btn); });
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = 'block';
+  });
+  window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
+})();
+</script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
 </body>
 </html>
