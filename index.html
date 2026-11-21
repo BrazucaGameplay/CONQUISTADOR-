@@ -4906,19 +4906,42 @@
           let selectedWaifuCard = null;
           let selectedSlotIndex = 0;
           const readWaifuData = () => this.extensionAPI.progress.get('waifus') || {};
-          const writeWaifuData = next => this.extensionAPI.progress.update('waifus', next);
+          // Serializa a gravação de equipamento fora do evento de clique. O EventBus
+          // publica progress:changed sincronamente; deferir evita reentrada no
+          // fluxo de seleção/fechamento da Galeria e permite aguardar o commit.
+          let waifuWriteQueue = Promise.resolve();
+          const writeWaifuData = next => {
+            const snapshot = next && typeof next === 'object' ? JSON.parse(JSON.stringify(next)) : null;
+            const operation = waifuWriteQueue.then(() => new Promise((resolve, reject) => {
+              statusDoc.defaultView.setTimeout(() => {
+                try {
+                  const result = this.extensionAPI.progress.update('waifus', snapshot);
+                  if (result && typeof result.then === 'function') result.then(resolve, reject);
+                  else resolve(result);
+                } catch (error) { reject(error); }
+              }, 0);
+            }));
+            waifuWriteQueue = operation.catch(() => undefined);
+            return operation;
+          };
           const findCard = id => {
             const data = readWaifuData();
             return (Array.isArray(data.cards) ? data.cards : []).find(card => card && card.instanceId === id) || null;
           };
           const waifuTypeOf = card => String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
-          const removeEquippedWaifu = slotIndex => {
+          const removeEquippedWaifu = async slotIndex => {
             const latest = readWaifuData();
             const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
             while (equippedNow.length < 3) equippedNow.push(null);
             equippedNow[slotIndex] = null;
-            writeWaifuData({ ...latest, equipped: equippedNow });
-            renderSlots();
+            try {
+              await writeWaifuData({ ...latest, equipped: equippedNow });
+              renderSlots();
+              syncHudVisibility();
+            } catch (error) {
+              console.error('[WaifuEquip] Falha ao remover carta:', error);
+              pickerTitle.textContent = 'NÃO FOI POSSÍVEL REMOVER. TENTE NOVAMENTE.';
+            }
           };
           const qualityInfo = {
             plebeia: { name: 'Plebeia', color: '#a9a9a9', stars: 1 },
