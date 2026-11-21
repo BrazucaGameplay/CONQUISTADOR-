@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V72</title>
+<title>CONQUISTADOR DE WAIFU'S — V73</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -748,12 +748,12 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'max(14px, calc(env(safe-area-inset-left) + 14px))';
+        autoAttackBadge.style.left = 'max(12px, calc(env(safe-area-inset-left) + 12px))';
         autoAttackBadge.style.right = 'auto';
-        autoAttackBadge.style.bottom = 'max(14px, calc(env(safe-area-inset-bottom) + 14px))';
+        autoAttackBadge.style.bottom = 'max(12px, calc(env(safe-area-inset-bottom) + 12px))';
         autoAttackBadge.style.zIndex = '30';
-        autoAttackBadge.style.width = '72px';
-        autoAttackBadge.style.height = '72px';
+        autoAttackBadge.style.width = '56px';
+        autoAttackBadge.style.height = '56px';
         autoAttackBadge.style.padding = '4px';
         autoAttackBadge.style.display = 'grid';
         autoAttackBadge.style.placeItems = 'center';
@@ -2153,7 +2153,7 @@
           background: 'rgba(0,0,0,.78)', backdropFilter: 'blur(3px)'
         });
         const dialog = this.el('section', {
-          width: 'min(100%,360px)', maxHeight: '70%', overflowY: 'auto',
+          width: 'min(100%,420px)', maxHeight: '78%', overflowY: 'auto',
           padding: '18px', border: '1px solid rgba(211,184,126,.85)',
           borderRadius: '12px', background: 'linear-gradient(180deg,#30241f,#151211)',
           color: '#f3dfb5', boxShadow: '0 12px 35px rgba(0,0,0,.8)',
@@ -2162,26 +2162,39 @@
         const heading = this.el('div', { font: 'bold 17px Georgia,serif', textAlign: 'center', marginBottom: '14px' });
         heading.textContent = 'ESCOLHA A WAIFU';
         dialog.appendChild(heading);
-        const definitions = this.api.data.WAIFUS || {};
+        // V73: rosa abre GALERIA em grade, nao lista de texto. Agrupa por especie|nivel|qualidade, mostra carta visual + xN.
+        const QUALITY_MAP = { plebeia:{name:'Plebeia',color:'#a9a9a9'}, dama:{name:'Dama',color:'#55a8e8'}, condessa:{name:'Condessa',color:'#b16ce2'}, duquesa:{name:'Duquesa',color:'#e6b84f'}, rainha:{name:'Rainha',color:'#b65bff'} };
+        const grid = this.el('div', { display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:'12px' });
+        const groups = new Map();
         owned.forEach(card => {
           const id = String(card.waifuId || card.waifuType || card.id || '');
-          const name = (definitions[id] && definitions[id].name) || (id === 'slime' ? 'Donzela Slime' : id);
-          const choice = this.el('button', {
-            display: 'block', width: '100%', minHeight: '44px', margin: '7px 0',
-            border: '1px solid rgba(211,184,126,.7)', borderRadius: '8px',
-            background: 'rgba(74,49,42,.8)', color: '#ffebca',
-            font: 'bold 14px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation'
-          });
-          choice.type = 'button';
+          const q = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
           const legacy = data.intimacy && data.intimacy[id] ? data.intimacy[id] : null;
-          const level = card.intimacy && card.intimacy.level ? card.intimacy.level : (legacy && legacy.level ? legacy.level : 1);
-          choice.textContent = `${name} · Nível ${level}`;
+          const level = Math.max(1, Math.floor(Number(card.intimacy && card.intimacy.level) || Number(legacy && legacy.level) || 1));
+          const key = id + '|' + level + '|' + q;
+          if (!groups.has(key)) groups.set(key, { id, level, quality: q, cards: [] });
+          groups.get(key).cards.push(card);
+        });
+        groups.forEach(g => {
+          const name = g.id === 'slime' ? 'Donzela Slime' : g.id;
+          const qinfo = QUALITY_MAP[g.quality];
+          const choice = this.el('button', { display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', padding:'10px 6px', border:'2px solid ' + qinfo.color, borderRadius:'12px', background:'linear-gradient(155deg,#352b3c,#120f18 65%,#302538)', color:qinfo.color, cursor:'pointer', touchAction:'manipulation' });
+          choice.type = 'button';
+          const art = this.el('div', { font:'34px/1 Georgia,serif', textAlign:'center' });
+          art.textContent = g.id === 'slime' ? '🫧' : '👧';
+          const nm = this.el('div', { font:'bold 12px Georgia,serif', color:'#ffebca', textAlign:'center' });
+          nm.textContent = name;
+          const meta = this.el('div', { font:'bold 11px Georgia,serif', textAlign:'center' });
+          meta.textContent = qinfo.name + ' · Nv. ' + g.level + (g.cards.length > 1 ? ' · x' + g.cards.length : '');
+          choice.append(art, nm, meta);
           choice.addEventListener('click', () => {
             shade.remove(); this.giftPicker = null;
-            this.api.events.emit('waifu:gift-use', { itemId: 'rose', waifuId: id, targetInstanceId: card.instanceId });
+            const first = g.cards[0];
+            this.api.events.emit('waifu:gift-use', { itemId: 'rose', waifuId: g.id, targetInstanceId: first && first.instanceId });
           });
-          dialog.appendChild(choice);
+          grid.appendChild(choice);
         });
+        dialog.appendChild(grid);
         const cancel = this.el('button', {
           display: 'block', width: '100%', minHeight: '40px', marginTop: '12px',
           border: '1px solid rgba(190,170,140,.55)', borderRadius: '8px',
@@ -5231,8 +5244,17 @@
               const legacy = data.intimacy && data.intimacy[species] ? data.intimacy[species].level : 1;
               return Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacy) || 1)));
             };
-            const orderedCards = cards.slice().sort((a,b) =>
-              qualityRank(b)-qualityRank(a) || cardLevel(b)-cardLevel(a) || String(a.instanceId).localeCompare(String(b.instanceId)));
+            // V73: empilha cartas iguais (mesma especie + mesmo nivel + mesma qualidade) em 1 pilha com xN.
+            const groupedMap = new Map();
+            cards.forEach(c => {
+              const k = waifuTypeOf(c) + '|' + cardLevel(c) + '|' + (c.quality || 'plebeia');
+              if (!groupedMap.has(k)) groupedMap.set(k, []);
+              groupedMap.get(k).push(c);
+            });
+            const orderedGroups = Array.from(groupedMap.values()).sort((ga,gb) => qualityRank(gb[0])-qualityRank(ga[0]) || cardLevel(gb[0])-cardLevel(ga[0]));
+            // orderedCards abaixo vira 1 representante por pilha; o clique usa a 1a carta livre da pilha.
+            const orderedCards = orderedGroups.map(g => g[0]);
+            const groupOf = card => groupedMap.get(waifuTypeOf(card) + '|' + cardLevel(card) + '|' + (card.quality || 'plebeia')) || [card];
 
             if (!orderedCards.length) {
               const empty = statusDoc.createElement('div');
@@ -5257,7 +5279,8 @@
                 return other && waifuTypeOf(other) === waifuTypeOf(card);
               });
               const alreadyInSelectedSlot = equippedIndex === selectedSlotIndex;
-              const unavailable = !card.instanceId || equippedInOtherSlot || sameTypeInOtherSlot || alreadyInSelectedSlot;
+              const _freeInPile = groupOf(card).some(c => c && c.instanceId && !equipped.includes(c.instanceId));
+              const unavailable = !_freeInPile || sameTypeInOtherSlot;
               const item = statusDoc.createElement('button');
               item.type = 'button';
               item.disabled = unavailable;
@@ -5278,7 +5301,7 @@
                 background: '#100d17', borderRadius: '5px'
               });
               const label = statusDoc.createElement('span');
-              label.textContent = `${quality.name} ${'★'.repeat(quality.stars)}`;
+              label.textContent = `${quality.name} ${'★'.repeat(quality.stars)}` + (groupOf(card).length > 1 ? `  ×${groupOf(card).length}` : '');
               Object.assign(label.style, {
                 color: quality.color, font: 'bold 11px Georgia,serif', textAlign: 'center'
               });
@@ -5296,7 +5319,7 @@
               item.append(art, label, levelLabel, stateLabel);
               item.addEventListener('click', () => {
                 if (item.disabled) return;
-                selectedWaifuCard = card;
+                selectedWaifuCard = (groupOf(card).find(c => !equipped.includes(c.instanceId)) || card);
                 pickerTitle.textContent = `SELECIONADA: ${quality.name} · NV. ${level}`;
                 pickerGrid.querySelectorAll('button').forEach(button => {
                   button.style.outline = '2px solid rgba(245,226,184,.75)';
@@ -7156,8 +7179,8 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;left:0;bottom:calc(100% + 10px);transform:none;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;width:max-content;height:auto;pointer-events:none;overflow:visible;z-index:5}
-    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 52px;width:52px;height:52px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #7ee8ff;color:#eafcff;box-shadow:0 3px 10px #000c,inset 0 0 0 2px #12303a,0 0 12px #38c8ff66;pointer-events:auto;touch-action:manipulation;font:24px Georgia;background:radial-gradient(circle at 35% 30%,#2a6b7a,#122a33 70%);transform:none}
+    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;width:38px;height:auto;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 38px;width:38px;height:38px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #7ee8ff;color:#eafcff;box-shadow:0 2px 6px #000b,inset 0 0 0 2px #12303a;pointer-events:auto;touch-action:manipulation;font:19px Georgia;background:radial-gradient(circle at 35% 30%,#2a6b7a,#122a33 70%);transform:none}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
     @keyframes cw53gel{0%,100%{transform:translateY(1px) scale(.92)}50%{transform:translateY(-2px) scale(1.12)}}
@@ -7186,7 +7209,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V72';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V73';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7273,7 +7296,7 @@
 
 <!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
 
-<script id="conquistador-v72-hud">
+<script id="conquistador-v73-hud">
 (function(){
   'use strict';
   function apply(){
@@ -7281,8 +7304,8 @@
     if(!style){
       style=document.createElement('style'); style.id='cw72-hud';
       style.textContent=[
-        '#conquistador-active-skills-v53{left:0 !important;bottom:calc(100% + 10px) !important;transform:none !important;flex-direction:row !important;gap:10px !important;}',
-        '#conquistador-active-skills-v53 button{width:52px !important;height:52px !important;font-size:24px !important;}',
+        '#conquistador-active-skills-v53{left:50% !important;bottom:calc(100% + 6px) !important;transform:translateX(-50%) !important;flex-direction:column !important;gap:6px !important;width:38px !important;}',
+        '#conquistador-active-skills-v53 button{width:38px !important;height:38px !important;font-size:19px !important;}',
         '#conquistador-active-skills-v53 button.cw53-ready .cw53-icon{filter:drop-shadow(0 0 6px #7ee8ff) !important;}'
       ].join('\n');
       document.head.appendChild(style);
@@ -7291,8 +7314,8 @@
     var badge=document.querySelector('[aria-label="Ataque automático — recarga"]');
     if(badge){
       badge.style.left='max(14px, calc(env(safe-area-inset-left) + 14px))';
-      badge.style.bottom='max(14px, calc(env(safe-area-inset-bottom) + 14px))';
-      badge.style.width='72px'; badge.style.height='72px';
+      badge.style.bottom='max(12px, calc(env(safe-area-inset-bottom) + 12px))';
+      badge.style.width='56px'; badge.style.height='56px';
       badge.style.background='radial-gradient(circle at 35% 30%, #5a2e12, #241108 70%)';
       badge.style.border='2px solid #ffb347';
       badge.style.boxShadow='0 4px 14px #000c, 0 0 16px #ff8c1a55';
@@ -7301,7 +7324,7 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ apply(); setInterval(apply, 1000); }, {once:true});
   else { apply(); setInterval(apply, 1000); }
-  window.CONQUISTADOR_V72_HUD={version:72, apply:apply};
+  window.CONQUISTADOR_V73_HUD={version:73, apply:apply};
 })();
 </script>
 </body>
