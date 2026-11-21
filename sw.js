@@ -1,5 +1,5 @@
 // CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
-const CACHE = 'conquistador-v89';
+const CACHE = 'conquistador-v90';
 const FILES = [
   './',
   './index.html',
@@ -45,16 +45,21 @@ self.addEventListener('fetch', event => {
     );
     return;
   }
+  // V87: os 3 recursos do mundo (tileset, personagem, mapa) vivem em hosts externos
+  // (jsDelivr / raw.githubusercontent) e o SW nunca os cacheava. Agora qualquer
+  // resposta GET ok e cacheada, de qualquer origem: depois de um carregamento bom,
+  // o mundo abre mesmo que esses repos caiam. Erro de rede num recurso NAO devolve
+  // mais o index.html (isso fazia o Phaser tentar ler HTML como imagem).
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        if (response && response.ok && url.origin === location.origin) {
+        if (response && response.ok) {
           const copy = response.clone();
           caches.open(CACHE).then(cache => cache.put(event.request, copy));
         }
         return response;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(() => caches.match(event.request));
     })
   );
 });
