@@ -3089,9 +3089,15 @@
         const definition = WAIFU_DEFINITIONS.slime;
         if (!definition || !this.api.status || typeof this.api.status.addModifier !== 'function') return false;
         const waifuData = this.api.progress.get('waifus') || {};
-        const unlocked = Array.isArray(waifuData.unlocked) && waifuData.unlocked.includes('slime');
-        if (!unlocked) {
+        const cards = Array.isArray(waifuData.cards) ? waifuData.cards : [];
+        const equipped = Array.isArray(waifuData.equipped) ? waifuData.equipped : [];
+        const slimeEquipped = equipped.some(instanceId => {
+          const card = cards.find(item => item && item.instanceId === instanceId);
+          return !!card && String(card.waifuId || card.waifuType || card.id || '') === 'slime';
+        });
+        if (!slimeEquipped) {
           this.api.status.removeModifier('player', 'waifu:slime:intimacy');
+          this.api.events.emit('waifu:passives-updated', { waifuId: 'slime', equipped: false });
           return false;
         }
         const stats = {};
@@ -3106,6 +3112,7 @@
         // sem ultrapassar o novo máximo. A substituição do modificador não acumula bônus.
         if (applied && Number.isFinite(before) && Number.isFinite(after) && after > before &&
             typeof this.api.status.heal === 'function') this.api.status.heal('player', after - before);
+        this.api.events.emit('waifu:passives-updated', { waifuId: 'slime', equipped: true, stats });
         return applied;
       }
 
@@ -3373,22 +3380,6 @@
         const intimacyXp = Math.max(0, Number(intimacy.xp) || 0);
         const intimacyThreshold = intimacyLevel >= 100 ? 1 : intimacyLevel * 10;
         const progress = intimacyLevel >= 100 ? 1 : Math.max(0, Math.min(1, intimacyXp / intimacyThreshold));
-        const intimacyPanel = this.el('section', {
-          gridColumn: '1/-1', padding: '12px 14px', marginBottom: '2px',
-          borderTop: '1px solid rgba(205,183,137,.55)', borderBottom: '1px solid rgba(205,183,137,.35)',
-          background: 'rgba(20,16,14,.24)', color: '#f3e4c5', font: '13px/1.45 Georgia,serif'
-        });
-        const intimacyTitle = this.el('div', { display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 'bold' });
-        const intimacyName = this.el('span'); intimacyName.textContent = 'Intimidade individual por carta';
-        const intimacyValue = this.el('span', { color: '#e9c77d' }); intimacyValue.textContent = 'Nível 1–100';
-        intimacyTitle.append(intimacyName, intimacyValue);
-        const intimacyTrack = this.el('div', { height: '7px', margin: '7px 0 9px', borderRadius: '8px', overflow: 'hidden', background: 'rgba(0,0,0,.55)', border: '1px solid rgba(205,183,137,.4)' });
-        const intimacyFill = this.el('div', { width: '100%', height: '100%', background: 'linear-gradient(90deg,#9c4560,#e7b978)', boxShadow: '0 0 8px rgba(231,185,120,.45)' });
-        intimacyTrack.appendChild(intimacyFill);
-        const skillInfo = this.el('div', { color: 'rgba(240,225,198,.9)', font: '12px/1.55 Georgia,serif' });
-        skillInfo.textContent = 'Cada carta evolui separadamente. Pilhas reúnem apenas waifus da mesma espécie, nível de intimidade e qualidade. Ativa: Gosma Ácida — 12 de dano fixo. Passivas: Pele de Gosma (+1 Defesa) · Corpo de Slime (+10 HP máximo).';
-        intimacyPanel.append(intimacyTitle, intimacyTrack, skillInfo);
-        this.content.appendChild(intimacyPanel);
         if (!cards.length) {
           const empty = this.el('div', {
             gridColumn: '1/-1', padding: '50px 18px', color: 'rgba(221,208,185,.75)',
@@ -6883,14 +6874,14 @@
   window.CONQUISTADOR_V45 = Object.freeze({
     version: 46,
     feature: 'Velocidade de ataque em ataques por segundo: 1 = 1 ataque por segundo',
-    gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
+    gallery: Object.freeze({ stackKey: 'species|intimacyLevel|quality', individualIntimacy: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
       qualities: Object.freeze({ plebeia: 0.90, dama: 0.04, condessa: 0.03, duquesa: 0.02, rainha: 0.01 })
     })
   });
   </script>
-  <script id="conquistador-v50">
+  <script id="conquistador-v52">
   (function () {
     'use strict';
     const SKILLS = Object.freeze({ slime: Object.freeze({
@@ -6898,6 +6889,7 @@
     }) });
     let runtime = null, monsterSystem = null, root = null, toast = null;
     let buttons = [], nextCastAt = [0, 0, 0], refreshQueued = false, autoTimer = null;
+    let unsubscribers = [];
 
     function getEquippedWaifus() {
       const data = runtime && runtime.progress ? (runtime.progress.get('waifus') || {}) : {};
@@ -6917,9 +6909,38 @@
       if (!base) return false;
       const factor = (safeLevel - 1) * 0.01;
       const stats = {};
-      ['hp','maxHp','energy','maxEnergy','attack','defense','penetration','attackSpeed','moveSpeed','hpRegenOutOfCombat','energyRegen']
-        .forEach(key => { const value = Number(base[key]); if (Number.isFinite(value)) stats[key] = value * factor; });
+      ['maxHp', 'maxEnergy', 'attack', 'defense'].forEach(key => {
+        const value = Number(base[key]);
+        if (Number.isFinite(value)) stats[key] = value * factor;
+      });
       return runtime.status.addModifier('player', { id: 'player:level-scaling', stats });
+    }
+
+    // Recalcula os modificadores das waifus equipadas a partir da coleção salva.
+    // O StatusSystem emite status:changed; a tabela aberta atualiza sem reabrir.
+    function refreshWaifuPassives() {
+      if (!runtime || !runtime.status || !runtime.progress) return false;
+      const data = runtime.progress.get('waifus') || {};
+      const cards = Array.isArray(data.cards) ? data.cards : [];
+      const equipped = Array.isArray(data.equipped) ? data.equipped : [];
+      const slimeEquipped = equipped.some(id => {
+        const card = cards.find(item => item && item.instanceId === id);
+        return !!card && String(card.waifuId || card.waifuType || card.id || '') === 'slime';
+      });
+      if (!slimeEquipped) {
+        runtime.status.removeModifier('player', 'waifu:slime:intimacy');
+        return false;
+      }
+      const beforeMaxHp = runtime.status.getStat('player', 'maxHp');
+      const applied = runtime.status.addModifier('player', {
+        id: 'waifu:slime:intimacy', stats: { defense: 1, maxHp: 10 }
+      });
+      const afterMaxHp = runtime.status.getStat('player', 'maxHp');
+      if (applied && Number.isFinite(beforeMaxHp) && Number.isFinite(afterMaxHp) && afterMaxHp > beforeMaxHp) {
+        runtime.status.heal('player', afterMaxHp - beforeMaxHp);
+      }
+      runtime.events.emit('waifu:passives-updated', { waifuId: 'slime', equipped: true, stats: { defense: 1, maxHp: 10 } });
+      return applied;
     }
 
     function showToast(message) {
@@ -6930,8 +6951,6 @@
       toast._hideTimer = setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translate(-50%,8px)'; }, 1500);
     }
 
-    // A habilidade só pode ser disparada quando existe um adversário vivo dentro do alcance.
-    // A recarga só começa depois de o dano ser efetivamente aplicado.
     function getSkillTarget() {
       if (!monsterSystem || !monsterSystem.active || !runtime || !runtime.status) return null;
       const playerPoint = monsterSystem.getPlayerPoint();
@@ -6941,17 +6960,37 @@
       return Math.hypot(target.sprite.x - playerPoint.x, target.sprite.y - playerPoint.y) <= monsterSystem.attackRange ? target : null;
     }
 
-    function playSlimeSkillAnimation(button) {
-      if (!button) return;
-      button.classList.remove('cw-skill-cast');
-      void button.offsetWidth;
-      button.classList.add('cw-skill-cast');
-      if (button._castTimer) clearTimeout(button._castTimer);
-      button._castTimer = setTimeout(() => button.classList.remove('cw-skill-cast'), 900);
-      const splash = document.createElement('span');
-      splash.className = 'cw-skill-splash';
-      button.appendChild(splash);
-      setTimeout(() => splash.remove(), 850);
+    function acidImpact(target) {
+      const scene = monsterSystem && monsterSystem.scene;
+      if (!scene || !target || !target.sprite || !target.sprite.active) return;
+      const x = target.sprite.x, y = target.sprite.y - 7;
+      const ring = scene.add.circle(x, y, 4, 0x9cff72, 0.18).setStrokeStyle(2, 0xbaff82, 0.95);
+      ring.setDepth(target.sprite.depth + 12);
+      scene.tweens.add({ targets: ring, radius: 19, alpha: 0, duration: 360, ease: 'Cubic.Out', onComplete: () => ring.destroy() });
+      for (let i = 0; i < 5; i += 1) {
+        const angle = (Math.PI * 2 * i) / 5;
+        const bubble = scene.add.circle(x, y, i % 2 ? 2 : 2.8, 0x9cff72, 0.95);
+        bubble.setDepth(target.sprite.depth + 13);
+        scene.tweens.add({ targets: bubble, x: x + Math.cos(angle) * (9 + (i % 2) * 4), y: y + Math.sin(angle) * 11 - 3, alpha: 0, scale: 0.35, duration: 300, ease: 'Quad.Out', onComplete: () => bubble.destroy() });
+      }
+    }
+
+    function launchAcidProjectile(target, onImpact) {
+      const scene = monsterSystem && monsterSystem.scene;
+      const from = monsterSystem && monsterSystem.getPlayerPoint();
+      if (!scene || !from || !target || !target.sprite || !target.sprite.active) return false;
+      const projectile = scene.add.circle(from.x, from.y - 12, 5, 0x9cff72, 1);
+      projectile.setStrokeStyle(2, 0xe1ffc0, 0.95);
+      projectile.setDepth(Math.max(1000, (target.sprite.depth || 0) + 20));
+      const glow = scene.add.circle(from.x, from.y - 12, 9, 0x78ff50, 0.2);
+      glow.setDepth(projectile.depth - 1);
+      scene.tweens.add({ targets: glow, x: target.sprite.x, y: target.sprite.y - 7, duration: 260, ease: 'Cubic.In', onUpdate: () => { if (projectile.active) { glow.x = projectile.x; glow.y = projectile.y; } }, onComplete: () => glow.destroy() });
+      scene.tweens.add({ targets: projectile, x: target.sprite.x, y: target.sprite.y - 7, scale: 0.72, duration: 260, ease: 'Cubic.In', onComplete: () => {
+        if (projectile.active) projectile.destroy();
+        acidImpact(target);
+        onImpact();
+      }});
+      return true;
     }
 
     function castSkill(slotIndex, silent) {
@@ -6961,23 +7000,25 @@
       const now = Date.now();
       if (now < nextCastAt[slotIndex]) return false;
       const target = getSkillTarget();
-      // Sem alvo, não há lançamento, animação de disparo ou consumo de recarga.
-      if (!target) {
-        if (!silent) showToast('Nenhum monstro ao alcance.');
-        return false;
-      }
-      const result = runtime.status.applyDamage(target.id, skill.damage, 'player');
-      if (!result) return false;
-      nextCastAt[slotIndex] = now + skill.cooldownMs;
-      playSlimeSkillAnimation(buttons[slotIndex]);
-      if (typeof monsterSystem.showMonsterHitEffect === 'function') monsterSystem.showMonsterHitEffect(target);
-      runtime.events.emit('combat:hit', {
-        attackerId: 'player', targetId: target.id, damage: skill.damage,
-        remainingHp: result.hp, skillId: skill.id, skillName: skill.name
+      if (!target) { if (!silent) showToast('Nenhum monstro ao alcance.'); return false; }
+      // A recarga começa somente após encontrar um alvo válido e lançar o projétil.
+      const launched = launchAcidProjectile(target, () => {
+        if (!target.alive || !target.sprite || !target.sprite.active) return;
+        const result = runtime.status.applyDamage(target.id, skill.damage, 'player');
+        if (!result) return;
+        if (typeof monsterSystem.showMonsterHitEffect === 'function') monsterSystem.showMonsterHitEffect(target);
+        runtime.events.emit('combat:hit', {
+          attackerId: 'player', targetId: target.id, damage: skill.damage,
+          remainingHp: result.hp, skillId: skill.id, skillName: skill.name
+        });
+        if (result.defeated) monsterSystem.killMonster(target, 'player');
+        if (typeof monsterSystem.refreshUI === 'function') monsterSystem.refreshUI();
       });
-      if (result.defeated) monsterSystem.killMonster(target, 'player');
-      if (typeof monsterSystem.refreshUI === 'function') monsterSystem.refreshUI();
-      if (!silent) showToast(skill.name + ': ' + skill.damage + ' de dano.');
+      if (!launched) return false;
+      nextCastAt[slotIndex] = now + skill.cooldownMs;
+      buttons[slotIndex].classList.add('cw-skill-cast');
+      setTimeout(() => buttons[slotIndex] && buttons[slotIndex].classList.remove('cw-skill-cast'), 650);
+      if (!silent) showToast(skill.name + ': lançamento!');
       renderSkillSlots();
       return true;
     }
@@ -6988,21 +7029,17 @@
       buttons.forEach((button, index) => {
         const waifuId = equipped[index], skill = SKILLS[waifuId];
         const remaining = Math.max(0, nextCastAt[index] - now);
-        const progress = skill ? 1 - remaining / skill.cooldownMs : 0;
-        const pct = Math.max(0, Math.min(100, progress * 100));
+        const pct = skill ? Math.max(0, Math.min(100, (1 - remaining / skill.cooldownMs) * 100)) : 0;
         button.disabled = !skill || remaining > 0;
-        button.title = skill ? `${skill.name} — ${skill.damage} de dano; recarga de 5 segundos` : (waifuId ? 'Waifu equipada sem habilidade ativa cadastrada' : 'Nenhuma waifu equipada');
+        button.title = skill ? `${skill.name} — ${skill.damage} de dano; recarga de 5 segundos` : 'Nenhuma habilidade ativa';
         button.setAttribute('aria-label', button.title);
-        button.style.display = 'grid';
-        button.style.opacity = skill ? (remaining > 0 ? '.82' : '1') : '.34';
-        button.style.background = `conic-gradient(from -90deg, #dfc47d ${pct}%, rgba(90,78,57,.42) ${pct}% 100%)`;
-        button.style.borderColor = skill ? 'rgba(222,185,112,.95)' : 'rgba(150,130,100,.35)';
+        button.style.opacity = skill ? (remaining > 0 ? '.9' : '1') : '.28';
+        button.style.background = `conic-gradient(from -90deg, #a7f17e ${pct}%, rgba(30,42,25,.88) ${pct}% 100%)`;
+        button.style.borderColor = skill ? 'rgba(190,255,151,.95)' : 'rgba(150,130,100,.35)';
         button.dataset.skill = skill ? skill.id : '';
         button.dataset.waifu = waifuId || '';
         const icon = button.querySelector('.cw-skill-icon');
         if (icon) icon.textContent = skill ? skill.icon : '·';
-        button.classList.toggle('cw-skill-ready', !!skill && remaining <= 0);
-        // A animação permanente de energia líquida existe somente no círculo da habilidade equipada.
         button.classList.toggle('cw-slime-equipped', !!skill && waifuId === 'slime');
         button.classList.toggle('cw-skill-cooldown', !!skill && remaining > 0);
       });
@@ -7016,20 +7053,16 @@
     }
 
     function addStyles() {
-      if (document.getElementById('cw-v50-skill-style')) return;
-      const style = document.createElement('style'); style.id = 'cw-v50-skill-style';
+      if (document.getElementById('cw-v52-skill-style')) return;
+      const style = document.createElement('style'); style.id = 'cw-v52-skill-style';
       style.textContent = `
-        @keyframes cwSlimeBob { 0%,100%{transform:translateY(1px) scale(.92)} 50%{transform:translateY(-3px) scale(1.06)} }
-        @keyframes cwSlimeGlow { 0%,100%{box-shadow:0 2px 8px #000a,inset 0 0 0 2px #191410,0 0 5px #8fe7a655} 50%{box-shadow:0 2px 8px #000a,inset 0 0 0 2px #191410,0 0 13px #a4ff9dcc} }
-        @keyframes cwAcidBurst { 0%{transform:scale(.25);opacity:0} 35%{transform:scale(1.25);opacity:1} 100%{transform:scale(1.75);opacity:0} }
-        @keyframes cwBubbleRise { 0%{transform:translate(0,8px) scale(.35);opacity:0} 25%{opacity:.95} 100%{transform:translate(var(--dx),-23px) scale(1);opacity:0} }
+        @keyframes cwSlimeBob { 0%,100%{transform:translateY(1px) scale(.94)} 50%{transform:translateY(-3px) scale(1.08)} }
+        @keyframes cwSlimeGlow { 0%,100%{box-shadow:0 2px 8px #000a,inset 0 0 0 2px #191410,0 0 5px #8fe7a655} 50%{box-shadow:0 2px 8px #000a,inset 0 0 0 2px #191410,0 0 14px #a4ff9dcc} }
+        @keyframes cwAcidCast { 0%{transform:scale(.88) rotate(-8deg)} 35%{transform:scale(1.18) rotate(8deg)} 70%{transform:scale(.94) rotate(-4deg)} 100%{transform:scale(1) rotate(0)} }
         #conquistador-active-skills button.cw-slime-equipped { animation:cwSlimeGlow 1.8s ease-in-out infinite; }
-        #conquistador-active-skills button .cw-skill-icon { position:relative; z-index:2; display:block; }
-        #conquistador-active-skills button.cw-slime-equipped .cw-skill-icon { animation:cwSlimeBob 1.25s ease-in-out infinite; filter:drop-shadow(0 0 4px #a9ff9a); }
-        #conquistador-active-skills button.cw-skill-cast .cw-skill-icon { animation:cwSlimeBob .24s ease-in-out 3; }
-        .cw-skill-splash { position:absolute; inset:5px; border:2px solid #baff9d; border-radius:44% 56% 48% 52%; box-shadow:0 0 10px #a8ff8c; pointer-events:none; animation:cwAcidBurst .72s ease-out forwards; }
-        .cw-skill-splash:before,.cw-skill-splash:after { content:''; position:absolute; width:6px;height:6px;border-radius:50%;background:#c8ff9e;box-shadow:0 0 6px #c8ff9e; animation:cwBubbleRise .62s ease-out forwards; }
-        .cw-skill-splash:before { left:4px;top:9px;--dx:-8px; } .cw-skill-splash:after { right:4px;top:7px;--dx:9px;animation-delay:.06s; }
+        #conquistador-active-skills button .cw-skill-icon { position:relative;z-index:2;display:block; }
+        #conquistador-active-skills button.cw-slime-equipped .cw-skill-icon { animation:cwSlimeBob 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #a9ff9a); }
+        #conquistador-active-skills button.cw-skill-cast .cw-skill-icon { animation:cwAcidCast .55s ease-out; }
         #conquistador-active-skills button:disabled { cursor:default; }
       `;
       document.head.appendChild(style);
@@ -7038,26 +7071,28 @@
     function createSkillHud() {
       if (document.getElementById('conquistador-active-skills')) { root = document.getElementById('conquistador-active-skills'); return; }
       addStyles();
+      const badge = monsterSystem && monsterSystem.autoAttackBadge;
+      if (!badge) return;
+      // HUD ancorado no próprio círculo da espada: acompanha safe-area e escala do viewport.
+      badge.style.overflow = 'visible';
       root = document.createElement('div'); root.id = 'conquistador-active-skills';
       Object.assign(root.style, {
-        position:'fixed', left:'max(16px, env(safe-area-inset-left))',
-        bottom:'max(18px, env(safe-area-inset-bottom))', width:'154px', height:'132px',
-        zIndex:'45', pointerEvents:'none', touchAction:'manipulation'
+        position:'absolute', left:'43px', bottom:'-3px', width:'126px', height:'132px',
+        zIndex:'2', pointerEvents:'none', touchAction:'manipulation'
       });
-      // Três círculos em arco, sem cobrir o círculo central de ataque automático.
       const positions = [
-        { left:'66px', bottom:'91px' },
-        { left:'108px', bottom:'47px' },
-        { left:'66px', bottom:'3px' }
+        { left:'0px', bottom:'86px' },
+        { left:'48px', bottom:'43px' },
+        { left:'0px', bottom:'0px' }
       ];
       for (let i=0;i<3;i+=1) {
         const button=document.createElement('button'); button.type='button';
         Object.assign(button.style, {
-          position:'absolute', ...positions[i], width:'42px', height:'42px', padding:'0',
+          position:'absolute', ...positions[i], width:'40px', height:'40px', padding:'0',
           display:'grid', placeItems:'center', border:'1px solid rgba(150,130,100,.35)',
           borderRadius:'50%', background:'rgba(35,29,23,.96)',
           boxShadow:'0 2px 8px rgba(0,0,0,.62), inset 0 0 0 2px rgba(25,20,16,.8)',
-          font:'bold 20px Georgia,serif', textShadow:'0 1px 3px #000', color:'#f4dfaa',
+          font:'bold 19px Georgia,serif', textShadow:'0 1px 3px #000', color:'#f4dfaa',
           cursor:'pointer', pointerEvents:'auto', touchAction:'manipulation', overflow:'visible'
         });
         const icon=document.createElement('span'); icon.className='cw-skill-icon'; icon.textContent='·'; button.appendChild(icon);
@@ -7072,7 +7107,7 @@
         borderRadius:'8px',background:'rgba(22,19,17,.96)',color:'#f4dfaa',
         font:'12px Georgia,serif',pointerEvents:'none',whiteSpace:'nowrap'
       });
-      document.body.append(root,toast); renderSkillSlots();
+      badge.appendChild(root); document.body.appendChild(toast); renderSkillSlots();
     }
 
     function attach() {
@@ -7082,21 +7117,25 @@
       runtime=api; monsterSystem=combat; createSkillHud();
       const level=api.levels && api.levels.snapshot ? api.levels.snapshot('player') : {level:1};
       updatePlayerLevelScaling(level.level);
-      const refresh=()=>{ if(refreshQueued)return; refreshQueued=true; Promise.resolve().then(()=>{refreshQueued=false;renderSkillSlots();}); };
-      api.events.on('level:changed',event=>{if(event&&event.entityId==='player')updatePlayerLevelScaling(event.level);});
-      api.events.on('progress:changed',event=>{if(event&&event.section==='waifus')refresh();});
-      api.events.on('progress:batch-changed',refresh); api.events.on('save:written',refresh);
+      refreshWaifuPassives();
+      const refresh=()=>{ if(refreshQueued)return; refreshQueued=true; Promise.resolve().then(()=>{refreshQueued=false;refreshWaifuPassives();renderSkillSlots();}); };
+      unsubscribers.push(api.events.on('level:changed',event=>{if(event&&event.entityId==='player')updatePlayerLevelScaling(event.level);}));
+      unsubscribers.push(api.events.on('progress:changed',event=>{if(event&&event.section==='waifus')refresh();}));
+      unsubscribers.push(api.events.on('progress:batch-changed',refresh));
+      unsubscribers.push(api.events.on('save:written',refresh));
+      unsubscribers.push(api.events.on('waifu:passives-updated',renderSkillSlots));
+      unsubscribers.push(api.events.on('entity:removed',refresh));
       renderSkillSlots(); if(!autoTimer) autoTimer=setInterval(autoUseEquippedSkills,200); return true;
     }
     let attempts=0;
     const boot=()=>{if(attach())return;attempts+=1;if(attempts<120)setTimeout(boot,250);};
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
-    window.CONQUISTADOR_V50=Object.freeze({version:50,skillHud:'three-spaced-circles-around-auto-attack',automaticSkillUse:true,requiresLiveTarget:true,noTargetConsumesCooldown:false,slimeSkillCooldownMs:5000,slimeSkillAnimation:'animated-liquid-pulse-and-acid-burst',activeSkillSlots:3,slimeSkill:SKILLS.slime,castSkill});
+    window.CONQUISTADOR_V52=Object.freeze({version:52,skillHud:'anchored-around-auto-attack',automaticSkillUse:true,requiresLiveTarget:true,noTargetConsumesCooldown:false,slimeSkillCooldownMs:5000,slimeSkillAnimation:'phaser-acid-projectile-travel-and-impact',activeSkillSlots:3,slimeSkill:SKILLS.slime,refreshWaifuPassives,castSkill});
   })();
   </script>
 
-<script id="conquistador-v50-metadata">
-  window.CONQUISTADOR_VERSION = 'V50';
+<script id="conquistador-v52-metadata">
+  window.CONQUISTADOR_VERSION = 'V52';
   </script>
 </body>
 </html>
