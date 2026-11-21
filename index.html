@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V73</title>
+<title>CONQUISTADOR DE WAIFU'S — V74</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -610,10 +610,10 @@
           width: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.width || 30)),
           height: Math.max(1, Math.floor(options.chunkGrid && options.chunkGrid.height || 30))
         });
-        this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 6));
+        this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 10));
         this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
         this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
-        this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 30000));
+        this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
         this.chunkRespawns = new Map();
@@ -2163,7 +2163,7 @@
         heading.textContent = 'ESCOLHA A WAIFU';
         dialog.appendChild(heading);
         // V73: rosa abre GALERIA em grade, nao lista de texto. Agrupa por especie|nivel|qualidade, mostra carta visual + xN.
-        const QUALITY_MAP = { plebeia:{name:'Plebeia',color:'#a9a9a9'}, dama:{name:'Dama',color:'#55a8e8'}, condessa:{name:'Condessa',color:'#b16ce2'}, duquesa:{name:'Duquesa',color:'#e6b84f'}, rainha:{name:'Rainha',color:'#b65bff'} };
+        const QUALITY_MAP = { plebeia:{name:'Plebeia',color:'#a9a9a9'}, dama:{name:'Dama',color:'#55a8e8'}, condessa:{name:'Condessa',color:'#b16ce2'}, duquesa:{name:'Duquesa',color:'#e6b84f'}, rainha:{name:'Rainha',color:'#ff2e88'} };
         const grid = this.el('div', { display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:'12px' });
         const groups = new Map();
         owned.forEach(card => {
@@ -3058,7 +3058,7 @@
               description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
               bonuses: ['Pele de Gosma — Defesa', 'Corpo de Slime — Vida máxima'],
               known: ((this.api.progress.get('waifus') || {}).cards || []).length > 0,
-              qualityColor: '#b65bff', detail: true
+              qualityColor: '#ff2e88', detail: true
             }]
           },
           titans: { heading: 'TITANS', entries: [] }
@@ -3112,7 +3112,7 @@
       { id: 'dama', name: 'Dama', chance: 0.04, color: '#55a8e8' },
       { id: 'condessa', name: 'Condessa', chance: 0.03, color: '#b16ce2' },
       { id: 'duquesa', name: 'Duquesa', chance: 0.02, color: '#e6b84f' },
-      { id: 'rainha', name: 'Rainha', chance: 0.01, color: '#b65bff' }
+      { id: 'rainha', name: 'Rainha', chance: 0.01, color: '#ff2e88' }
     ];
 
     // Catálogo extensível: presentes, curva e habilidades ficam declarados por waifu.
@@ -4810,9 +4810,9 @@
               width: this.chunkGrid.width,
               height: this.chunkGrid.height
             },
-            maxMonstersPerChunk: 6,
+            maxMonstersPerChunk: 10,
             maxPerMonsterType: 2,
-            respawnDelayMs: 30000
+            respawnDelayMs: 5000
           });
           this.inventorySystem = new window.CONQUISTADOR_V15_SYSTEMS.InventorySystem(this.extensionAPI, {
             document: window.document
@@ -5153,7 +5153,7 @@
             dama: { name: 'Dama', color: '#55a8e8', stars: 2 },
             condessa: { name: 'Condessa', color: '#b16ce2', stars: 3 },
             duquesa: { name: 'Duquesa', color: '#e6b84f', stars: 4 },
-            rainha: { name: 'Rainha', color: '#b65bff', stars: 5 }
+            rainha: { name: 'Rainha', color: '#ff2e88', stars: 5 }
           };
           const renderSlots = () => {
             const data = readWaifuData();
@@ -7013,25 +7013,25 @@
       window.CONQUISTADOR_V18 = Object.freeze({
         version: 18,
         game,
-        maxMonstersPerChunk: 5,
-        respawnDelayMs: 30000,
+        maxMonstersPerChunk: 10,
+        respawnDelayMs: 5000,
         chunkGrid: { width: 90, height: 120, chunkSize: 30, columns: 3, rows: 4 }
       });
       window.CONQUISTADOR_V19 = Object.freeze({
         version: 19,
         game,
         monsterTypes: ['slime', 'monkey', 'rat'],
-        maxMonstersPerChunk: 6,
+        maxMonstersPerChunk: 10,
         maxPerMonsterType: 2,
-        respawnDelayMs: 30000
+        respawnDelayMs: 5000
       });
       window.CONQUISTADOR_V20 = Object.freeze({
         version: 20,
         game,
         monsterTypes: ['slime', 'monkey', 'rat'],
         spriteStyle: 'full-body-pixel-art',
-        maxMonstersPerChunk: 6,
-        respawnDelayMs: 30000,
+        maxMonstersPerChunk: 10,
+        respawnDelayMs: 5000,
         automaticAttack: true,
         automaticAttackBadge: 'icon-only'
       });
@@ -7054,8 +7054,8 @@
         attackRange: 48,
         hitWindupMs: 180,
         hitEffects: ['slash', 'red-hit-flash', 'blood-like-particles', 'recoil', 'death-fade'],
-        maxMonstersPerChunk: 6,
-        respawnDelayMs: 30000
+        maxMonstersPerChunk: 10,
+        respawnDelayMs: 5000
       });
       window.CONQUISTADOR_V23 = Object.freeze({
         version: 23,
@@ -7209,7 +7209,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V73';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V74';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7296,7 +7296,7 @@
 
 <!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
 
-<script id="conquistador-v73-hud">
+<script id="conquistador-v74-hud">
 (function(){
   'use strict';
   function apply(){
@@ -7324,7 +7324,7 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ apply(); setInterval(apply, 1000); }, {once:true});
   else { apply(); setInterval(apply, 1000); }
-  window.CONQUISTADOR_V73_HUD={version:73, apply:apply};
+  window.CONQUISTADOR_V74_HUD={version:74, apply:apply};
 })();
 </script>
 </body>
