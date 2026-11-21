@@ -4515,6 +4515,13 @@
             const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
             while (equippedNow.length < 3) equippedNow.push(null);
             if (equippedNow.includes(selectedWaifuCard.instanceId)) return;
+            const ownedCards = Array.isArray(latest.cards) ? latest.cards : [];
+            const equippedCards = equippedNow.map(id => ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
+            const selectedType = waifuTypeOf(selectedWaifuCard);
+            if (equippedCards.some(card => waifuTypeOf(card) === selectedType)) {
+              pickerTitle.textContent = 'ESTA WAIFU JÁ ESTÁ EQUIPADA';
+              return;
+            }
             equippedNow[selectedSlotIndex] = selectedWaifuCard.instanceId;
             writeWaifuData({ ...latest, equipped: equippedNow });
             selectedWaifuCard = null;
@@ -4552,6 +4559,15 @@
           const findCard = id => {
             const data = readWaifuData();
             return (Array.isArray(data.cards) ? data.cards : []).find(card => card && card.instanceId === id) || null;
+          };
+          const waifuTypeOf = card => String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+          const removeEquippedWaifu = slotIndex => {
+            const latest = readWaifuData();
+            const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
+            while (equippedNow.length < 3) equippedNow.push(null);
+            equippedNow[slotIndex] = null;
+            writeWaifuData({ ...latest, equipped: equippedNow });
+            renderSlots();
           };
           const qualityInfo = {
             plebeia: { name: 'Plebeia', color: '#a9a9a9', stars: 1 },
@@ -4644,6 +4660,30 @@
                   aspectRatio: '2 / 3'
                 });
                 slot.appendChild(art);
+                const removeMark = statusDoc.createElement('span');
+                removeMark.textContent = '×';
+                removeMark.setAttribute('role', 'button');
+                removeMark.setAttribute('tabindex', '0');
+                removeMark.setAttribute('aria-label', 'Remover waifu equipada');
+                Object.assign(removeMark.style, {
+                  position: 'absolute', top: '3%', right: '3%', zIndex: '3',
+                  width: '25px', height: '25px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  border: '1px solid #e0c17e', borderRadius: '50%',
+                  background: 'rgba(20,14,18,.96)', color: '#ffe8b2',
+                  font: 'bold 19px/1 Georgia,serif',
+                  boxShadow: '0 2px 7px rgba(0,0,0,.7)', cursor: 'pointer'
+                });
+                const removeAction = event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  removeEquippedWaifu(index);
+                };
+                removeMark.addEventListener('click', removeAction);
+                removeMark.addEventListener('keydown', event => {
+                  if (event.key === 'Enter' || event.key === ' ') removeAction(event);
+                });
+                slot.appendChild(removeMark);
               } else {
                 slot.textContent = '+';
                 slot.style.border = '1px dashed #b99a64';
@@ -4655,7 +4695,11 @@
             const data = readWaifuData();
             const cards = Array.isArray(data.cards) ? data.cards : [];
             const equipped = Array.isArray(data.equipped) ? data.equipped : [];
-            const available = cards.filter(card => card && !equipped.includes(card.instanceId));
+            const equippedCards = equipped.map(id => findCard(id)).filter(Boolean);
+            const equippedTypes = new Set(equippedCards.map(waifuTypeOf));
+            const available = cards.filter(card =>
+              card && !equipped.includes(card.instanceId) && !equippedTypes.has(waifuTypeOf(card))
+            );
             const qualityOrder = ['plebeia', 'dama', 'condessa', 'duquesa', 'rainha'];
             const grouped = qualityOrder.map(id => ({
               id, info: qualityInfo[id],
@@ -4665,7 +4709,7 @@
             if (!grouped.length) {
               const empty = statusDoc.createElement('div');
               empty.textContent = cards.length
-                ? 'Todas as cartas disponíveis já estão equipadas.'
+                ? 'A Donzela Slime já está equipada. Remova-a do espaço atual para escolher outra qualidade.'
                 : 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
               Object.assign(empty.style, {
                 gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center',
@@ -6460,9 +6504,9 @@
     }
   })();
   </script>
-  <script id="conquistador-v40">
+  <script id="conquistador-v41">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 40,
+    version: 41,
     feature: 'Atributos canônicos compartilhados e cartas equipadas com moldura da galeria',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
