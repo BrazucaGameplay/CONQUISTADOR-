@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V75</title>
+<title>CONQUISTADOR DE WAIFU'S — V78</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -402,7 +402,7 @@
         this.unreadable = false;
         this.replacementLocked = false;
         this.replacementAuthorized = false;
-        this.progressData = { pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [] };
+        this.progressData = { pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] } };
         this.lastLoadedData = null;
       }
       readPrimary() {
@@ -456,7 +456,7 @@
           player: { id: 'player', position: position ? { x: position.x, y: position.y } : null, tile: null },
           status: { player: null },
           level: { level: 1, xp: 0 },
-          pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: []
+          pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] }
         };
       }
       normalizeV4(data) {
@@ -475,6 +475,7 @@
         normalized.flags = data.flags && typeof data.flags === 'object' && !Array.isArray(data.flags) ? cloneData(data.flags) : {};
         normalized.dungeons = data.dungeons && typeof data.dungeons === 'object' && !Array.isArray(data.dungeons) ? cloneData(data.dungeons) : {};
         normalized.items = Array.isArray(data.items) ? cloneData(data.items) : [];
+        normalized.monsters = data.monsters && typeof data.monsters === 'object' && !Array.isArray(data.monsters) ? cloneData(data.monsters) : { list: [], respawns: [] };
         return normalized;
       }
       load() {
@@ -496,7 +497,7 @@
           // must preserve this known-good save instead of assuming a backup exists.
           this.preserveRaw(raw);
           this.lastLoadedData = data;
-          this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items) };
+          this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items), monsters: cloneData(data.monsters || { list: [], respawns: [] }) };
           return { status: 'v4', raw, data, positionRecord: { version: 4, world: this.worldId, x: data.player.position.x, y: data.player.position.y } };
         }
         if (![1, 2, 3].includes(parsed.version)) return { status: 'invalid', raw, error: new Error('Versão de save não reconhecida.') };
@@ -510,8 +511,9 @@
         data.flags = parsed.flags && typeof parsed.flags === 'object' ? cloneData(parsed.flags) : {};
         data.dungeons = parsed.dungeons && typeof parsed.dungeons === 'object' ? cloneData(parsed.dungeons) : {};
         data.items = Array.isArray(parsed.items) ? cloneData(parsed.items) : [];
+        data.monsters = parsed.monsters && typeof parsed.monsters === 'object' ? cloneData(parsed.monsters) : { list: [], respawns: [] };
         this.lastLoadedData = data;
-        this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items) };
+        this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items), monsters: cloneData(data.monsters || { list: [], respawns: [] }) };
         return { status: 'legacy', raw, data, positionRecord: parsed };
       }
       setProgressData(data = {}) {
@@ -520,7 +522,8 @@
           waifus: data.waifus && typeof data.waifus === 'object' ? cloneData(data.waifus) : this.progressData.waifus,
           flags: data.flags && typeof data.flags === 'object' ? cloneData(data.flags) : this.progressData.flags,
           dungeons: data.dungeons && typeof data.dungeons === 'object' ? cloneData(data.dungeons) : this.progressData.dungeons,
-          items: Array.isArray(data.items) ? cloneData(data.items) : this.progressData.items
+          items: Array.isArray(data.items) ? cloneData(data.items) : this.progressData.items,
+          monsters: data.monsters && typeof data.monsters === 'object' ? cloneData(data.monsters) : this.progressData.monsters
         };
       }
       getProgressData() { return cloneData(this.progressData); }
@@ -555,6 +558,7 @@
         data.flags = snapshot.flags && typeof snapshot.flags === 'object' ? cloneData(snapshot.flags) : progress.flags;
         data.dungeons = snapshot.dungeons && typeof snapshot.dungeons === 'object' ? cloneData(snapshot.dungeons) : progress.dungeons;
         data.items = Array.isArray(snapshot.items) ? cloneData(snapshot.items) : progress.items;
+        data.monsters = snapshot.monsters && typeof snapshot.monsters === 'object' ? cloneData(snapshot.monsters) : (progress.monsters || { list: [], respawns: [] });
         try {
           const serialized = JSON.stringify(data);
           root.localStorage.setItem(this.primaryKey, serialized);
@@ -571,7 +575,7 @@
           this.replacementLocked = false;
           this.replacementAuthorized = false;
           this.lastLoadedData = data;
-          this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items) };
+          this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items), monsters: cloneData(data.monsters || { list: [], respawns: [] }) };
           this.eventBus.emit('save:written', { version: 4, savedAt: data.savedAt });
           return true;
         } catch (error) {
@@ -662,6 +666,18 @@
             this.refreshUI();
           })
         ];
+        // V76: qualquer nascimento/morte/dano em monstro agenda save (debounce 800ms).
+        this.monsterSaveTimer = null;
+        this.unsubscribers.push(
+          this.events.on('monster:spawned', () => this.scheduleMonsterSave()),
+          this.events.on('monster:died', () => { try { if (this.progress && this.progress.update) this.progress.update('monsters', this.snapshotMonsters()); } catch (e) {} }),
+          this.events.on('status:changed', event => { if (event && event.entityId && event.entityId !== 'player' && this.monsters.has(event.entityId)) { this.updateMonsterHpBar(this.monsters.get(event.entityId)); this.scheduleMonsterSave(); } })
+        );
+        if (typeof window !== 'undefined' && window.addEventListener) {
+          this.monsterFlushOnHide = () => { try { if (this.monsterSaveTimer) { clearTimeout(this.monsterSaveTimer); this.monsterSaveTimer = null; } if (this.progress && this.progress.update) this.progress.update('monsters', this.snapshotMonsters()); } catch (e) {} };
+          window.addEventListener('pagehide', this.monsterFlushOnHide);
+          this.unsubscribers.push(() => window.removeEventListener('pagehide', this.monsterFlushOnHide));
+        }
         this.boundUpdate = (time, delta) => this.update(time, delta);
         this.boundDestroy = () => this.destroy();
         this.scene.events.on('update', this.boundUpdate);
@@ -688,7 +704,7 @@
           loaded += 1;
           if (loaded !== types.length || !this.active) return;
           this.texturesReady = true;
-          this.populateAllChunks();
+          this.restoreOrPopulate();
           this.refreshUI();
         };
 
@@ -957,15 +973,17 @@
         }
       }
 
-      spawnOneMonsterForChunk(chunkX, chunkY, monsterId) {
+      spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
         const definition = this.data.MONSTERS[monsterId];
         if (!definition || !this.monsterTextureKeys[monsterId]) return false;
         if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
 
+        // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
+        const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y) ? { x: saved.tile.x, y: saved.tile.y } : null;
         const candidates = this.getSpawnCandidates(chunkX, chunkY);
-        const tile = candidates[0];
+        const tile = savedTile || candidates[0];
         if (!tile) return false;
 
         const sequence = this.nextMonsterSequence++;
@@ -974,7 +992,8 @@
         const y = (tile.y + 0.5) * this.tileSize;
         // Every new spawn, including respawns, rolls only level 1 or 2.
         // Level 2 is less common and gains durability, damage, defense and XP.
-        const level = Math.random() < 0.30 ? 2 : 1;
+        // V76: restauracao usa o nivel salvo, sem re-rolar.
+        const level = saved && (saved.level === 1 || saved.level === 2) ? saved.level : (Math.random() < 0.30 ? 2 : 1);
         const levelMultiplier = level === 2 ? {
           hp: 1.5, attack: 1.25, defense: 1, xp: 1.5
         } : { hp: 1, attack: 1, defense: 0, xp: 1 };
@@ -997,7 +1016,7 @@
           }
         });
         this.status.register(id, {
-          hp: maxHp, maxHp,
+          hp: saved && Number.isFinite(Number(saved.hp)) ? Math.max(1, Math.min(maxHp, Math.floor(Number(saved.hp)))) : maxHp, maxHp,
           energy: 0, maxEnergy: 0,
           attack,
           defense,
@@ -1023,6 +1042,14 @@
         });
         levelLabel.setOrigin(0.5, 1);
         levelLabel.setDepth(sprite.depth + 20);
+        // V77: barra de HP embaixo do monstro, proporcional ao tamanho do sprite.
+        const hpBarWidth = Math.max(30, (definition.displayWidth || 30) + 6);
+        const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
+        hpBarBg.setDepth(sprite.depth + 21);
+        hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
+        const hpBarFill = this.scene.add.rectangle(x - hpBarWidth / 2, y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
+        hpBarFill.setOrigin(0, 0.5);
+        hpBarFill.setDepth(sprite.depth + 22);
         const record = {
           id,
           monsterId,
@@ -1032,6 +1059,9 @@
           tile: { x: tile.x, y: tile.y },
           sprite,
           levelLabel,
+          hpBarBg,
+          hpBarFill,
+          hpBarWidth,
           animation: {
             state: null, facing: 0, tween: null,
             baseScaleX: sprite.scaleX || 1, baseScaleY: sprite.scaleY || 1
@@ -1048,6 +1078,7 @@
           originChunkY: chunkY
         };
         this.monsters.set(id, record);
+        this.updateMonsterHpBar(record);
         this.setMonsterAnimation(record, 'idle');
         const population = this.getChunkPopulationState(chunkId);
         population.totalSpawned += 1;
@@ -1063,6 +1094,63 @@
         return true;
       }
 
+      // V76: monstros passam a fazer parte do save.
+      snapshotMonsters() {
+        const list = [];
+        for (const record of this.monsters.values()) {
+          if (!record || !record.alive) continue;
+          const hp = this.status ? this.status.getStat(record.id, 'hp') : null;
+          list.push({
+            monsterId: record.monsterId, level: record.level,
+            tile: { x: record.tile.x, y: record.tile.y },
+            hp: Number.isFinite(Number(hp)) ? Math.max(0, Math.floor(Number(hp))) : null,
+            originChunkId: record.originChunkId || this.getChunkId(record.originChunkX, record.originChunkY),
+            originChunkX: record.originChunkX, originChunkY: record.originChunkY,
+            xpReward: record.xpReward
+          });
+        }
+        const respawns = [];
+        for (const [chunkId, queue] of this.chunkRespawns.entries()) {
+          if (!queue || !queue.pending) continue;
+          respawns.push({ chunkId, chunkX: queue.chunkX, chunkY: queue.chunkY, pending: queue.pending, pendingByMonster: { ...(queue.pendingByMonster || {}) } });
+        }
+        return { list, respawns };
+      }
+      scheduleMonsterSave() {
+        if (!this.active) return;
+        if (this.monsterSaveTimer) return;
+        this.monsterSaveTimer = setTimeout(() => {
+          this.monsterSaveTimer = null;
+          try { if (this.progress && this.progress.update) this.progress.update('monsters', this.snapshotMonsters()); } catch (e) { /* save de monstro nao pode quebrar o jogo */ }
+        }, 800);
+      }
+      restoreOrPopulate() {
+        let saved = null;
+        try { saved = this.progress ? this.progress.get('monsters') : null; } catch (e) { saved = null; }
+        const list = saved && Array.isArray(saved.list) ? saved.list.filter(m => m && this.monsterTypes.includes(m.monsterId)) : [];
+        if (list.length) {
+          // Restaura monstros salvos nas posicoes exatas, sem re-rolar nivel/HP.
+          for (const m of list) {
+            const fallback = (m.tile && this.getChunkForTile(m.tile)) || { chunkX: 0, chunkY: 0 };
+            const cx = Number.isInteger(m.originChunkX) ? m.originChunkX : fallback.chunkX;
+            const cy = Number.isInteger(m.originChunkY) ? m.originChunkY : fallback.chunkY;
+            this.spawnOneMonsterForChunk(cx, cy, m.monsterId, m);
+          }
+          // Respawns pendentes: recria a fila (timer recomeça em 5s, posicao/tipo preservados).
+          if (Array.isArray(saved.respawns)) {
+            for (const r of saved.respawns) {
+              if (!r || !Number.isInteger(r.pending) || r.pending <= 0) continue;
+              const q = { chunkX: r.chunkX, chunkY: r.chunkY, pending: r.pending, pendingByMonster: { slime: 0, monkey: 0, rat: 0, ...(r.pendingByMonster || {}) }, nextAt: this.now + this.respawnDelayMs };
+              this.chunkRespawns.set(r.chunkId || this.getChunkId(r.chunkX, r.chunkY), q);
+            }
+          }
+          // Completa chunks que ficaram abaixo do minimo (ex.: monstro morto sem respawn salvo).
+          this.populateAllChunks();
+          return;
+        }
+        this.populateAllChunks();
+        this.scheduleMonsterSave();
+      }
       populateAllChunks() {
         for (let chunkY = 0; chunkY < this.chunkGrid.rows; chunkY += 1) {
           for (let chunkX = 0; chunkX < this.chunkGrid.columns; chunkX += 1) {
@@ -1429,6 +1517,8 @@
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
         if (record.levelLabel && record.levelLabel.active) record.levelLabel.destroy();
+        if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.destroy();
+        if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.destroy();
         if (record.sprite && record.sprite.active) {
           const deathSprite = record.sprite;
           this.scene.tweens.killTweensOf(deathSprite);
@@ -1547,6 +1637,26 @@
         const height = record.definition.displayHeight || 24;
         label.setPosition(sprite.x, sprite.y - height * 0.86 - 4);
         label.setDepth(sprite.depth + 20);
+        this.updateMonsterHpBar(record);
+      }
+      // V77: barra de HP embaixo do monstro, segue o sprite e muda de cor com o HP.
+      updateMonsterHpBar(record) {
+        const sprite = record && record.sprite;
+        const bg = record && record.hpBarBg;
+        const fill = record && record.hpBarFill;
+        if (!sprite || !sprite.active || !bg || !bg.active || !fill || !fill.active) return;
+        const maxHp = Math.max(1, Number(this.status.getStat(record.id, 'maxHp')) || 1);
+        const hp = Math.max(0, Math.min(maxHp, Number(this.status.getStat(record.id, 'hp')) || 0));
+        const pct = hp / maxHp;
+        const w = record.hpBarWidth || 36;
+        const y = sprite.y + 6;
+        bg.setPosition(sprite.x, y);
+        bg.setDepth(sprite.depth + 21);
+        fill.setPosition(sprite.x - w / 2, y);
+        fill.setDepth(sprite.depth + 22);
+        fill.width = Math.max(0, w * pct);
+        // Cor: verde >50%, amarelo 25-50%, vermelho <25%.
+        fill.setFillStyle(pct > 0.5 ? 0x3ddc5f : (pct > 0.25 ? 0xffc93c : 0xff4444), 1);
       }
 
       updateMonster(record, playerPoint, time, delta) {
@@ -1656,6 +1766,7 @@
       destroy() {
         if (!this.active) return;
         this.active = false;
+        if (this.monsterSaveTimer) { clearTimeout(this.monsterSaveTimer); this.monsterSaveTimer = null; }
         for (const unsubscribe of this.unsubscribers || []) unsubscribe();
         this.unsubscribers = [];
         if (this.scene && this.scene.events) {
@@ -1664,6 +1775,8 @@
         }
         for (const record of this.monsters.values()) {
           if (record.levelLabel && record.levelLabel.destroy) record.levelLabel.destroy();
+          if (record.hpBarBg && record.hpBarBg.destroy) record.hpBarBg.destroy();
+          if (record.hpBarFill && record.hpBarFill.destroy) record.hpBarFill.destroy();
           if (record.sprite && record.sprite.destroy) record.sprite.destroy();
           this.entities.remove(record.id);
         }
@@ -3654,15 +3767,12 @@
           topPlate.textContent = '👑 RAINHA · ESPECIAL 👑 · ' + '★'.repeat(5);
         }
         cardFrame.append(topPlate, art, titlePlate);
-        const quantity = this.el('div', {
-          color: '#e9d8b7', font: '14px Georgia,serif', textAlign: 'center'
-        });
-        quantity.textContent = `Cartas nesta pilha: ×${matchingCards.length}`;
+        // V78: sem descricao de quantidade da pilha no perfil.
         const hint = this.el('div', {
           color: '#e9d5a6', font: '13px Georgia,serif', textAlign: 'center'
         });
         hint.textContent = '‹ Deslize para ver descrição e bônus ›';
-        profile.append(cardFrame, quantity, hint);
+        profile.append(cardFrame, hint);
 
         const details = this.el('section', {
           width: '50%', height: '100%', flex: '0 0 50%',
@@ -4697,7 +4807,7 @@
             if (event && event.entityId === 'player') this.scheduleExtensionSave();
           }),
           this.eventBus.on('progress:changed', event => {
-            if (!event || !['pets', 'waifus', 'flags', 'dungeons', 'items'].includes(event.section)) return;
+            if (!event || !['pets', 'waifus', 'flags', 'dungeons', 'items', 'monsters'].includes(event.section)) return;
             this.saveSystem.setProgressData({ [event.section]: event.data });
             this.scheduleExtensionSave();
           }),
@@ -4736,18 +4846,18 @@
           save: Object.freeze({ request: reason => this.eventBus.emit('save:request', { reason: reason || 'extension' }) }),
           progress: Object.freeze({
             get: section => {
-              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items'];
+              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items', 'monsters'];
               if (!allowed.includes(section)) return null;
               return this.saveSystem.getProgressData()[section];
             },
             update: (section, data) => {
-              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items'];
+              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items', 'monsters'];
               if (!allowed.includes(section)) return false;
               const delivered = this.eventBus.emit('progress:changed', { section, data });
               return delivered > 0 ? 'pending' : false;
             },
             updateBatch: data => {
-              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items'];
+              const allowed = ['pets', 'waifus', 'flags', 'dungeons', 'items', 'monsters'];
               if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
               const entries = Object.entries(data);
               if (!entries.length || entries.some(([section]) => !allowed.includes(section))) return false;
@@ -5459,35 +5569,37 @@
           // por sua própria janela, estado e atualização de dados.
           const menuRoot = document.createElement('div');
           menuRoot.id = 'conquistador-main-menu';
+          // V78: menu colado no canto superior direito, mais acima.
           Object.assign(menuRoot.style, {
             position: 'fixed',
-            top: 'max(52px, env(safe-area-inset-top))',
-            right: 'max(12px, env(safe-area-inset-right))',
+            top: 'max(6px, env(safe-area-inset-top))',
+            right: 'max(6px, env(safe-area-inset-right))',
             zIndex: '110',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'flex-end',
-            gap: '8px',
+            gap: '6px',
             fontFamily: 'Georgia, "Times New Roman", serif'
           });
 
           const menuButton = document.createElement('button');
           menuButton.type = 'button';
-          menuButton.textContent = 'MENU';
+          menuButton.textContent = '☰  MENU';
           menuButton.setAttribute('aria-label', 'Abrir menu principal');
           menuButton.setAttribute('aria-expanded', 'false');
+          // V78: botao MENU mais compacto e premium — pilula dourada, sem peso visual.
           Object.assign(menuButton.style, {
-            minWidth: '104px',
-            minHeight: '40px',
-            padding: '8px 18px',
-            border: '1px solid rgba(221,196,128,.9)',
-            borderRadius: '22px',
-            background: 'linear-gradient(180deg, rgba(75,55,34,.98), rgba(22,19,17,.98))',
-            color: '#f4dfaa',
-            font: '700 12px/1 Georgia, serif',
-            letterSpacing: '.16em',
+            minWidth: '0',
+            minHeight: '34px',
+            padding: '7px 14px',
+            border: '1px solid rgba(255,215,130,.95)',
+            borderRadius: '999px',
+            background: 'linear-gradient(180deg, rgba(64,48,26,.97), rgba(18,15,13,.97))',
+            color: '#ffe9b0',
+            font: '700 11px/1 Georgia, serif',
+            letterSpacing: '.18em',
             textShadow: '0 1px 2px #000',
-            boxShadow: '0 3px 12px rgba(0,0,0,.55)',
+            boxShadow: '0 2px 10px rgba(0,0,0,.6), 0 0 10px rgba(255,215,130,.22), inset 0 1px 0 rgba(255,240,190,.35)',
             touchAction: 'manipulation',
             cursor: 'pointer'
           });
@@ -5496,13 +5608,13 @@
           Object.assign(menuPanel.style, {
             display: 'none',
             flexDirection: 'column',
-            minWidth: '176px',
-            padding: '8px',
-            gap: '6px',
-            border: '1px solid rgba(190,169,125,.9)',
-            borderRadius: '10px',
-            background: 'linear-gradient(180deg, rgba(37,29,24,.98), rgba(12,12,11,.68))',
-            boxShadow: '0 10px 28px rgba(0,0,0,.7), inset 0 0 18px rgba(0,0,0,.35)'
+            minWidth: '168px',
+            padding: '6px',
+            gap: '4px',
+            border: '1px solid rgba(255,215,130,.85)',
+            borderRadius: '14px',
+            background: 'linear-gradient(180deg, rgba(30,23,19,.98), rgba(12,11,11,.97))',
+            boxShadow: '0 12px 30px rgba(0,0,0,.75), 0 0 16px rgba(255,215,130,.12), inset 0 1px 0 rgba(255,240,190,.18)'
           });
 
           const makeMenuItem = (label, action) => {
@@ -5511,11 +5623,11 @@
             item.textContent = label;
             Object.assign(item.style, {
               width: '100%',
-              minHeight: '42px',
+              minHeight: '40px',
               padding: '9px 12px',
-              border: '1px solid rgba(190,169,125,.55)',
-              borderRadius: '7px',
-              background: 'linear-gradient(180deg, rgba(61,47,36,.96), rgba(25,21,18,.98))',
+              border: '1px solid transparent',
+              borderRadius: '10px',
+              background: 'rgba(255,235,180,.06)',
               color: '#f2e4c7',
               font: 'bold 13px Georgia, serif',
               letterSpacing: '.06em',
@@ -5532,9 +5644,9 @@
             return item;
           };
 
-          makeMenuItem('BESTIÁRIO', () => this.bestiarySystem.setOpen(true));
-          makeMenuItem('MOCHILA', () => this.inventorySystem.setOpen(true));
-          makeMenuItem('GALERIA DE WAIFUS', () => this.waifuGallerySystem.setOpen(true));
+          makeMenuItem('📖  BESTIÁRIO', () => this.bestiarySystem.setOpen(true));
+          makeMenuItem('🎒  MOCHILA', () => this.inventorySystem.setOpen(true));
+          makeMenuItem('🃏  GALERIA DE WAIFUS', () => this.waifuGallerySystem.setOpen(true));
 
           menuButton.addEventListener('click', () => {
             const opening = menuPanel.style.display !== 'flex';
@@ -7253,7 +7365,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V75';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V78';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -7340,7 +7452,7 @@
 
 <!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
 
-<script id="conquistador-v75-hud">
+<script id="conquistador-v78-hud">
 (function(){
   'use strict';
   function apply(){
@@ -7368,7 +7480,7 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ apply(); setInterval(apply, 1000); }, {once:true});
   else { apply(); setInterval(apply, 1000); }
-  window.CONQUISTADOR_V75_HUD={version:75, apply:apply};
+  window.CONQUISTADOR_V78_HUD={version:78, apply:apply};
 })();
 </script>
 </body>
