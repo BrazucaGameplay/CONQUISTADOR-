@@ -2546,13 +2546,14 @@
         arrow.type = 'button'; arrow.textContent = '›';
         arrow.setAttribute('aria-label', 'Mostrar descrição');
         const description = this.el('div', {
-          position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
-          transform: 'translateY(-50%)', width: 'min(58vw, 230px)',
-          padding: '13px 14px', border: '1px solid #c6a86c',
-          borderRadius: '8px', background: 'rgba(25,19,15,.98)',
-          color: '#f0e4ce', font: '14px/1.5 Georgia,serif',
-          boxShadow: '0 8px 26px rgba(0,0,0,.8)', zIndex: '3',
-          display: 'none'
+          position: 'fixed', left: '50%', bottom: 'max(22px, env(safe-area-inset-bottom))',
+          transform: 'translateX(-50%)', width: 'min(86vw, 340px)',
+          maxHeight: '30dvh', overflowY: 'auto', padding: '14px 16px',
+          border: '1px solid #c6a86c', borderRadius: '9px',
+          background: 'linear-gradient(180deg, rgba(38,29,23,.99), rgba(16,13,12,.99))',
+          color: '#f0e4ce', font: '14px/1.55 Georgia,serif',
+          boxShadow: '0 8px 26px rgba(0,0,0,.85)', zIndex: '6',
+          display: 'none', textAlign: 'left'
         });
         description.textContent = entry.description || 'Descrição ainda não disponível.';
         const showDescription = () => { description.style.display = 'block'; };
@@ -2561,12 +2562,16 @@
         arrow.addEventListener('mouseleave', hideDescription);
         arrow.addEventListener('focus', showDescription);
         arrow.addEventListener('blur', hideDescription);
-        arrow.addEventListener('click', () => {
-          description.style.display = description.style.display === 'block' ? 'none' : 'block';
+        arrow.addEventListener('click', event => {
+          event.stopPropagation();
+          const isVisible = description.style.display === 'block';
+          description.style.display = isVisible ? 'none' : 'block';
+          arrow.textContent = isVisible ? '›' : '‹';
+          arrow.setAttribute('aria-label', isVisible ? 'Mostrar descrição' : 'Ocultar descrição');
         });
         side.appendChild(arrow);
         layout.append(art, side);
-        overlay.append(close, layout);
+        overlay.append(close, layout, description);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
         this.backdrop.appendChild(overlay); this.detailOverlay = overlay;
       }
@@ -2842,7 +2847,7 @@
 
         // Cada pilha representa uma qualidade. Cartas da mesma qualidade
         // são idênticas; qualidades diferentes continuam separadas.
-        const artByQuality = root.CONQUISTADOR_WAIFU_DROP_ART || {};
+        const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const grouped = new Map(QUALITY.map(quality => [quality.id, []]));
         for (const card of cards) {
           const qualityId = grouped.has(card && card.quality) ? card.quality : 'plebeia';
@@ -2853,21 +2858,21 @@
           const matchingCards = grouped.get(quality.id) || [];
           if (!matchingCards.length) continue;
           const stack = this.el('button', {
-            position: 'relative', width: 'min(100%, 150px)', justifySelf: 'center',
-            padding: '0', border: `3px solid ${quality.color}`, borderRadius: '9px',
-            background: 'transparent',
-            boxShadow: `0 0 12px ${quality.color}55, 0 3px 12px rgba(0,0,0,.45)`,
+            position: 'relative', width: 'min(100%, 184px)', justifySelf: 'center',
+            padding: '5px', border: `2px solid ${quality.color}`, borderRadius: '13px',
+            background: 'linear-gradient(145deg, rgba(35,29,28,.98), rgba(8,10,15,.98))',
+            boxShadow: `0 0 0 1px rgba(255,255,255,.10), 0 0 18px ${quality.color}44, 0 8px 18px rgba(0,0,0,.5)`,
             color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation',
             overflow: 'visible'
           });
           stack.type = 'button';
           const art = this.el('img', {
             display: 'block', width: '100%', height: 'auto',
-            objectFit: 'contain', objectPosition: 'center', background: 'transparent',
-            borderRadius: '5px'
+            aspectRatio: '2 / 3', objectFit: 'contain', objectPosition: 'center',
+            background: '#10131b', borderRadius: '8px'
           });
-          art.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
-          art.alt = `Carta completa da Donzela Slime`;
+          art.src = fullResolutionArt;
+          art.alt = 'Ilustração completa da Donzela Slime';
           const quantity = this.el('div', {
             position: 'absolute', top: '9px', right: '9px', minWidth: '29px',
             padding: '5px 7px', border: `1px solid ${quality.color}`, borderRadius: '14px',
@@ -2884,7 +2889,7 @@
       showFullCard(qualityId = 'plebeia') {
         if (this.cardOverlay) this.cardOverlay.remove();
         const quality = QUALITY.find(item => item.id === qualityId) || QUALITY[0];
-        const artByQuality = root.CONQUISTADOR_WAIFU_DROP_ART || {};
+        const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const overlay = this.el('div', {
           position: 'fixed', inset: '0', zIndex: '104', display: 'flex',
           alignItems: 'center', justifyContent: 'center', padding: '16px',
@@ -2903,8 +2908,8 @@
           objectFit: 'contain', border: `3px solid ${quality.color}`, borderRadius: '9px',
           boxShadow: `0 14px 44px rgba(0,0,0,.8), 0 0 16px ${quality.color}66`
         });
-        full.src = artByQuality[quality.id] || root.CONQUISTADOR_WAIFU_ART || '';
-        full.alt = `Carta completa da Donzela Slime — ${quality.name}`;
+        full.src = fullResolutionArt;
+        full.alt = 'Ilustração completa da Donzela Slime';
         overlay.append(close, full);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
         this.document.body.appendChild(overlay); this.cardOverlay = overlay;
@@ -5491,10 +5496,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v31">
+  <script id="conquistador-v32">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 31,
-    feature: 'Cartas completas e descrição lateral no bestiário',
+    version: 32,
+    feature: 'Galeria com arte integral e descrição funcional no bestiário',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
