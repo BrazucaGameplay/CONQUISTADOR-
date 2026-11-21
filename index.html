@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V26 Bestiário</title>
+  <title>CONQUISTADOR DE WAIFU'S — V43</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -24,7 +24,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" crossorigin="anonymous"></script>
 
-\n  <script id="conquistador-systems-v13">
+\n  <script id="conquistador-systems-v43">
   (function (root) {
     'use strict';
 
@@ -153,6 +153,7 @@
       constructor(eventBus) {
         this.eventBus = eventBus;
         this.records = new Map();
+        this.combatGraceMs = 5000;
         this.unsubscribeRemoved = this.eventBus.on('entity:removed', entity => {
           if (entity && entity.statusId) this.records.delete(entity.statusId);
         });
@@ -175,7 +176,9 @@
           moveSpeed: this.numberOr(source.moveSpeed ?? source.speed, 76, 0),
           hpRegenOutOfCombat: this.numberOr(source.hpRegenOutOfCombat, 0, 0),
           energyRegen: this.numberOr(source.energyRegen, 0, 0),
-          modifiers: []
+          modifiers: [],
+          combatUntil: 0,
+          regenEmitAccumulator: 0
         };
         this.records.set(entityId, record);
         this.emitChanged(entityId, 'registered');
@@ -228,18 +231,40 @@
           moveSpeed: this.numberOr(savedStats.moveSpeed ?? savedStats.speed, current.moveSpeed ?? current.speed ?? 76, 0),
           hpRegenOutOfCombat: this.numberOr(savedStats.hpRegenOutOfCombat, current.hpRegenOutOfCombat ?? 0, 0),
           energyRegen: this.numberOr(savedStats.energyRegen, current.energyRegen ?? 0, 0),
-          modifiers
+          modifiers,
+          combatUntil: 0,
+          regenEmitAccumulator: 0
         });
         this.emitChanged(entityId, 'restored');
         return true;
       }
-      applyDamage(entityId, amount) {
+      touchCombat(entityId, now = Date.now()) {
+        const record = this.records.get(entityId);
+        if (record) record.combatUntil = now + this.combatGraceMs;
+      }
+      applyDamage(entityId, amount, attackerId = null) {
         const record = this.records.get(entityId);
         if (!record) return null;
         const damage = this.numberOr(amount, 0, 0);
         record.hp = Math.max(0, record.hp - damage);
+        const now = Date.now();
+        this.touchCombat(entityId, now);
+        if (attackerId) this.touchCombat(attackerId, now);
+        if (entityId === 'player' || attackerId === 'player') this.touchCombat('player', now);
         this.emitChanged(entityId, 'damage');
-        return { hp: this.getStat(entityId, 'hp'), defeated: record.hp <= 0 };
+        return { hp: this.getStat(entityId, 'hp'), defeated: record.hp <= 0, damage };
+      }
+      calculateDamage(attackerId, targetId) {
+        const attack = this.getStat(attackerId, 'attack');
+        const defense = this.getStat(targetId, 'defense');
+        const penetration = this.getStat(attackerId, 'penetration');
+        if (attack === null || defense === null || penetration === null) return null;
+        return Math.max(1, Math.floor(attack - Math.max(0, defense - penetration)));
+      }
+      getAttackCooldown(entityId, baseCooldownMs) {
+        const base = this.numberOr(baseCooldownMs, 1000, 1);
+        const speed = this.getStat(entityId, 'attackSpeed');
+        return Math.max(80, base / Math.max(0.1, this.numberOr(speed, 1, 0.1, 10)));
       }
       heal(entityId, amount) {
         const record = this.records.get(entityId);
@@ -256,6 +281,34 @@
         record[canonicalResource] = Math.min(this.getStat(entityId, maxKey), record[canonicalResource] + this.numberOr(amount, 0, 0));
         this.emitChanged(entityId, `restore-${resource}`);
         return this.getStat(entityId, canonicalResource);
+      }
+      updateRegeneration(deltaMs, now = Date.now()) {
+        // Delta real até 1s; limita pausas longas e evita perda em quedas moderadas de FPS.
+        const elapsed = Math.max(0, Math.min(1000, Number(deltaMs) || 0)) / 1000;
+        if (!elapsed) return;
+        for (const [entityId, record] of this.records) {
+          let changed = false;
+          const maxEnergy = this.getStat(entityId, 'maxEnergy');
+          const energyRate = this.getStat(entityId, 'energyRegen');
+          if (energyRate > 0 && record.energy < maxEnergy) {
+            const next = Math.min(maxEnergy, record.energy + energyRate * elapsed);
+            if (next !== record.energy) { record.energy = next; changed = true; }
+          }
+          const maxHp = this.getStat(entityId, 'maxHp');
+          const hpRate = this.getStat(entityId, 'hpRegenOutOfCombat');
+          if (now >= (record.combatUntil || 0) && hpRate > 0 && record.hp < maxHp) {
+            const next = Math.min(maxHp, record.hp + hpRate * elapsed);
+            if (next !== record.hp) { record.hp = next; changed = true; }
+          }
+          if (changed) {
+            record.regenEmitAccumulator = (record.regenEmitAccumulator || 0) + elapsed;
+            if (record.regenEmitAccumulator >= 0.25 ||
+                record.hp >= maxHp && record.energy >= maxEnergy) {
+              record.regenEmitAccumulator = 0;
+              this.emitChanged(entityId, 'regeneration');
+            }
+          }
+        }
       }
       addModifier(entityId, modifier) {
         const record = this.records.get(entityId);
@@ -712,9 +765,11 @@
         autoAttackInner.textContent = '⚔';
         autoAttackBadge.appendChild(autoAttackInner);
 
-        document.body.appendChild(root);
+        // O painel textual superior foi removido a pedido; manter somente
+        // o indicador circular de ataque automático.
+        root.remove();
         document.body.appendChild(autoAttackBadge);
-        this.uiRoot = root;
+        this.uiRoot = null;
         this.playerLine = playerLine;
         this.monsterLine = monsterLine;
         this.messageLine = messageLine;
@@ -725,7 +780,7 @@
 
       updateAutoAttackIndicator() {
         if (!this.autoAttackBadge) return;
-        const cooldown = Math.max(1, this.playerAttackCooldownMs || 420);
+        const cooldown = this.status.getAttackCooldown('player', this.playerAttackCooldownMs || 420);
         const elapsed = Math.max(0, this.now - this.lastPlayerAttackAt);
         const progress = Math.max(0, Math.min(1, elapsed / cooldown));
         const percent = (progress * 100).toFixed(1);
@@ -1179,7 +1234,8 @@
           this.events.emit('player:combat-stop', { targetId: this.approachTargetId });
           this.approachTargetId = null;
         }
-        if (this.pendingPlayerAttack || this.now - this.lastPlayerAttackAt < this.playerAttackCooldownMs) {
+        const currentAttackCooldown = this.status.getAttackCooldown('player', this.playerAttackCooldownMs);
+        if (this.pendingPlayerAttack || this.now - this.lastPlayerAttackAt < currentAttackCooldown) {
           return false;
         }
         return this.playerAttack(target);
@@ -1219,10 +1275,9 @@
         const distance = Math.hypot(record.sprite.x - playerPoint.x, record.sprite.y - playerPoint.y);
         if (distance > this.attackRange + 8) return false;
 
-        const strength = this.status.getStat('player', 'attack') || 1;
-        const defense = this.status.getStat(record.id, 'defense') || 0;
-        const damage = Math.max(1, strength - defense);
-        const result = this.status.applyDamage(record.id, damage);
+        const damage = this.status.calculateDamage('player', record.id);
+        if (damage === null) return false;
+        const result = this.status.applyDamage(record.id, damage, 'player');
         if (!result) return false;
 
         this.showMonsterHitEffect(record);
@@ -1457,12 +1512,14 @@
             this.setMonsterAnimation(record, 'idle');
           }
           if (time >= record.nextAttackAt) {
-            record.nextAttackAt = time + this.monsterAttackCooldownMs;
+            const cooldown = this.status.getAttackCooldown(record.id, this.monsterAttackCooldownMs);
+            record.nextAttackAt = time + cooldown;
             this.setMonsterAnimation(record, 'attack', dxToPlayer, dyToPlayer);
-            const result = this.status.applyDamage('player', record.definition.damage);
+            const damage = this.status.calculateDamage(record.id, 'player');
+            const result = damage === null ? null : this.status.applyDamage('player', damage, record.id);
             if (result) {
               this.events.emit('monster:attack', {
-                entityId: record.id, targetId: 'player', damage: record.definition.damage,
+                entityId: record.id, targetId: 'player', damage: result.damage,
                 remainingHp: result.hp
               });
             }
@@ -1522,6 +1579,7 @@
       update(time, delta) {
         if (!this.active) return;
         this.now = Number.isFinite(time) ? time : this.now + (Number(delta) || 0);
+        this.status.updateRegeneration(Number(delta) || 0, Date.now());
         this.updateAutoAttackIndicator();
         this.updateInitialChunkFill();
         this.updateChunkRespawns();
@@ -2400,7 +2458,7 @@
           borderRadius: '9px',
           outline: '1px solid rgba(28,20,14,.95)',
           outlineOffset: '-6px',
-          background: 'linear-gradient(180deg, rgba(31,25,21,.96), rgba(12,12,11,.95))',
+          background: 'linear-gradient(180deg, rgba(31,25,21,.76), rgba(12,12,11,.68))',
           color: '#f3ead8',
           boxShadow: '0 18px 55px rgba(0,0,0,.68), inset 0 0 38px rgba(0,0,0,.34)',
           font: '14px/1.35 Georgia, "Times New Roman", serif',
@@ -2981,7 +3039,7 @@
           width: 'min(100%, 540px)', height: 'min(88dvh, 760px)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           border: '2px solid rgba(190,169,125,.9)', borderRadius: '9px',
-          background: 'linear-gradient(180deg, rgba(31,25,21,.98), rgba(12,12,11,.98))',
+          background: 'linear-gradient(180deg, rgba(31,25,21,.76), rgba(12,12,11,.68))',
           color: '#f3ead8', boxShadow: '0 18px 55px rgba(0,0,0,.68)',
           font: '14px/1.35 Georgia, serif', touchAction: 'pan-y'
         });
@@ -3155,7 +3213,7 @@
         const overlay = this.el('div', {
           position: 'fixed', inset: '0', zIndex: '104', display: 'flex',
           alignItems: 'center', justifyContent: 'center', padding: '16px',
-          background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(3px)'
+          background: 'rgba(0,0,0,.30)', backdropFilter: 'blur(2px)'
         });
         const close = this.el('button', {
           position: 'absolute', top: 'max(14px, env(safe-area-inset-top))',
@@ -4120,7 +4178,9 @@
         this._systemSaveUnsubs = [
           this.eventBus.on('save:request', () => this.scheduleExtensionSave()),
           this.eventBus.on('status:changed', event => {
-            if (event && event.entityId === 'player') this.scheduleExtensionSave();
+            if (event && event.entityId === 'player' && event.reason !== 'regeneration') {
+              this.scheduleExtensionSave();
+            }
           }),
           this.eventBus.on('level:changed', event => {
             if (event && event.entityId === 'player') this.scheduleExtensionSave();
@@ -4353,30 +4413,6 @@
           Object.assign(statusTitle.style, {
             color: '#f2dfb8', font: 'bold 21px Georgia,serif'
           });
-          const makeBottomExit = (parent, label, onExit) => {
-            const footer = statusDoc.createElement('div');
-            Object.assign(footer.style, {
-              position: 'sticky', bottom: '0', display: 'flex',
-              justifyContent: 'center', padding: '12px 0 2px', marginTop: '12px',
-              background: 'linear-gradient(180deg,rgba(16,15,16,0),rgba(16,15,16,.98) 28%)'
-            });
-            const button = statusDoc.createElement('button');
-            button.type = 'button'; button.textContent = `×  ${label}`;
-            Object.assign(button.style, {
-              minWidth: '142px', minHeight: '42px', padding: '8px 18px',
-              border: '1px solid #b99a64', borderRadius: '22px',
-              background: 'linear-gradient(180deg,#493727,#17110e)',
-              color: '#f4dfaa', font: 'bold 12px Georgia,serif',
-              letterSpacing: '.08em', cursor: 'pointer', touchAction: 'manipulation'
-            });
-            button.addEventListener('click', onExit);
-            button.addEventListener('click', () => window.setTimeout(() => {
-              if (typeof syncHudVisibility === 'function') syncHudVisibility();
-            }, 0));
-            footer.appendChild(button); parent.appendChild(footer);
-            return button;
-          };
-
           const statusClose = statusDoc.createElement('button');
           statusClose.type = 'button'; statusClose.textContent = '×';
           Object.assign(statusClose.style, {
@@ -4453,7 +4489,6 @@
             statNodes[key] = value;
           }
           statusPanel.append(statusHeader, waifuHeading, slotsRow, statsHeading, statsGrid);
-          makeBottomExit(statusPanel, 'SAIR', () => { statusBackdrop.style.display = 'none'; });
           statusBackdrop.appendChild(statusPanel);
           statusDoc.body.appendChild(statusBackdrop);
 
@@ -4461,7 +4496,7 @@
           Object.assign(pickerBackdrop.style, {
             position: 'fixed', inset: '0', zIndex: '130', display: 'none',
             alignItems: 'center', justifyContent: 'center', padding: '14px',
-            background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(3px)'
+            background: 'rgba(0,0,0,.30)', backdropFilter: 'blur(2px)'
           });
           const pickerPanel = statusDoc.createElement('section');
           Object.assign(pickerPanel.style, {
@@ -4514,7 +4549,10 @@
             const latest = readWaifuData();
             const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
             while (equippedNow.length < 3) equippedNow.push(null);
-            if (equippedNow.includes(selectedWaifuCard.instanceId)) return;
+            if (equippedNow.includes(selectedWaifuCard.instanceId)) {
+              pickerTitle.textContent = 'ESTA CARTA JÁ ESTÁ EQUIPADA';
+              return;
+            }
             const ownedCards = Array.isArray(latest.cards) ? latest.cards : [];
             const equippedCards = equippedNow.map(id => ownedCards.find(card => card && card.instanceId === id)).filter(Boolean);
             const selectedType = waifuTypeOf(selectedWaifuCard);
@@ -4545,10 +4583,6 @@
           });
           pickerActions.append(addWaifuButton, cancelPickerButton);
           pickerPanel.append(pickerHeader, pickerGrid, pickerActions);
-          makeBottomExit(pickerPanel, 'SAIR', () => {
-            pickerBackdrop.style.display = 'none';
-            statusBackdrop.style.display = 'none';
-          });
           pickerBackdrop.appendChild(pickerPanel);
           statusDoc.body.appendChild(pickerBackdrop);
 
@@ -4694,12 +4728,10 @@
             pickerGrid.replaceChildren();
             const data = readWaifuData();
             const cards = Array.isArray(data.cards) ? data.cards : [];
+            // A galeria nunca esconde cartas equipadas: a tentativa de
+            // duplicar um tipo é validada ao confirmar, com aviso explícito.
             const equipped = Array.isArray(data.equipped) ? data.equipped : [];
-            const equippedCards = equipped.map(id => findCard(id)).filter(Boolean);
-            const equippedTypes = new Set(equippedCards.map(waifuTypeOf));
-            const available = cards.filter(card =>
-              card && !equipped.includes(card.instanceId) && !equippedTypes.has(waifuTypeOf(card))
-            );
+            const available = cards.filter(card => card);
             const qualityOrder = ['plebeia', 'dama', 'condessa', 'duquesa', 'rainha'];
             const grouped = qualityOrder.map(id => ({
               id, info: qualityInfo[id],
@@ -4708,9 +4740,7 @@
 
             if (!grouped.length) {
               const empty = statusDoc.createElement('div');
-              empty.textContent = cards.length
-                ? 'A Donzela Slime já está equipada. Remova-a do espaço atual para escolher outra qualidade.'
-                : 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
+              empty.textContent = 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
               Object.assign(empty.style, {
                 gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center',
                 color: '#d6c8ad', lineHeight: '1.5'
@@ -4754,7 +4784,7 @@
               });
               stack.append(art, count, quality);
               stack.addEventListener('click', () => {
-                selectedWaifuCard = group.cards[0];
+                selectedWaifuCard = group.cards.find(card => !equipped.includes(card.instanceId)) || group.cards[0];
                 pickerGrid.querySelectorAll('button').forEach(button => {
                   button.style.outline = 'none';
                 });
@@ -4887,7 +4917,7 @@
             gap: '6px',
             border: '1px solid rgba(190,169,125,.9)',
             borderRadius: '10px',
-            background: 'linear-gradient(180deg, rgba(37,29,24,.98), rgba(12,12,11,.98))',
+            background: 'linear-gradient(180deg, rgba(37,29,24,.98), rgba(12,12,11,.68))',
             boxShadow: '0 10px 28px rgba(0,0,0,.7), inset 0 0 18px rgba(0,0,0,.35)'
           });
 
@@ -4943,6 +4973,17 @@
             statusBackdrop,
             pickerBackdrop
           ].filter(Boolean);
+          // Todas as abas usam superfícies translúcidas; o mapa permanece visível
+          // atrás do painel, sem fundos opacos que escondam o mundo.
+          for (const backdrop of modalBackdrops) {
+            backdrop.style.background = 'rgba(0,0,0,.30)';
+            backdrop.style.backdropFilter = 'blur(2px)';
+            const panel = backdrop.querySelector('section');
+            if (panel) {
+              panel.style.background = 'linear-gradient(180deg,rgba(41,32,29,.78),rgba(16,15,16,.72))';
+              panel.style.backdropFilter = 'blur(8px)';
+            }
+          }
           const modalIsOpen = () => modalBackdrops.some(backdrop => backdrop.style.display !== 'none');
           const syncHudVisibility = () => {
             const hidden = modalIsOpen();
@@ -4973,9 +5014,6 @@
             exit.addEventListener('click', () => system.setOpen(false));
             footer.appendChild(exit); panel.appendChild(footer);
           };
-          addPanelExit(this.inventorySystem.backdrop, this.inventorySystem);
-          addPanelExit(this.bestiarySystem.backdrop, this.bestiarySystem);
-          addPanelExit(this.waifuGallerySystem.backdrop, this.waifuGallerySystem);
 
           for (const system of [this.inventorySystem, this.bestiarySystem, this.waifuGallerySystem]) {
             const originalSetOpen = system.setOpen.bind(system);
@@ -6504,10 +6542,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v41">
-  window.CONQUISTADOR_V30 = Object.freeze({
-    version: 41,
-    feature: 'Atributos canônicos compartilhados e cartas equipadas com moldura da galeria',
+  <script id="conquistador-v43">
+  window.CONQUISTADOR_V43 = Object.freeze({
+    version: 43,
+    feature: 'Fundação estabilizada: regeneração, dano compartilhado, penetração e velocidade de ataque',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
