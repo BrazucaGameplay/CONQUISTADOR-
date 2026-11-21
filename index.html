@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#17251b">
-  <title>CONQUISTADOR — V24 Respawn e Impacto Compacto</title>
+  <title>CONQUISTADOR — V26 Bestiário</title>
   <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -540,6 +540,7 @@
         this.pendingPlayerAttack = null;
         this.approachTargetId = null;
         this.lastApproachRequestAt = -Infinity;
+        this.manualDestinationActive = false;
         this.aggroRange = 260;
         this.monsterAttackRange = 24;
         this.monsterAttackCooldownMs = 1350;
@@ -551,6 +552,18 @@
         this.createMonsterTextures();
         this.createUI();
         this.unsubscribers = [
+          this.events.on('player:destination-set', () => {
+            this.manualDestinationActive = true;
+            // Discard only combat intent. Never send combat-stop here because
+            // that event clears the WorldScene path, including the user's route.
+            this.pendingPlayerAttack = null;
+            this.approachTargetId = null;
+          }),
+          this.events.on('player:destination-cleared', () => {
+            this.manualDestinationActive = false;
+            this.approachTargetId = null;
+            this.pendingPlayerAttack = null;
+          }),
           this.events.on('status:changed', event => {
             if (event && (event.entityId === 'player' || this.monsters.has(event.entityId))) this.refreshUI();
           }),
@@ -1031,6 +1044,11 @@
 
       autoAttackNearbyMonster() {
         if (!this.active) return false;
+        if (this.manualDestinationActive) {
+          this.pendingPlayerAttack = null;
+          this.approachTargetId = null;
+          return false;
+        }
         const playerPoint = this.getPlayerPoint();
         if (!playerPoint) return false;
 
@@ -2165,6 +2183,388 @@
   })(window);
   </script>
 
+
+  <script id="conquistador-bestiary-v1">
+  (function (root) {
+    'use strict';
+    class BestiarySystem {
+      constructor(api, options = {}) {
+        if (!api || !api.events || !api.progress || !api.data) {
+          throw new TypeError('BestiarySystem exige events, progress e data.');
+        }
+        this.api = api;
+        this.document = options.document || root.document;
+        this.active = true;
+        this.opened = false;
+        this.category = 'monsters';
+        this.killCounts = this.readKillCounts();
+        this.createUI();
+        this.unsubscribers = [
+          this.api.events.on('monster:died', event => this.recordKill(event)),
+          this.api.events.on('save:written', () => this.refresh())
+        ];
+        this.refresh();
+      }
+
+      el(tag, styles = {}, className = '') {
+        const node = this.document.createElement(tag);
+        Object.assign(node.style, styles);
+        if (className) node.className = className;
+        return node;
+      }
+
+      readKillCounts() {
+        const flags = this.api.progress.get('flags');
+        const bestiary = flags && typeof flags === 'object' ? flags.bestiary : null;
+        const counts = bestiary && typeof bestiary.monsters === 'object' ? bestiary.monsters : {};
+        const result = {};
+        for (const [id, count] of Object.entries(counts)) {
+          result[id] = Math.max(0, Math.floor(Number(count) || 0));
+        }
+        return result;
+      }
+
+      recordKill(event) {
+        if (!this.active || !event || event.killerId !== 'player' ||
+            typeof event.monsterId !== 'string') return;
+        this.killCounts[event.monsterId] = (this.killCounts[event.monsterId] || 0) + 1;
+        const currentFlags = this.api.progress.get('flags');
+        const flags = currentFlags && typeof currentFlags === 'object' ? { ...currentFlags } : {};
+        const oldBestiary = flags.bestiary && typeof flags.bestiary === 'object'
+          ? flags.bestiary : {};
+        flags.bestiary = {
+          ...oldBestiary,
+          monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
+        };
+        this.api.progress.update('flags', flags);
+        this.refresh();
+      }
+
+      createUI() {
+        const button = this.el('button', {
+          position: 'fixed',
+          top: 'max(98px, calc(env(safe-area-inset-top) + 98px))',
+          right: 'max(12px, env(safe-area-inset-right))',
+          zIndex: '40',
+          padding: '7px 13px',
+          minHeight: '38px',
+          border: '1px solid rgba(221,196,128,.82)',
+          borderRadius: '20px',
+          background: 'linear-gradient(180deg, rgba(55,43,31,.96), rgba(22,19,17,.96))',
+          color: '#f4dfaa',
+          font: '700 11px/1 Georgia, serif',
+          letterSpacing: '.13em',
+          textShadow: '0 1px 2px #000',
+          boxShadow: '0 3px 12px rgba(0,0,0,.45)',
+          touchAction: 'manipulation',
+          cursor: 'pointer'
+        });
+        button.type = 'button';
+        button.textContent = 'BESTIÁRIO';
+        button.setAttribute('aria-label', 'Abrir bestiário');
+        button.setAttribute('aria-expanded', 'false');
+        this.openHandler = () => this.setOpen(!this.opened);
+        button.addEventListener('click', this.openHandler);
+
+        const backdrop = this.el('div', {
+          position: 'fixed',
+          inset: '0',
+          zIndex: '101',
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 'max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom))',
+          background: 'rgba(0,0,0,.62)',
+          backdropFilter: 'blur(1.5px)',
+          WebkitBackdropFilter: 'blur(1.5px)',
+          overscrollBehavior: 'contain'
+        });
+        const panel = this.el('section', {
+          position: 'relative',
+          width: 'min(100%, 540px)',
+          height: 'min(88dvh, 760px)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          border: '2px solid rgba(190,169,125,.9)',
+          borderRadius: '9px',
+          outline: '1px solid rgba(28,20,14,.95)',
+          outlineOffset: '-6px',
+          background: 'linear-gradient(180deg, rgba(31,25,21,.96), rgba(12,12,11,.95))',
+          color: '#f3ead8',
+          boxShadow: '0 18px 55px rgba(0,0,0,.68), inset 0 0 38px rgba(0,0,0,.34)',
+          font: '14px/1.35 Georgia, "Times New Roman", serif',
+          touchAction: 'pan-y'
+        });
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        panel.setAttribute('aria-label', 'Bestiário');
+
+        const header = this.el('div', {
+          position: 'relative',
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '62px',
+          padding: '8px 54px 7px'
+        });
+        const title = this.el('div', {
+          color: '#f2e4c7',
+          font: 'bold 23px/1 Georgia, serif',
+          letterSpacing: '.055em',
+          textAlign: 'center',
+          textShadow: '0 2px 4px #000, 0 0 12px rgba(221,190,125,.18)'
+        });
+        title.textContent = 'BESTIÁRIO';
+        const close = this.el('button', {
+          position: 'absolute',
+          right: '10px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: '36px',
+          height: '36px',
+          display: 'grid',
+          placeItems: 'center',
+          border: '1px solid rgba(219,198,157,.72)',
+          borderRadius: '50%',
+          background: 'linear-gradient(145deg, rgba(86,72,61,.95), rgba(25,22,20,.98))',
+          color: '#f7eddb',
+          font: '26px/1 Arial, sans-serif',
+          boxShadow: '0 2px 8px rgba(0,0,0,.55)',
+          cursor: 'pointer',
+          touchAction: 'manipulation'
+        });
+        close.type = 'button';
+        close.textContent = '×';
+        close.setAttribute('aria-label', 'Fechar bestiário');
+        this.closeHandler = () => this.setOpen(false);
+        close.addEventListener('click', this.closeHandler);
+        header.append(title, close);
+
+        const rule = this.el('div', {
+          height: '1px',
+          flex: '0 0 auto',
+          margin: '0 17px 10px',
+          background: 'linear-gradient(90deg, transparent, rgba(205,183,137,.65), transparent)'
+        });
+        const tabs = this.el('div', {
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0,1fr))',
+          gap: '5px',
+          padding: '0 12px 12px',
+          flex: '0 0 auto'
+        });
+        this.tabButtons = {};
+        const tabDefs = [
+          ['monsters','MONSTROS'],
+          ['bosses','BOSS'],
+          ['waifus','WAIFUS'],
+          ['titans','TITANS']
+        ];
+        for (const [id,label] of tabDefs) {
+          const tab = this.el('button', {
+            minWidth: '0',
+            minHeight: '39px',
+            padding: '4px 2px',
+            border: '1px solid rgba(190,169,125,.58)',
+            borderRadius: '7px',
+            background: 'linear-gradient(180deg, rgba(57,46,35,.95), rgba(20,18,16,.96))',
+            color: '#d9c8a7',
+            font: 'bold 10px/1.1 Georgia, serif',
+            letterSpacing: '.035em',
+            textShadow: '0 1px 2px #000',
+            cursor: 'pointer',
+            touchAction: 'manipulation'
+          });
+          tab.type = 'button';
+          tab.textContent = label;
+          tab.addEventListener('click', () => {
+            this.category = id;
+            this.refresh();
+          });
+          this.tabButtons[id] = tab;
+          tabs.appendChild(tab);
+        }
+
+        const content = this.el('div', {
+          flex: '1 1 auto',
+          minHeight: '0',
+          overflowY: 'auto',
+          padding: '13px 14px 25px',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch'
+        });
+        panel.append(header, rule, tabs, content);
+        backdrop.appendChild(panel);
+        this.document.body.append(button, backdrop);
+        this.openButton = button;
+        this.backdrop = backdrop;
+        this.content = content;
+        this.backdropHandler = event => {
+          if (event.target === backdrop) this.setOpen(false);
+        };
+        backdrop.addEventListener('click', this.backdropHandler);
+        this.keyHandler = event => {
+          if (event.key === 'Escape' && this.opened) this.setOpen(false);
+        };
+        this.document.addEventListener('keydown', this.keyHandler);
+      }
+
+      makeSectionHeading(text) {
+        const heading = this.el('div', {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          margin: '4px 3px 18px',
+          color: '#e9d8b7',
+          font: 'bold 17px/1.2 Georgia, serif',
+          letterSpacing: '.045em',
+          textAlign: 'center',
+          textShadow: '0 2px 3px #000'
+        });
+        const left = this.el('span', {
+          height: '1px', flex: '1 1 20px', maxWidth: '70px',
+          background: 'linear-gradient(90deg, transparent, rgba(194,169,125,.65))'
+        });
+        const label = this.el('span');
+        label.textContent = text;
+        const right = this.el('span', {
+          height: '1px', flex: '1 1 20px', maxWidth: '70px',
+          background: 'linear-gradient(90deg, rgba(194,169,125,.65), transparent)'
+        });
+        heading.append(left,label,right);
+        return heading;
+      }
+
+      renderEntryGrid(entries) {
+        const grid = this.el('div', {
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: '12px 9px',
+          alignItems: 'stretch'
+        });
+        for (const entry of entries) {
+          const card = this.el('div', {
+            minWidth: '0',
+            minHeight: '112px',
+            padding: '12px 5px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            border: '1px solid rgba(190,169,125,.38)',
+            borderRadius: '8px',
+            background: 'linear-gradient(180deg, rgba(71,58,43,.34), rgba(20,18,16,.35))',
+            boxShadow: 'inset 0 0 16px rgba(0,0,0,.28)'
+          });
+          const emblem = this.el('div', {
+            width: '48px',
+            height: '48px',
+            marginBottom: '7px',
+            display: 'grid',
+            placeItems: 'center',
+            color: entry.known ? '#e9d6a8' : 'rgba(179,169,151,.48)',
+            font: '34px/1 "Arial Unicode MS", sans-serif',
+            filter: entry.known ? 'drop-shadow(0 3px 3px rgba(0,0,0,.8))' : 'grayscale(1)',
+            textShadow: '0 0 9px rgba(221,190,125,.25)'
+          });
+          emblem.textContent = entry.icon;
+          const name = this.el('div', {
+            color: entry.known ? '#eee2cb' : '#a69b89',
+            font: '13px/1.2 Georgia, serif',
+            overflowWrap: 'anywhere',
+            textShadow: '0 2px 3px #000'
+          });
+          name.textContent = entry.known ? entry.name : 'Desconhecido';
+          card.append(emblem,name);
+          if (entry.known && entry.countLabel) {
+            const count = this.el('div', {
+              marginTop: '5px',
+              color: '#cbb88e',
+              font: '11px/1.2 Georgia, serif',
+              fontVariantNumeric: 'tabular-nums'
+            });
+            count.textContent = entry.countLabel;
+            card.appendChild(count);
+          }
+          grid.appendChild(card);
+        }
+        this.content.appendChild(grid);
+      }
+
+      refresh() {
+        if (!this.active || !this.content) return;
+        this.content.replaceChildren();
+        for (const [id, tab] of Object.entries(this.tabButtons)) {
+          const active = id === this.category;
+          tab.style.borderColor = active ? 'rgba(232,198,126,.98)' : 'rgba(190,169,125,.58)';
+          tab.style.background = active
+            ? 'linear-gradient(180deg, rgba(112,83,45,.95), rgba(48,35,23,.98))'
+            : 'linear-gradient(180deg, rgba(57,46,35,.95), rgba(20,18,16,.96))';
+          tab.style.color = active ? '#fff0c9' : '#d9c8a7';
+          tab.setAttribute('aria-pressed', String(active));
+        }
+
+        const configs = {
+          monsters: {
+            heading: 'MONSTROS',
+            entries: Object.values(this.api.data.MONSTERS || {}).map(monster => ({
+              id: monster.id,
+              name: monster.name,
+              icon: monster.id === 'slime' ? '◈' : monster.id === 'monkey' ? '♟' : '♧',
+              known: true,
+              countLabel: `Derrotados: ${(this.killCounts[monster.id] || 0).toLocaleString('pt-BR')}`
+            }))
+          },
+          bosses: { heading: 'BOSS', entries: [] },
+          waifus: { heading: 'WAIFUS', entries: [] },
+          titans: { heading: 'TITANS', entries: [] }
+        };
+        const config = configs[this.category] || configs.monsters;
+        this.content.appendChild(this.makeSectionHeading(config.heading));
+        if (config.entries.length) {
+          this.renderEntryGrid(config.entries);
+        } else {
+          const empty = this.el('div', {
+            padding: '45px 15px',
+            color: 'rgba(221,208,185,.72)',
+            font: 'italic 15px/1.5 Georgia, serif',
+            textAlign: 'center',
+            textShadow: '0 2px 3px #000'
+          });
+          empty.textContent = 'Nenhum registro descoberto.';
+          this.content.appendChild(empty);
+        }
+      }
+
+      setOpen(open) {
+        if (!this.active) return;
+        this.opened = Boolean(open);
+        this.backdrop.style.display = this.opened ? 'flex' : 'none';
+        this.openButton.setAttribute('aria-expanded', String(this.opened));
+        if (this.opened) this.refresh();
+      }
+
+      destroy() {
+        if (!this.active) return;
+        this.active = false;
+        for (const unsubscribe of this.unsubscribers || []) unsubscribe();
+        this.unsubscribers = [];
+        if (this.openButton) this.openButton.removeEventListener('click', this.openHandler);
+        if (this.closeButton) this.closeButton.removeEventListener('click', this.closeHandler);
+        if (this.backdrop) this.backdrop.removeEventListener('click', this.backdropHandler);
+        if (this.document && this.keyHandler) this.document.removeEventListener('keydown', this.keyHandler);
+        if (this.openButton) this.openButton.remove();
+        if (this.backdrop) this.backdrop.remove();
+      }
+    }
+    root.CONQUISTADOR_BESTIARY_SYSTEMS = Object.freeze({ BestiarySystem });
+  })(window);
+  </script>
+
   <script id="conquistador-core">
   (function (root) {
     'use strict';
@@ -3035,6 +3435,7 @@
         super('WorldScene');
         this.path = [];
         this.currentDestinationKey = null;
+        this.manualDestinationActive = false;
         this.lastStuckDestinationKey = null;
         this.lastStuckPosition = null;
         this.lastStuckAt = 0;
@@ -3223,11 +3624,16 @@
           this.inventorySystem = new window.CONQUISTADOR_V15_SYSTEMS.InventorySystem(this.extensionAPI, {
             document: window.document
           });
+          this.bestiarySystem = new window.CONQUISTADOR_BESTIARY_SYSTEMS.BestiarySystem(this.extensionAPI, {
+            document: window.document
+          });
           this.events.once('shutdown', () => {
             if (this.monsterSystem) this.monsterSystem.destroy();
             if (this.inventorySystem) this.inventorySystem.destroy();
+            if (this.bestiarySystem) this.bestiarySystem.destroy();
             this.monsterSystem = null;
             this.inventorySystem = null;
+            this.bestiarySystem = null;
           });
           loading.style.display = 'none';
         } catch (error) {
@@ -4010,6 +4416,7 @@
       }
 
       clearPlayerPath({ rememberStuck = false, resetRetry = true } = {}) {
+        const wasManualDestination = this.manualDestinationActive === true;
         if (rememberStuck && this.currentDestinationKey) {
           this.lastStuckDestinationKey = this.currentDestinationKey;
           this.lastStuckPosition = this.player ? { x: this.player.x, y: this.player.y } : null;
@@ -4019,6 +4426,10 @@
         this.invalidSaveRouteActive = false;
         this.currentDestinationKey = null;
         this.combatMoveTargetKey = null;
+        this.manualDestinationActive = false;
+        if (wasManualDestination && this.eventBus) {
+          this.eventBus.emit('player:destination-cleared', {});
+        }
         if (resetRetry) {
           this.stuckElapsed = 0;
           this.stuckRepathCount = 0;
@@ -4338,6 +4749,9 @@
         this.clearInvalidDestinationFeedback();
         this.path = route.map(tile => this.getPlayerWaypoint(tile));
         this.currentDestinationKey = destinationKey;
+        this.combatMoveTargetKey = null;
+        this.manualDestinationActive = true;
+        this.eventBus.emit('player:destination-set', { tile: destination });
         if (this.invalidSavePreserved) this.invalidSaveRouteActive = true;
         this.stuckElapsed = 0;
         this.stuckRepathCount = 0;
@@ -4682,6 +5096,20 @@
         respawnRetryMs: 2000,
         hitEffect: 'compact-local-burst',
         attackArcRemoved: true
+      });
+      window.CONQUISTADOR_V25 = Object.freeze({
+        version: 25,
+        game,
+        movementPriority: 'manual-destination-before-auto-combat',
+        autoAttackPausedDuringManualRoute: true,
+        autoAttackResumesAfterArrivalOrCancel: true
+      });
+      window.CONQUISTADOR_V26 = Object.freeze({
+        version: 26,
+        game,
+        bestiaryCategories: ['monsters', 'bosses', 'waifus', 'titans'],
+        monsterKillTracking: 'save-v4-progress-flags',
+        bestiaryButtonPosition: 'below-backpack'
       });
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
