@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V67</title>
+<title>CONQUISTADOR DE WAIFU'S — V68</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -748,9 +748,9 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'auto';
-        autoAttackBadge.style.right = '70px';
-        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 96px))';
+        autoAttackBadge.style.left = 'max(76px, calc(env(safe-area-inset-left) + 76px))';
+        autoAttackBadge.style.right = 'auto';
+        autoAttackBadge.style.bottom = 'max(190px, calc(env(safe-area-inset-bottom) + 174px))';
         autoAttackBadge.style.zIndex = '30';
         autoAttackBadge.style.width = '56px';
         autoAttackBadge.style.height = '56px';
@@ -2964,12 +2964,28 @@
           boxShadow: 'inset 0 0 20px rgba(0,0,0,.35)'
         });
         descText.textContent = entry.description || 'Descrição ainda não disponível.';
+        const bonusLabel = this.el('div', {
+          margin: '22px 0 10px', color: '#e7c987',
+          font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
+        });
+        bonusLabel.textContent = 'BÔNUS DA CARTA';
+        const bonusList = this.el('div', {
+          display: 'flex', flexDirection: 'column', gap: '10px',
+          padding: '2px 0', color: '#f0e4ce', font: '16px/1.45 Georgia,serif'
+        });
+        for (const bonus of (Array.isArray(entry.bonuses) ? entry.bonuses : [])) {
+          const line = this.el('div', { padding: '4px 0', borderBottom: '1px solid rgba(198,168,108,.22)' });
+          line.textContent = `• ${bonus}`;
+          bonusList.appendChild(line);
+        }
         const pageHint = this.el('div', {
           marginTop: 'auto', paddingTop: '18px',
           color: '#d7c39b', font: '13px Georgia,serif', textAlign: 'center'
         });
         pageHint.textContent = 'Deslize para voltar ao perfil';
-        descriptionPage.append(pageHeader, descLabel, descText, pageHint);
+        descriptionPage.append(pageHeader, descLabel, descText);
+        if (bonusList.childElementCount) descriptionPage.append(bonusLabel, bonusList);
+        descriptionPage.append(pageHint);
         track.append(profile, descriptionPage);
         viewport.appendChild(track);
         overlay.append(close, viewport);
@@ -3027,6 +3043,7 @@
               id: 'slime', name: 'Donzela Slime', icon: '♥',
               image: root.CONQUISTADOR_WAIFU_ART || '',
               description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
+              bonuses: ['Pele de Gosma — Defesa', 'Corpo de Slime — Vida máxima'],
               known: ((this.api.progress.get('waifus') || {}).cards || []).length > 0,
               qualityColor: '#b65bff', detail: true
             }]
@@ -3549,31 +3566,194 @@
       showFullCard(stackKey = 'slime|1|plebeia') {
         if (this.cardOverlay) this.cardOverlay.remove();
         const parts = String(stackKey).split('|');
+        const speciesId = parts[0] || 'slime';
+        const level = Math.max(1, Math.floor(Number(parts[1]) || 1));
         const quality = QUALITY.find(item => item.id === parts[2]) || QUALITY[0];
+        const speciesName = speciesId === 'slime' ? 'Donzela Slime' : speciesId;
+        const cardsData = this.api.progress.get('waifus') || {};
+        const cards = Array.isArray(cardsData.cards) ? cardsData.cards : [];
+        const matchingCards = cards.filter(card => {
+          const cardSpecies = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+          const cardQuality = QUALITY.some(q => q.id === (card && card.quality)) ? card.quality : 'plebeia';
+          const legacyLevel = cardsData.intimacy && cardsData.intimacy[cardSpecies]
+            ? cardsData.intimacy[cardSpecies].level : 1;
+          const cardLevel = Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacyLevel) || 1)));
+          return cardSpecies === speciesId && cardQuality === quality.id && cardLevel === level;
+        });
+        const description = speciesId === 'slime'
+          ? 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.'
+          : 'Descrição ainda não disponível.';
+        const bonuses = speciesId === 'slime'
+          ? ['Pele de Gosma — +1 Defesa', 'Corpo de Slime — +10 HP máximo']
+          : [];
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const overlay = this.el('div', {
           position: 'fixed', inset: '0', zIndex: '104', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: '16px',
-          background: 'rgba(0,0,0,.30)', backdropFilter: 'blur(2px)'
+          alignItems: 'center', justifyContent: 'center',
+          padding: 'max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))',
+          background: 'rgba(0,0,0,.48)', backdropFilter: 'blur(3px)',
+          touchAction: 'pan-y'
         });
         const close = this.el('button', {
           position: 'absolute', top: 'max(14px, env(safe-area-inset-top))',
-          right: '14px', width: '40px', height: '40px', border: '1px solid #c6a86c',
-          borderRadius: '50%', background: '#211b17', color: '#fff', font: '26px Arial'
+          right: '14px', zIndex: '5', width: '40px', height: '40px',
+          border: '1px solid #c6a86c', borderRadius: '50%',
+          background: '#211b17', color: '#fff', font: '26px Arial',
+          cursor: 'pointer', touchAction: 'manipulation'
         });
         close.type = 'button'; close.textContent = '×';
         close.addEventListener('click', () => overlay.remove());
-        const full = this.el('img', {
-          display: 'block', width: 'auto', height: 'auto',
-          maxWidth: 'min(88vw, 440px)', maxHeight: '84dvh',
-          objectFit: 'contain', border: `3px solid ${quality.color}`, borderRadius: '9px',
-          boxShadow: `0 14px 44px rgba(0,0,0,.8), 0 0 16px ${quality.color}66`
+
+        const viewport = this.el('div', {
+          width: 'min(100%, 620px)', height: 'min(86dvh, 780px)',
+          overflow: 'hidden', position: 'relative',
+          border: '1px solid rgba(198,168,108,.5)', borderRadius: '12px',
+          background: 'linear-gradient(160deg,#211923,#0b0a10)',
+          boxShadow: '0 18px 55px rgba(0,0,0,.75)'
         });
-        full.src = fullResolutionArt;
-        full.alt = `Ilustração completa de ${parts[0] === 'slime' ? 'Donzela Slime' : parts[0]} nível ${parts[1] || 1}`;
-        overlay.append(close, full);
+        const track = this.el('div', {
+          display: 'flex', width: '200%', height: '100%',
+          transform: 'translateX(0)', transition: 'transform .28s ease',
+          willChange: 'transform'
+        });
+        const profile = this.el('section', {
+          width: '50%', height: '100%', flex: '0 0 50%',
+          boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          gap: '12px', padding: '18px 16px 24px', overflowY: 'auto',
+          background: 'radial-gradient(ellipse at 50% 30%,rgba(91,55,117,.28),transparent 65%)'
+        });
+        const cardFrame = this.el('div', {
+          position: 'relative', width: 'min(70vw, 310px)',
+          height: 'min(61dvh, 470px)', aspectRatio: '2 / 3',
+          flex: '0 1 auto', minHeight: '0',
+          padding: '9px', boxSizing: 'border-box',
+          border: `5px solid ${quality.color}`,
+          outline: '2px solid rgba(255,240,190,.88)', outlineOffset: '-8px',
+          borderRadius: '22px 22px 12px 12px',
+          background: 'linear-gradient(145deg,#fff0bd,#493047 28%,#17101d 72%,#d4a65b)',
+          boxShadow: `0 0 0 3px #24172b, 0 0 24px ${quality.color}88, 0 14px 36px rgba(0,0,0,.8)`,
+          overflow: 'hidden'
+        });
+        const art = this.el('img', {
+          position: 'absolute', left: '8px', top: '8px',
+          width: 'calc(100% - 16px)', height: 'calc(100% - 16px)',
+          display: 'block', objectFit: 'cover', objectPosition: 'center 18%',
+          borderRadius: '12px', background: '#10131b'
+        });
+        art.src = fullResolutionArt;
+        art.alt = `Carta de ${speciesName}`;
+        const topPlate = this.el('div', {
+          position: 'absolute', top: '12px', left: '12%', right: '12%',
+          zIndex: '2', padding: '5px 4px', textAlign: 'center',
+          color: '#fff0c9', font: 'bold 12px Georgia,serif',
+          background: 'linear-gradient(90deg,transparent,rgba(25,13,30,.94) 18%,rgba(25,13,30,.94) 82%,transparent)',
+          textShadow: '0 2px 4px #000'
+        });
+        topPlate.textContent = `${quality.name} · ${'★'.repeat(QUALITY.indexOf(quality) + 1)}`;
+        const titlePlate = this.el('div', {
+          position: 'absolute', left: '9%', right: '9%', bottom: '13px',
+          zIndex: '2', padding: '8px 5px', textAlign: 'center',
+          color: '#fff0c9', font: 'bold 16px Georgia,serif',
+          background: 'linear-gradient(90deg,transparent,rgba(25,13,30,.96) 12%,rgba(25,13,30,.96) 88%,transparent)',
+          borderTop: `2px solid ${quality.color}`, borderBottom: `2px solid ${quality.color}`,
+          textShadow: '0 2px 4px #000'
+        });
+        titlePlate.textContent = `${speciesName} · Nv. ${level}`;
+        cardFrame.append(art, topPlate, titlePlate);
+        const quantity = this.el('div', {
+          color: '#e9d8b7', font: '14px Georgia,serif', textAlign: 'center'
+        });
+        quantity.textContent = `Cartas nesta pilha: ×${matchingCards.length}`;
+        const hint = this.el('div', {
+          color: '#e9d5a6', font: '13px Georgia,serif', textAlign: 'center'
+        });
+        hint.textContent = '‹ Deslize para ver descrição e bônus ›';
+        profile.append(cardFrame, quantity, hint);
+
+        const details = this.el('section', {
+          width: '50%', height: '100%', flex: '0 0 50%',
+          boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
+          padding: '24px 20px', overflowY: 'auto',
+          background: 'linear-gradient(180deg,rgba(38,28,34,.99),rgba(12,10,13,.99))',
+          color: '#f0e4ce'
+        });
+        const pageHeader = this.el('div', {
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '14px 0', borderBottom: '1px solid rgba(198,168,108,.6)'
+        });
+        const back = this.el('button', {
+          width: '42px', height: '42px', flex: '0 0 42px',
+          border: '1px solid #c6a86c', borderRadius: '50%',
+          background: 'linear-gradient(145deg,#493727,#17110e)',
+          color: '#f4dfaa', font: 'bold 25px Georgia,serif',
+          cursor: 'pointer', touchAction: 'manipulation'
+        });
+        back.type = 'button'; back.textContent = '‹';
+        back.setAttribute('aria-label', 'Voltar à carta');
+        back.addEventListener('click', () => { track.style.transform = 'translateX(0)'; });
+        const pageTitle = this.el('div', { color: '#f2dfb8', font: 'bold 22px Georgia,serif' });
+        pageTitle.textContent = speciesName;
+        pageHeader.append(back, pageTitle);
+        const descLabel = this.el('div', {
+          margin: '22px 0 12px', color: '#e7c987',
+          font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
+        });
+        descLabel.textContent = 'DESCRIÇÃO';
+        const descText = this.el('div', {
+          padding: '18px', border: '1px solid rgba(198,168,108,.55)',
+          borderRadius: '10px',
+          background: 'linear-gradient(145deg,rgba(49,37,30,.9),rgba(18,15,14,.96))',
+          color: '#f0e4ce', font: '17px/1.65 Georgia,serif'
+        });
+        descText.textContent = description;
+        details.append(pageHeader, descLabel, descText);
+        if (bonuses.length) {
+          const bonusLabel = this.el('div', {
+            margin: '22px 0 10px', color: '#e7c987',
+            font: 'bold 15px Georgia,serif', letterSpacing: '.08em'
+          });
+          bonusLabel.textContent = 'BÔNUS DA CARTA';
+          const bonusList = this.el('div', {
+            display: 'flex', flexDirection: 'column', gap: '10px',
+            color: '#f0e4ce', font: '16px/1.45 Georgia,serif'
+          });
+          for (const bonus of bonuses) {
+            const line = this.el('div', { padding: '4px 0', borderBottom: '1px solid rgba(198,168,108,.22)' });
+            line.textContent = `• ${bonus}`;
+            bonusList.appendChild(line);
+          }
+          details.append(bonusLabel, bonusList);
+        }
+        const pageHint = this.el('div', {
+          marginTop: 'auto', paddingTop: '18px',
+          color: '#d7c39b', font: '13px Georgia,serif', textAlign: 'center'
+        });
+        pageHint.textContent = 'Deslize para voltar à carta';
+        details.appendChild(pageHint);
+        track.append(profile, details);
+        viewport.appendChild(track);
+        overlay.append(close, viewport);
+
+        let startX = 0, startY = 0;
+        const swipeStart = event => {
+          const point = event.changedTouches ? event.changedTouches[0] : event;
+          startX = point.clientX; startY = point.clientY;
+        };
+        const swipeEnd = event => {
+          const point = event.changedTouches ? event.changedTouches[0] : event;
+          const dx = point.clientX - startX, dy = point.clientY - startY;
+          if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+            track.style.transform = dx < 0 ? 'translateX(-50%)' : 'translateX(0)';
+          }
+        };
+        viewport.addEventListener('touchstart', swipeStart, { passive: true });
+        viewport.addEventListener('touchend', swipeEnd, { passive: true });
+        viewport.addEventListener('pointerdown', swipeStart);
+        viewport.addEventListener('pointerup', swipeEnd);
         overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
-        this.document.body.appendChild(overlay); this.cardOverlay = overlay;
+        this.document.body.appendChild(overlay);
+        this.cardOverlay = overlay;
       }
 
       setOpen(open) {
@@ -7049,8 +7229,9 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Three skills are evenly distributed around the attack control; the attack anchor is inset from screen edges.
-    const radial=[[0,-50],[43,25],[-43,25]];
+    // Three skill buttons form a 120-degree arc around the lower-left attack control.
+    // The arc stays inward from the left/bottom safe areas on narrow phones.
+    const radial=[[-43,-25],[0,-50],[43,-25]];
     for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';b.style.setProperty('--skill-x',radial[i][0]+'px');b.style.setProperty('--skill-y',radial[i][1]+'px');const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
@@ -7068,7 +7249,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V67';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V68';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
