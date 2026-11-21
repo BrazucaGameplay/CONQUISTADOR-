@@ -3070,7 +3070,8 @@
           borderRadius: '8px', background: 'rgba(23,17,24,.88)',
           color: '#f0e4ce', font: '15px/1.6 Georgia,serif'
         });
-        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> Slime</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
+        const speciesLabel = { slime: 'Slime', monkey: 'Macaca', rat: 'Rata' }[speciesId] || speciesName;
+        profileMeta.innerHTML = '<div><span style="color:#e7c987">Espécie:</span> ' + speciesLabel + '</div><div><span style="color:#e7c987">Tipo:</span> Waifu</div>';
         const hint = this.el('div', {
           marginTop: '14px', color: '#e9d5a6',
           font: '13px Georgia,serif', textAlign: 'center'
@@ -5384,8 +5385,9 @@
               if (card) {
                 const quality = qualityInfo[card.quality] || qualityInfo.plebeia;
                 const art = statusDoc.createElement('img');
-                art.src = window.CONQUISTADOR_WAIFU_ART || '';
-                art.alt = 'Donzela Slime';
+                const slotWaifuId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+                art.src = slotWaifuId === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : slotWaifuId === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
+                art.alt = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[slotWaifuId] || 'Donzela Slime';
                 Object.assign(art.style, {
                   position: 'absolute', left: '7%', top: '19%', width: '86%', height: '62%',
                   display: 'block', objectFit: 'contain', objectPosition: 'center',
@@ -5530,8 +5532,9 @@
                 });
               }
               const art = statusDoc.createElement('img');
-              art.src = window.CONQUISTADOR_WAIFU_ART || '';
-              art.alt = 'Carta completa da Donzela Slime';
+              const pickerWaifuId = waifuTypeOf(card);
+              art.src = pickerWaifuId === 'monkey' ? (window.CONQUISTADOR_WAIFU_ART_MONKEY || '') : pickerWaifuId === 'rat' ? (window.CONQUISTADOR_WAIFU_ART_RAT || '') : (window.CONQUISTADOR_WAIFU_ART || '');
+              art.alt = 'Carta completa da ' + ({ slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[pickerWaifuId] || 'Donzela Slime');
               Object.assign(art.style, {
                 display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
                 background: '#100d17', borderRadius: '5px'
