@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V60</title>
+<title>CONQUISTADOR DE WAIFU'S — V65</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -484,8 +484,9 @@
         if (parsed.version === 4) {
           const data = this.normalizeV4(parsed);
           if (!data) return { status: 'invalid', raw, error: new Error('Save V4 sem posição válida.') };
-          this.legacyRaw = null;
-          this.backupConfirmed = true;
+          // Keep the exact primary snapshot. Before the next write, backupRaw()
+          // must preserve this known-good save instead of assuming a backup exists.
+          this.preserveRaw(raw);
           this.lastLoadedData = data;
           this.progressData = { pets: cloneData(data.pets), waifus: cloneData(data.waifus), flags: cloneData(data.flags), dungeons: cloneData(data.dungeons), items: cloneData(data.items) };
           return { status: 'v4', raw, data, positionRecord: { version: 4, world: this.worldId, x: data.player.position.x, y: data.player.position.y } };
@@ -526,13 +527,13 @@
         const read = this.readPrimary();
         if (!read.ok) return false;
         const currentRaw = read.raw;
-        const isLegacyPrimary = currentRaw && currentRaw !== this.legacyRaw && (() => {
-          try { return JSON.parse(currentRaw).version !== 4; } catch (error) { return true; }
-        })();
-        const rawToPreserve = this.legacyRaw || (isLegacyPrimary ? currentRaw : null);
-        if (rawToPreserve && !this.backupConfirmed) {
-          if (!this.backupRaw(rawToPreserve)) return false;
-        }
+        // The current primary is authoritative if another tab changed it.
+        // Otherwise preserve the last exact snapshot known by this instance.
+        const rawToPreserve = currentRaw && currentRaw !== this.legacyRaw
+          ? currentRaw : this.legacyRaw;
+        const needsBackup = Boolean(rawToPreserve) &&
+          (!this.backupConfirmed || rawToPreserve !== this.legacyRaw);
+        if (needsBackup && !this.backupRaw(rawToPreserve)) return false;
         if (this.legacyRaw && currentRaw === this.legacyRaw && !this.backupConfirmed) return false;
         const data = this.defaultV4(snapshot.player && snapshot.player.position);
         data.savedAt = Number(snapshot.savedAt) || Date.now();
@@ -547,15 +548,18 @@
         data.dungeons = snapshot.dungeons && typeof snapshot.dungeons === 'object' ? cloneData(snapshot.dungeons) : progress.dungeons;
         data.items = Array.isArray(snapshot.items) ? cloneData(snapshot.items) : progress.items;
         try {
-          root.localStorage.setItem(this.primaryKey, JSON.stringify(data));
+          const serialized = JSON.stringify(data);
+          root.localStorage.setItem(this.primaryKey, serialized);
           const verify = root.localStorage.getItem(this.primaryKey);
           const parsed = verify ? JSON.parse(verify) : null;
           if (!parsed || parsed.version !== 4 || parsed.world !== this.worldId ||
               !parsed.player || !parsed.player.position ||
               parsed.player.position.x !== data.player.position.x ||
               parsed.player.position.y !== data.player.position.y) return false;
-          this.legacyRaw = null;
-          this.backupConfirmed = true;
+          // Mark this exact write as the next snapshot to preserve. The backup
+          // flag is false because the backup currently contains the previous save.
+          this.legacyRaw = serialized;
+          this.backupConfirmed = false;
           this.replacementLocked = false;
           this.replacementAuthorized = false;
           this.lastLoadedData = data;
@@ -852,12 +856,16 @@
 
             // Avoid overlapping newly spawned groups and existing monsters,
             // including monsters that have wandered in from another chunk.
-            const tooClose = Array.from(this.monsters.values()).some(record =>
-              record.alive && Math.max(
+            let tooClose = false;
+            for (const record of this.monsters.values()) {
+              if (record.alive && Math.max(
                 Math.abs(record.tile.x - x),
                 Math.abs(record.tile.y - y)
-              ) < 3
-            );
+              ) < 3) {
+                tooClose = true;
+                break;
+              }
+            }
             if (!tooClose) candidates.push({ x, y });
           }
         }
@@ -955,6 +963,16 @@
         const id = `monster-${monsterId}-${chunkX}-${chunkY}-${String(sequence).padStart(4, '0')}`;
         const x = (tile.x + 0.5) * this.tileSize;
         const y = (tile.y + 0.5) * this.tileSize;
+        // Every new spawn, including respawns, rolls only level 1 or 2.
+        // Level 2 is less common and gains durability, damage, defense and XP.
+        const level = Math.random() < 0.30 ? 2 : 1;
+        const levelMultiplier = level === 2 ? {
+          hp: 1.5, attack: 1.25, defense: 1, xp: 1.5
+        } : { hp: 1, attack: 1, defense: 0, xp: 1 };
+        const maxHp = Math.max(1, Math.round(definition.hp * levelMultiplier.hp));
+        const attack = Math.max(0, Math.round((definition.attack ?? definition.damage ?? 0) * levelMultiplier.attack));
+        const defense = Math.max(0, (definition.defense || 0) + levelMultiplier.defense);
+        const xpReward = Math.max(0, Math.round(definition.xp * levelMultiplier.xp));
 
         this.entities.create({
           id,
@@ -963,16 +981,17 @@
           statusId: id,
           data: {
             monsterId,
+            level,
             originChunkId: chunkId,
             originChunkX: chunkX,
             originChunkY: chunkY
           }
         });
         this.status.register(id, {
-          hp: definition.hp, maxHp: definition.hp,
+          hp: maxHp, maxHp,
           energy: 0, maxEnergy: 0,
-          attack: definition.attack ?? definition.damage ?? 0,
-          defense: definition.defense || 0,
+          attack,
+          defense,
           penetration: definition.penetration || 0,
           attackSpeed: definition.attackSpeed || 1,
           moveSpeed: definition.moveSpeed ?? definition.speed ?? 0,
@@ -984,12 +1003,26 @@
         sprite.setDisplaySize(definition.displayWidth || 30, definition.displayHeight || 24);
         sprite.setOrigin(0.5, 0.86);
         sprite.setDepth(y + 10);
+        const levelLabel = this.scene.add.text(x, y - (definition.displayHeight || 24) * 0.86 - 4, String(level), {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '8px',
+          fontStyle: 'bold',
+          color: level === 2 ? '#ffd27a' : '#f1f4ed',
+          stroke: '#17251b',
+          strokeThickness: 2,
+          align: 'center'
+        });
+        levelLabel.setOrigin(0.5, 1);
+        levelLabel.setDepth(sprite.depth + 20);
         const record = {
           id,
           monsterId,
+          level,
+          xpReward,
           definition,
           tile: { x: tile.x, y: tile.y },
           sprite,
+          levelLabel,
           animation: {
             state: null, facing: 0, tween: null,
             baseScaleX: sprite.scaleX || 1, baseScaleY: sprite.scaleY || 1
@@ -1012,6 +1045,7 @@
         this.events.emit('monster:spawned', {
           entityId: id,
           monsterId,
+          level,
           tile,
           originChunkId: chunkId,
           originChunkX: chunkX,
@@ -1377,13 +1411,15 @@
           entityId: record.id,
           killerId,
           monsterId: record.monsterId,
-          xp: record.definition.xp,
+          level: record.level,
+          xp: record.xpReward,
           tile
         });
-        this.events.emit('monster:died', { entityId: record.id, monsterId: record.monsterId, killerId, tile });
+        this.events.emit('monster:died', { entityId: record.id, monsterId: record.monsterId, level: record.level, killerId, tile });
         this.createDrop(record);
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
+        if (record.levelLabel && record.levelLabel.active) record.levelLabel.destroy();
         if (record.sprite && record.sprite.active) {
           const deathSprite = record.sprite;
           this.scene.tweens.killTweensOf(deathSprite);
@@ -1495,6 +1531,15 @@
         this.messageLine.textContent = this.now <= this.messageUntil ? this.message : '';
       }
 
+      updateMonsterLevelLabel(record) {
+        const label = record && record.levelLabel;
+        const sprite = record && record.sprite;
+        if (!label || !label.active || !sprite || !sprite.active) return;
+        const height = record.definition.displayHeight || 24;
+        label.setPosition(sprite.x, sprite.y - height * 0.86 - 4);
+        label.setDepth(sprite.depth + 20);
+      }
+
       updateMonster(record, playerPoint, time, delta) {
         if (!record.alive || !record.sprite || !record.sprite.active) return;
         const dxToPlayer = playerPoint.x - record.sprite.x;
@@ -1587,6 +1632,7 @@
         if (playerPoint) {
           for (const record of Array.from(this.monsters.values())) {
             this.updateMonster(record, playerPoint, this.now, Number(delta) || 0);
+            this.updateMonsterLevelLabel(record);
           }
           this.resolvePendingPlayerAttack();
           this.autoAttackNearbyMonster();
@@ -1608,6 +1654,7 @@
           this.scene.events.off('shutdown', this.boundDestroy);
         }
         for (const record of this.monsters.values()) {
+          if (record.levelLabel && record.levelLabel.destroy) record.levelLabel.destroy();
           if (record.sprite && record.sprite.destroy) record.sprite.destroy();
           this.entities.remove(record.id);
         }
@@ -4420,7 +4467,6 @@
         this.invalidSaveSpawnPosition = null;
         this.invalidSaveHasCoordinate = false;
         this._hasCompletedPostSpawnFrame = false;
-        this._malformedSavePostSpawnAttempted = false;
         this._pathRevalidatedThisFrame = false;
         this._lastPathRevalidationResult = null;
         this._currentUpdateToken = null;
@@ -4693,10 +4739,10 @@
           Object.assign(statusPanel.style, {
             width: 'min(100%,540px)', maxHeight: '90dvh', overflowY: 'auto',
             padding: '16px', boxSizing: 'border-box',
-            border: '2px solid #b99a64', borderRadius: '12px',
-            background: 'linear-gradient(180deg,#29201d,#100f10)',
+            border: '0', borderRadius: '0',
+            background: 'rgba(18,16,14,.58)',
             color: '#f0e4ce', font: '14px Georgia,serif',
-            boxShadow: '0 18px 55px rgba(0,0,0,.8)'
+            boxShadow: 'none'
           });
           const statusHeader = statusDoc.createElement('div');
           Object.assign(statusHeader.style, {
@@ -4712,9 +4758,9 @@
           const statusClose = statusDoc.createElement('button');
           statusClose.type = 'button'; statusClose.textContent = '×';
           Object.assign(statusClose.style, {
-            width: '36px', height: '36px', border: '1px solid #a88c5f',
-            borderRadius: '50%', background: '#211b17',
-            color: '#f7eddb', font: '24px Arial', cursor: 'pointer'
+            width: '36px', height: '36px', border: '0',
+            borderRadius: '0', background: 'transparent',
+            color: '#f7eddb', font: '28px Arial', cursor: 'pointer'
           });
           statusHeader.append(statusTitle, statusClose);
 
@@ -4726,15 +4772,15 @@
           });
           const slotsRow = statusDoc.createElement('div');
           Object.assign(slotsRow.style, {
-            display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
-            gap: '10px'
+            display: 'flex', alignItems: 'flex-start',
+            gap: '14px'
           });
           const slotButtons = [];
           for (let i = 0; i < 3; i += 1) {
             const slot = statusDoc.createElement('button');
             slot.type = 'button';
             Object.assign(slot.style, {
-              minWidth: '0', aspectRatio: '2 / 3', padding: '0',
+              minWidth: '0', flex: '1', height: '92px', padding: '0',
               border: '0', borderRadius: '0',
               background: 'transparent',
               color: '#e7c987', font: 'bold 28px Georgia,serif',
@@ -4754,13 +4800,14 @@
             margin: '18px 0 10px', color: '#e7c987',
             font: 'bold 14px Georgia,serif', letterSpacing: '.08em'
           });
-          const statsGrid = statusDoc.createElement('div');
-          Object.assign(statsGrid.style, {
-            display: 'grid', gridTemplateColumns: '1fr',
-            gap: '0', padding: '2px 4px'
+          const statsList = statusDoc.createElement('div');
+          Object.assign(statsList.style, {
+            display: 'flex', flexDirection: 'column',
+            gap: '0', padding: '0 4px'
           });
           const statNodes = {};
           const statLabels = [
+            ['level','Nível'], ['xp','EXP'],
             ['maxHp','Vida Máxima'], ['maxEnergy','Energia Máxima'],
             ['attack','Ataque'], ['defense','Defesa'],
             ['penetration','Penetração'], ['attackSpeed','Velocidade de Ataque'],
@@ -4771,20 +4818,21 @@
           for (const [key, label] of statLabels) {
             const cell = statusDoc.createElement('div');
             Object.assign(cell.style, {
-              padding: '10px', border: '1px solid rgba(190,169,125,.4)',
-              borderRadius: '7px', background: 'rgba(12,11,13,.65)'
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+              gap: '16px', padding: '7px 0', border: '0',
+              borderRadius: '0', background: 'transparent'
             });
             const caption = statusDoc.createElement('div');
             caption.textContent = label;
-            Object.assign(caption.style, { color: '#d7c49e', fontSize: '13px', marginBottom: '0', flex: '1' });
+            Object.assign(caption.style, { color: '#d7c49e', fontSize: '14px', marginBottom: '0', flex: '1' });
             const value = statusDoc.createElement('strong');
             value.textContent = '—';
-            Object.assign(value.style, { color: '#fff0d1', fontSize: '15px', textAlign: 'right', fontWeight: 'bold' });
+            Object.assign(value.style, { color: '#fff0d1', fontSize: '15px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' });
             cell.append(caption, value);
-            statsGrid.appendChild(cell);
+            statsList.appendChild(cell);
             statNodes[key] = value;
           }
-          statusPanel.append(statusHeader, waifuHeading, slotsRow, statsHeading, statsGrid);
+          statusPanel.append(statusHeader, waifuHeading, slotsRow, statsHeading, statsList);
           statusBackdrop.appendChild(statusPanel);
           statusDoc.body.appendChild(statusBackdrop);
 
@@ -5060,7 +5108,7 @@
                 slot.appendChild(removeMark);
               } else {
                 slot.textContent = '+';
-                slot.style.border = '1px dashed #b99a64';
+                slot.style.border = '0'; slot.style.background = 'transparent';
               }
             });
           };
@@ -5156,6 +5204,8 @@
             const maxMp = this.statusSystem.getStat('player', 'maxEnergy') ?? status.maxMp;
             hpFill.style.width = `${Math.max(0, Math.min(100, hp / Math.max(1,maxHp) * 100))}%`;
             mpFill.style.width = `${Math.max(0, Math.min(100, mp / Math.max(1,maxMp) * 100))}%`;
+            statNodes.level.textContent = String(level.level);
+            statNodes.xp.textContent = `${level.xp} / ${level.xpToNext}`;
             statNodes.maxHp.textContent = String(this.statusSystem.getStat('player','maxHp'));
             statNodes.maxEnergy.textContent = String(this.statusSystem.getStat('player','maxEnergy'));
             statNodes.attack.textContent = String(this.statusSystem.getStat('player','attack'));
@@ -6572,11 +6622,12 @@
         }
         // A coordinate-less malformed save gets one release attempt only on
         // the frame AFTER a complete post-spawn update has finished.
-        if (this.invalidSavePreserved && !this.invalidSaveHasCoordinate &&
-            this._hasCompletedPostSpawnFrame && !this._malformedSavePostSpawnAttempted &&
+        // Invalid saves are handled automatically after a safe spawn and one
+        // complete frame. This also retries transient backup/storage failures;
+        // releaseInvalidSaveIfSafe() applies the configured retry delay.
+        if (this.invalidSavePreserved && this._hasCompletedPostSpawnFrame &&
             !this.spawnCollisionDegraded &&
             this.isPlayerBodyPositionWalkable(this.player.x, this.player.y)) {
-          this._malformedSavePostSpawnAttempted = true;
           this.savePlayerPositionSafely(true);
         }
         if (!this.path.length) {
@@ -6977,8 +7028,8 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;inset:-42px -42px -42px -42px;pointer-events:none;overflow:visible;z-index:5}
-    #conquistador-active-skills-v53 button{position:absolute;width:38px;height:38px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c}
+    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 9px);transform:translateX(-50%);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;width:max-content;height:38px;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 38px;width:38px;height:38px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
     @keyframes cw53gel{0%,100%{transform:translateY(1px) scale(.92)}50%{transform:translateY(-2px) scale(1.12)}}
@@ -6989,9 +7040,8 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Compact arc around the sword button; layout uses the badge as the coordinate origin.
-    const positions=[{left:'-27px',top:'-34px'},{left:'28px',top:'-48px'},{left:'73px',top:'-34px'}];
-    positions.forEach((pos,i)=>{const b=document.createElement('button');b.type='button';Object.assign(b.style,pos);const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);});
+    // Three skills form a centered row directly above the auto-attack control.
+    for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
   function cleanup(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}if(bootTimer){clearTimeout(bootTimer);bootTimer=null;}unsubscribers.forEach(fn=>{try{fn();}catch(_){}});unsubscribers=[];}
@@ -7008,17 +7058,17 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V60';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V65';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
   'use strict';
-  const KEY='WorldScene', STALL_MS=1800, CHECK_MS=700, MAX_RECOVERIES=2;
+  const KEY='WorldScene', STALL_MS=4000, CHECK_MS=700, MAX_RECOVERIES=2;
   let game=null, scene=null, lastFrame=Date.now(), lastRecovery=0, recoveries=0, handler=null, timer=null, rebindTimer=null;
   let overlay=null, recoveryInProgress=false;
   function getGame(){return window.CONQUISTADOR_V13?.game||window.CONQUISTADOR_V14?.game||window.CONQUISTADOR_V16?.game||null;}
   function getScene(){try{return game?.scene?.getScene?.(KEY)||null;}catch(_){return null;}}
-  function mark(){lastFrame=Date.now();recoveries=0;recoveryInProgress=false;}
+  function mark(){lastFrame=Date.now();recoveries=0;recoveryInProgress=false;if(overlay)overlay.style.display='none';}
   function notice(msg){
     if(!overlay){overlay=document.createElement('div');overlay.id='cw59-recovery-overlay';
       Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'none',alignItems:'center',justifyContent:'center',background:'rgba(8,10,14,.82)',padding:'24px',color:'#f5e8c8',font:'16px Georgia',textAlign:'center'});
@@ -7049,7 +7099,7 @@
       if(scene?.invalidSavePreserved){
         console.warn('[CW60] reinício suspenso: salvamento inválido ainda preservado');
         recoveryInProgress=false;
-        notice('O salvamento está protegido. Use RECUPERAR SALVAMENTO para confirmar um ponto seguro.');
+        notice('O salvamento original está protegido. O jogo tentará gravar automaticamente após confirmar uma posição segura.');
         return;
       }
       if(game?.loop?.wake)game.loop.wake();
@@ -7073,7 +7123,9 @@
         if(!used){sessionStorage.setItem('cw59_reload_guard','1');location.reload();return;}
       }catch(_){}
       recoveryInProgress=false;notice('O jogo não conseguiu retomar automaticamente. Toque para recarregar; o salvamento será preservado quando disponível.');
-    },1100);
+    // Wait longer than the stall threshold so this check proves that at least
+    // one real postupdate frame arrived after the restart attempt.
+    },STALL_MS + 250);
   }
   function tick(){
     if(document.visibilityState!=='visible')return;
@@ -7092,49 +7144,6 @@
 </script>
 
 
-<script id="conquistador-v60-save-unlock">
-(function(){
-  'use strict';
-  function addControl(){
-    if(document.getElementById('cw60-save-unlock')) return;
-    const btn=document.createElement('button');
-    btn.id='cw60-save-unlock';
-    btn.type='button';
-    btn.textContent='RECUPERAR SALVAMENTO';
-    Object.assign(btn.style,{position:'fixed',left:'12px',bottom:'calc(env(safe-area-inset-bottom) + 12px)',zIndex:'2147483646',padding:'12px 14px',background:'#40331f',color:'#fff0c8',border:'1px solid #d4b66f',borderRadius:'9px',font:'bold 12px Georgia',boxShadow:'0 3px 12px #0009',touchAction:'manipulation'});
-    const panel=document.createElement('div');
-    Object.assign(panel.style,{position:'fixed',left:'12px',bottom:'calc(env(safe-area-inset-bottom) + 62px)',zIndex:'2147483646',maxWidth:'min(330px, calc(100vw - 24px))',padding:'10px 12px',display:'none',background:'#211d18',color:'#f5e8c8',border:'1px solid #b99a5d',borderRadius:'8px',font:'12px/1.45 Georgia'});
-    function report(message,ok){panel.textContent=message;panel.style.display='block';panel.style.borderColor=ok?'#8caf70':'#d4b66f';}
-    btn.addEventListener('click',function(){
-      btn.disabled=true;
-      try{
-        const game=window.CONQUISTADOR_V13?.game;
-        const scene=game?.scene?.getScene?.('WorldScene');
-        if(!scene||!scene.player||!scene.saveSystem){report('A cena ainda não está pronta. Aguarde e tente novamente.',false);btn.disabled=false;return;}
-        if(!scene.isPlayerBodyPositionWalkable(scene.player.x,scene.player.y)){report('A posição atual não é segura. O salvamento original foi preservado.',false);btn.disabled=false;return;}
-        if(scene.invalidSavePreserved){
-          if(scene.invalidSaveNeedsBackup||!scene.saveSystem.backupConfirmed){
-            const raw=scene.invalidSavedPlayerRaw;
-            const backedUp=raw!=null&&scene.backupInvalidPlayerSave(raw);
-            if(!backedUp){report('Não foi possível confirmar o backup. O bloqueio foi mantido; nenhum dado foi apagado.',false);btn.disabled=false;return;}
-            scene.invalidSaveNeedsBackup=false;
-          }
-          scene._hasCompletedPostSpawnFrame=true;
-          scene.invalidSaveReleaseRetryAt=0;
-          if(!scene.releaseInvalidSaveIfSafe()){report('Backup preservado, mas a gravação segura não foi confirmada. O save original continua protegido.',false);btn.disabled=false;return;}
-        }else{
-          scene._hasCompletedPostSpawnFrame=true;
-          const result=scene.savePlayerPositionSafely(true);
-          if(result!==true&&result!=='already-saved'){report('A gravação não foi confirmada. Nenhum dado foi removido.',false);btn.disabled=false;return;}
-        }
-        report('Salvamento recuperado em posição segura. Recarregue a página uma vez para iniciar com o save corrigido.',true);
-        btn.textContent='SALVAMENTO RECUPERADO';btn.disabled=true;
-      }catch(error){console.error('[CW60] recuperação do save falhou',error);report('Falha na recuperação. O salvamento original foi mantido.',false);btn.disabled=false;}
-    });
-    document.body.append(panel,btn);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addControl,{once:true});else addControl();
-})();
-</script>
+<!-- V65: status em lista simples, nível/EXP visíveis, nível numérico nos monstros e habilidades alinhadas acima do ataque. -->
 </body>
 </html>
