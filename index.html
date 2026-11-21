@@ -4241,12 +4241,487 @@
           this.waifuGallerySystem = new window.CONQUISTADOR_WAIFU_SYSTEMS.WaifuGallerySystem(this.extensionAPI, {
             document: window.document
           });
+
+          // Status do jogador: retrato clicável, barras HP/MP, três espaços de waifu
+          // e seleção de cartas persistida no campo waifus.equipped.
+          const statusDoc = window.document;
+          const statusRoot = statusDoc.createElement('div');
+          statusRoot.id = 'conquistador-player-status-entry';
+          Object.assign(statusRoot.style, {
+            position: 'fixed', left: '50%', bottom: 'max(8px, env(safe-area-inset-bottom))',
+            transform: 'translateX(-50%)', zIndex: '90',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: '2px', width: '86px', pointerEvents: 'none'
+          });
+          const statusEntry = statusDoc.createElement('button');
+          statusEntry.type = 'button';
+          statusEntry.setAttribute('aria-label', 'Abrir status do jogador');
+          Object.assign(statusEntry.style, {
+            width: '72px', height: '72px', padding: '3px',
+            border: '2px solid #d4b16b', borderRadius: '50%',
+            background: 'linear-gradient(145deg,#493727,#151018)',
+            boxShadow: '0 0 12px rgba(214,174,94,.55), 0 4px 12px rgba(0,0,0,.65)',
+            overflow: 'hidden', pointerEvents: 'auto', cursor: 'pointer',
+            touchAction: 'manipulation'
+          });
+          const portrait = statusDoc.createElement('canvas');
+          portrait.width = 96; portrait.height = 96;
+          Object.assign(portrait.style, {
+            width: '100%', height: '100%', display: 'block',
+            imageRendering: 'pixelated', borderRadius: '50%'
+          });
+          statusEntry.appendChild(portrait);
+          const hpTrack = statusDoc.createElement('div');
+          const hpFill = statusDoc.createElement('div');
+          Object.assign(hpTrack.style, {
+            width: '82px', height: '8px', border: '1px solid #30221e',
+            borderRadius: '5px', background: '#281414', overflow: 'hidden',
+            boxShadow: '0 1px 4px #000', pointerEvents: 'none'
+          });
+          Object.assign(hpFill.style, {
+            width: '100%', height: '100%',
+            background: 'linear-gradient(180deg,#ff7770,#a91520)',
+            transition: 'width .2s'
+          });
+          hpTrack.appendChild(hpFill);
+          const mpTrack = statusDoc.createElement('div');
+          const mpFill = statusDoc.createElement('div');
+          Object.assign(mpTrack.style, {
+            width: '82px', height: '6px', border: '1px solid #182638',
+            borderRadius: '5px', background: '#101d31', overflow: 'hidden',
+            boxShadow: '0 1px 4px #000', pointerEvents: 'none'
+          });
+          Object.assign(mpFill.style, {
+            width: '100%', height: '100%',
+            background: 'linear-gradient(180deg,#78c9ff,#174fbb)',
+            transition: 'width .2s'
+          });
+          mpTrack.appendChild(mpFill);
+          statusRoot.append(statusEntry, hpTrack, mpTrack);
+          statusDoc.body.appendChild(statusRoot);
+
+          const statusBackdrop = statusDoc.createElement('div');
+          Object.assign(statusBackdrop.style, {
+            position: 'fixed', inset: '0', zIndex: '120', display: 'none',
+            alignItems: 'center', justifyContent: 'center',
+            padding: 'max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom))',
+            background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(3px)'
+          });
+          const statusPanel = statusDoc.createElement('section');
+          Object.assign(statusPanel.style, {
+            width: 'min(100%,540px)', maxHeight: '90dvh', overflowY: 'auto',
+            padding: '16px', boxSizing: 'border-box',
+            border: '2px solid #b99a64', borderRadius: '12px',
+            background: 'linear-gradient(180deg,#29201d,#100f10)',
+            color: '#f0e4ce', font: '14px Georgia,serif',
+            boxShadow: '0 18px 55px rgba(0,0,0,.8)'
+          });
+          const statusHeader = statusDoc.createElement('div');
+          Object.assign(statusHeader.style, {
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', paddingBottom: '12px',
+            borderBottom: '1px solid rgba(205,183,137,.45)'
+          });
+          const statusTitle = statusDoc.createElement('div');
+          statusTitle.textContent = 'STATUS DO JOGADOR';
+          Object.assign(statusTitle.style, {
+            color: '#f2dfb8', font: 'bold 21px Georgia,serif'
+          });
+          const statusClose = statusDoc.createElement('button');
+          statusClose.type = 'button'; statusClose.textContent = '×';
+          Object.assign(statusClose.style, {
+            width: '36px', height: '36px', border: '1px solid #a88c5f',
+            borderRadius: '50%', background: '#211b17',
+            color: '#f7eddb', font: '24px Arial', cursor: 'pointer'
+          });
+          statusHeader.append(statusTitle, statusClose);
+
+          const waifuHeading = statusDoc.createElement('div');
+          waifuHeading.textContent = 'WAIFUS EQUIPADAS';
+          Object.assign(waifuHeading.style, {
+            margin: '16px 0 10px', color: '#e7c987',
+            font: 'bold 14px Georgia,serif', letterSpacing: '.08em'
+          });
+          const slotsRow = statusDoc.createElement('div');
+          Object.assign(slotsRow.style, {
+            display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
+            gap: '10px'
+          });
+          const slotButtons = [];
+          for (let i = 0; i < 3; i += 1) {
+            const slot = statusDoc.createElement('button');
+            slot.type = 'button';
+            Object.assign(slot.style, {
+              minWidth: '0', aspectRatio: '3 / 4', padding: '5px',
+              border: '1px dashed #b99a64', borderRadius: '9px',
+              background: 'linear-gradient(145deg,#211a25,#100d13)',
+              color: '#e7c987', font: 'bold 28px Georgia,serif',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: '4px', cursor: 'pointer',
+              overflow: 'hidden', touchAction: 'manipulation'
+            });
+            slot.dataset.slot = String(i);
+            slot.addEventListener('click', () => openWaifuPicker(i));
+            slotButtons.push(slot);
+            slotsRow.appendChild(slot);
+          }
+
+          const statsHeading = statusDoc.createElement('div');
+          statsHeading.textContent = 'ATRIBUTOS';
+          Object.assign(statsHeading.style, {
+            margin: '18px 0 10px', color: '#e7c987',
+            font: 'bold 14px Georgia,serif', letterSpacing: '.08em'
+          });
+          const statsGrid = statusDoc.createElement('div');
+          Object.assign(statsGrid.style, {
+            display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))',
+            gap: '8px'
+          });
+          const statNodes = {};
+          const statLabels = [
+            ['level','Nível'], ['xp','Experiência'], ['hp','Vida'],
+            ['mp','Mana'], ['strength','Ataque'], ['defense','Defesa'], ['speed','Velocidade']
+          ];
+          for (const [key, label] of statLabels) {
+            const cell = statusDoc.createElement('div');
+            Object.assign(cell.style, {
+              padding: '10px', border: '1px solid rgba(190,169,125,.4)',
+              borderRadius: '7px', background: 'rgba(12,11,13,.65)'
+            });
+            const caption = statusDoc.createElement('div');
+            caption.textContent = label;
+            Object.assign(caption.style, { color: '#cbb88f', fontSize: '11px', marginBottom: '4px' });
+            const value = statusDoc.createElement('strong');
+            value.textContent = '—';
+            Object.assign(value.style, { color: '#fff0d1', fontSize: '16px' });
+            cell.append(caption, value);
+            statsGrid.appendChild(cell);
+            statNodes[key] = value;
+          }
+          statusPanel.append(statusHeader, waifuHeading, slotsRow, statsHeading, statsGrid);
+          statusBackdrop.appendChild(statusPanel);
+          statusDoc.body.appendChild(statusBackdrop);
+
+          const pickerBackdrop = statusDoc.createElement('div');
+          Object.assign(pickerBackdrop.style, {
+            position: 'fixed', inset: '0', zIndex: '130', display: 'none',
+            alignItems: 'center', justifyContent: 'center', padding: '14px',
+            background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(3px)'
+          });
+          const pickerPanel = statusDoc.createElement('section');
+          Object.assign(pickerPanel.style, {
+            width: 'min(100%,480px)', maxHeight: '78dvh', overflowY: 'auto',
+            padding: '14px', border: '2px solid #b99a64', borderRadius: '10px',
+            background: 'linear-gradient(180deg,#29201d,#100f10)',
+            color: '#f0e4ce', boxShadow: '0 15px 45px rgba(0,0,0,.8)'
+          });
+          const pickerHeader = statusDoc.createElement('div');
+          Object.assign(pickerHeader.style, {
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', marginBottom: '12px'
+          });
+          const pickerTitle = statusDoc.createElement('strong');
+          pickerTitle.textContent = 'ESCOLHER CARTA';
+          pickerTitle.style.color = '#f2dfb8';
+          const pickerClose = statusDoc.createElement('button');
+          pickerClose.type = 'button'; pickerClose.textContent = '×';
+          Object.assign(pickerClose.style, {
+            width: '34px', height: '34px', border: '1px solid #a88c5f',
+            borderRadius: '50%', background: '#211b17', color: '#f7eddb',
+            font: '22px Arial', cursor: 'pointer'
+          });
+          pickerHeader.append(pickerTitle, pickerClose);
+          const pickerGrid = statusDoc.createElement('div');
+          Object.assign(pickerGrid.style, {
+            display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
+            gap: '10px'
+          });
+          pickerPanel.append(pickerHeader, pickerGrid);
+          pickerBackdrop.appendChild(pickerPanel);
+          statusDoc.body.appendChild(pickerBackdrop);
+
+          let selectedWaifuCard = null;
+          let selectedSlotIndex = 0;
+          const readWaifuData = () => this.extensionAPI.progress.get('waifus') || {};
+          const writeWaifuData = next => this.extensionAPI.progress.update('waifus', next);
+          const findCard = id => {
+            const data = readWaifuData();
+            return (Array.isArray(data.cards) ? data.cards : []).find(card => card && card.instanceId === id) || null;
+          };
+          const qualityInfo = {
+            plebeia: { name: 'Plebeia', color: '#a9a9a9', stars: 1 },
+            dama: { name: 'Dama', color: '#55a8e8', stars: 2 },
+            condessa: { name: 'Condessa', color: '#b16ce2', stars: 3 },
+            duquesa: { name: 'Duquesa', color: '#e6b84f', stars: 4 },
+            rainha: { name: 'Rainha', color: '#b65bff', stars: 5 }
+          };
+          const renderSlots = () => {
+            const data = readWaifuData();
+            const equipped = Array.isArray(data.equipped) ? data.equipped.slice(0,3) : [];
+            while (equipped.length < 3) equipped.push(null);
+            slotButtons.forEach((slot, index) => {
+              slot.replaceChildren();
+              const card = equipped[index] ? findCard(equipped[index]) : null;
+              if (card) {
+                const art = statusDoc.createElement('img');
+                art.src = window.CONQUISTADOR_WAIFU_DROP_ART?.[card.quality] || window.CONQUISTADOR_WAIFU_ART || '';
+                art.alt = 'Donzela Slime';
+                Object.assign(art.style, { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '5px' });
+                slot.style.border = `2px solid ${(qualityInfo[card.quality] || qualityInfo.plebeia).color}`;
+                slot.appendChild(art);
+              } else {
+                slot.textContent = '+';
+                slot.style.border = '1px dashed #b99a64';
+              }
+            });
+          };
+          const renderPicker = () => {
+            pickerGrid.replaceChildren();
+            const data = readWaifuData();
+            const cards = Array.isArray(data.cards) ? data.cards : [];
+            const equipped = Array.isArray(data.equipped) ? data.equipped : [];
+            const available = cards.filter(card => card && !equipped.includes(card.instanceId));
+            if (!available.length) {
+              const empty = statusDoc.createElement('div');
+              empty.textContent = cards.length ? 'Todas as cartas disponíveis já estão equipadas.' : 'Você ainda não possui cartas. Derrote Slimes para encontrá-las.';
+              Object.assign(empty.style, { gridColumn: '1/-1', padding: '24px 8px', textAlign: 'center', color: '#d6c8ad', lineHeight: '1.5' });
+              pickerGrid.appendChild(empty);
+              return;
+            }
+            available.forEach(card => {
+              const info = qualityInfo[card.quality] || qualityInfo.plebeia;
+              const option = statusDoc.createElement('button');
+              option.type = 'button';
+              Object.assign(option.style, {
+                padding: '5px', border: `2px solid ${info.color}`,
+                borderRadius: '8px', background: '#100d17',
+                color: '#fff0c9', cursor: 'pointer', touchAction: 'manipulation'
+              });
+              const art = statusDoc.createElement('img');
+              art.src = window.CONQUISTADOR_WAIFU_DROP_ART?.[card.quality] || window.CONQUISTADOR_WAIFU_ART || '';
+              art.alt = 'Carta Donzela Slime';
+              Object.assign(art.style, { width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' });
+              const quality = statusDoc.createElement('div');
+              quality.textContent = `${info.name} ${'★'.repeat(info.stars)}`;
+              Object.assign(quality.style, { color: info.color, font: 'bold 11px Georgia,serif', marginTop: '5px' });
+              option.append(art, quality);
+              option.addEventListener('click', () => {
+                selectedWaifuCard = card;
+                pickerGrid.querySelectorAll('button').forEach(button => {
+                  button.style.outline = 'none';
+                });
+                option.style.outline = '3px solid #f3d58e';
+                let addButton = pickerPanel.querySelector('[data-add-waifu]');
+                if (!addButton) {
+                  addButton = statusDoc.createElement('button');
+                  addButton.type = 'button';
+                  addButton.dataset.addWaifu = 'true';
+                  addButton.textContent = 'ADICIONAR';
+                  Object.assign(addButton.style, {
+                    width: '100%', minHeight: '42px', marginTop: '14px',
+                    border: '1px solid #d4b16b', borderRadius: '8px',
+                    background: 'linear-gradient(180deg,#74552e,#302116)',
+                    color: '#fff0c9', font: 'bold 13px Georgia,serif',
+                    cursor: 'pointer', touchAction: 'manipulation'
+                  });
+                  addButton.addEventListener('click', () => {
+                    if (!selectedWaifuCard) return;
+                    const latest = readWaifuData();
+                    const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
+                    while (equippedNow.length < 3) equippedNow.push(null);
+                    if (equippedNow.includes(selectedWaifuCard.instanceId)) return;
+                    equippedNow[selectedSlotIndex] = selectedWaifuCard.instanceId;
+                    writeWaifuData({ ...latest, equipped: equippedNow });
+                    selectedWaifuCard = null;
+                    pickerBackdrop.style.display = 'none';
+                    renderSlots();
+                  });
+                  pickerPanel.appendChild(addButton);
+                }
+              });
+              pickerGrid.appendChild(option);
+            });
+          };
+          const openWaifuPicker = slotIndex => {
+            selectedSlotIndex = slotIndex;
+            selectedWaifuCard = null;
+            const oldAdd = pickerPanel.querySelector('[data-add-waifu]');
+            if (oldAdd) oldAdd.remove();
+            renderPicker();
+            pickerBackdrop.style.display = 'flex';
+          };
+          const refreshPlayerStatus = () => {
+            if (!this.statusSystem || !this.levelSystem) return;
+            const status = this.statusSystem.snapshot('player');
+            const level = this.levelSystem.snapshot('player');
+            if (!status || !level) return;
+            const hp = this.statusSystem.getStat('player', 'hp') ?? status.hp;
+            const maxHp = this.statusSystem.getStat('player', 'maxHp') ?? status.maxHp;
+            const mp = this.statusSystem.getStat('player', 'mp') ?? status.mp;
+            const maxMp = this.statusSystem.getStat('player', 'maxMp') ?? status.maxMp;
+            hpFill.style.width = `${Math.max(0, Math.min(100, hp / Math.max(1,maxHp) * 100))}%`;
+            mpFill.style.width = `${Math.max(0, Math.min(100, mp / Math.max(1,maxMp) * 100))}%`;
+            statNodes.level.textContent = String(level.level);
+            statNodes.xp.textContent = `${level.xp} / ${level.xpToNext}`;
+            statNodes.hp.textContent = `${hp} / ${maxHp}`;
+            statNodes.mp.textContent = `${mp} / ${maxMp}`;
+            statNodes.strength.textContent = String(this.statusSystem.getStat('player','strength'));
+            statNodes.defense.textContent = String(this.statusSystem.getStat('player','defense'));
+            statNodes.speed.textContent = String(this.statusSystem.getStat('player','speed'));
+            renderSlots();
+          };
+          const drawPlayerPortrait = () => {
+            try {
+              const frame = this.player && this.player.frame;
+              const source = this.textures.get('hero').getSourceImage();
+              if (!frame || !source) return;
+              const ctx = portrait.getContext('2d');
+              ctx.clearRect(0,0,96,96);
+              ctx.imageSmoothingEnabled = false;
+              ctx.drawImage(source, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight, 0, 0, 96, 96);
+            } catch (error) { /* Retrato permanece neutro se a textura não estiver pronta. */ }
+          };
+          statusEntry.addEventListener('click', () => {
+            refreshPlayerStatus();
+            statusBackdrop.style.display = 'flex';
+          });
+          statusClose.addEventListener('click', () => { statusBackdrop.style.display = 'none'; });
+          statusBackdrop.addEventListener('click', event => {
+            if (event.target === statusBackdrop) statusBackdrop.style.display = 'none';
+          });
+          pickerClose.addEventListener('click', () => { pickerBackdrop.style.display = 'none'; });
+          pickerBackdrop.addEventListener('click', event => {
+            if (event.target === pickerBackdrop) pickerBackdrop.style.display = 'none';
+          });
+          const statusUnsubs = [
+            this.eventBus.on('status:changed', event => { if (event && event.entityId === 'player') refreshPlayerStatus(); }),
+            this.eventBus.on('level:changed', event => { if (event && event.entityId === 'player') refreshPlayerStatus(); }),
+            this.eventBus.on('progress:changed', event => { if (event && event.section === 'waifus') { renderSlots(); if (pickerBackdrop.style.display === 'flex') renderPicker(); } })
+          ];
+          const portraitRefreshTimer = window.setInterval(drawPlayerPortrait, 180);
+          drawPlayerPortrait();
+          refreshPlayerStatus();
+          this.playerStatusUI = {
+            root: statusRoot, backdrop: statusBackdrop, picker: pickerBackdrop,
+            destroy: () => {
+              window.clearInterval(portraitRefreshTimer);
+              for (const unsub of statusUnsubs) unsub();
+              statusRoot.remove(); statusBackdrop.remove(); pickerBackdrop.remove();
+            }
+          };
+
+          // Um único botão MENU reúne os acessos aos sistemas já existentes.
+          // Os botões antigos ficam ocultos; cada sistema continua responsável
+          // por sua própria janela, estado e atualização de dados.
+          const menuRoot = document.createElement('div');
+          menuRoot.id = 'conquistador-main-menu';
+          Object.assign(menuRoot.style, {
+            position: 'fixed',
+            top: 'max(52px, env(safe-area-inset-top))',
+            right: 'max(12px, env(safe-area-inset-right))',
+            zIndex: '110',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '8px',
+            fontFamily: 'Georgia, "Times New Roman", serif'
+          });
+
+          const menuButton = document.createElement('button');
+          menuButton.type = 'button';
+          menuButton.textContent = 'MENU';
+          menuButton.setAttribute('aria-label', 'Abrir menu principal');
+          menuButton.setAttribute('aria-expanded', 'false');
+          Object.assign(menuButton.style, {
+            minWidth: '104px',
+            minHeight: '40px',
+            padding: '8px 18px',
+            border: '1px solid rgba(221,196,128,.9)',
+            borderRadius: '22px',
+            background: 'linear-gradient(180deg, rgba(75,55,34,.98), rgba(22,19,17,.98))',
+            color: '#f4dfaa',
+            font: '700 12px/1 Georgia, serif',
+            letterSpacing: '.16em',
+            textShadow: '0 1px 2px #000',
+            boxShadow: '0 3px 12px rgba(0,0,0,.55)',
+            touchAction: 'manipulation',
+            cursor: 'pointer'
+          });
+
+          const menuPanel = document.createElement('div');
+          Object.assign(menuPanel.style, {
+            display: 'none',
+            flexDirection: 'column',
+            minWidth: '176px',
+            padding: '8px',
+            gap: '6px',
+            border: '1px solid rgba(190,169,125,.9)',
+            borderRadius: '10px',
+            background: 'linear-gradient(180deg, rgba(37,29,24,.98), rgba(12,12,11,.98))',
+            boxShadow: '0 10px 28px rgba(0,0,0,.7), inset 0 0 18px rgba(0,0,0,.35)'
+          });
+
+          const makeMenuItem = (label, action) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.textContent = label;
+            Object.assign(item.style, {
+              width: '100%',
+              minHeight: '42px',
+              padding: '9px 12px',
+              border: '1px solid rgba(190,169,125,.55)',
+              borderRadius: '7px',
+              background: 'linear-gradient(180deg, rgba(61,47,36,.96), rgba(25,21,18,.98))',
+              color: '#f2e4c7',
+              font: 'bold 13px Georgia, serif',
+              letterSpacing: '.06em',
+              textAlign: 'left',
+              touchAction: 'manipulation',
+              cursor: 'pointer'
+            });
+            item.addEventListener('click', () => {
+              menuPanel.style.display = 'none';
+              menuButton.setAttribute('aria-expanded', 'false');
+              action();
+            });
+            menuPanel.appendChild(item);
+            return item;
+          };
+
+          makeMenuItem('BESTIÁRIO', () => this.bestiarySystem.setOpen(true));
+          makeMenuItem('MOCHILA', () => this.inventorySystem.setOpen(true));
+          makeMenuItem('GALERIA DE WAIFUS', () => this.waifuGallerySystem.setOpen(true));
+
+          menuButton.addEventListener('click', () => {
+            const opening = menuPanel.style.display !== 'flex';
+            menuPanel.style.display = opening ? 'flex' : 'none';
+            menuButton.setAttribute('aria-expanded', opening ? 'true' : 'false');
+          });
+          document.addEventListener('pointerdown', event => {
+            if (!menuRoot.contains(event.target)) {
+              menuPanel.style.display = 'none';
+              menuButton.setAttribute('aria-expanded', 'false');
+            }
+          });
+          menuRoot.append(menuButton, menuPanel);
+          document.body.appendChild(menuRoot);
+
+          // Hide only the three old entry buttons, not their panels.
+          if (this.inventorySystem.openButton) this.inventorySystem.openButton.style.display = 'none';
+          if (this.bestiarySystem.openButton) this.bestiarySystem.openButton.style.display = 'none';
+          if (this.waifuGallerySystem.openButton) this.waifuGallerySystem.openButton.style.display = 'none';
+          this.mainMenuRoot = menuRoot;
+
           this.events.once('shutdown', () => {
             if (this.monsterSystem) this.monsterSystem.destroy();
             if (this.inventorySystem) this.inventorySystem.destroy();
             if (this.bestiarySystem) this.bestiarySystem.destroy();
             if (this.waifuDropSystem) this.waifuDropSystem.destroy();
             if (this.waifuGallerySystem) this.waifuGallerySystem.destroy();
+            if (this.playerStatusUI) this.playerStatusUI.destroy();
+            this.playerStatusUI = null;
+            if (this.mainMenuRoot) this.mainMenuRoot.remove();
+            this.mainMenuRoot = null;
             this.monsterSystem = null;
             this.inventorySystem = null;
             this.bestiarySystem = null;
@@ -5734,10 +6209,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v36">
+  <script id="conquistador-v38">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 36,
-    feature: 'Animações procedurais Idle, Walk e Attack para monstros',
+    version: 38,
+    feature: 'Status do jogador com retrato, barras, atributos e três slots de waifu',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
