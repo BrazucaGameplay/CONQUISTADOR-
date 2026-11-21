@@ -2556,12 +2556,6 @@
         });
         art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || '';
         art.alt = entry.name || 'Waifu';
-        const crown = this.el('div', {
-          position: 'absolute', top: '-3px', left: '50%', transform: 'translateX(-50%)',
-          color: '#ffe29a', font: '34px Georgia,serif',
-          textShadow: '0 2px 8px #8b4bd1', zIndex: '2'
-        });
-        crown.textContent = '♛';
         const titlePlate = this.el('div', {
           position: 'absolute', left: '8%', right: '8%', bottom: '9px',
           padding: '8px 5px', textAlign: 'center',
@@ -2571,7 +2565,7 @@
           textShadow: '0 2px 4px #000'
         });
         titlePlate.textContent = entry.name || 'Waifu';
-        artFrame.append(art, crown, titlePlate);
+        artFrame.append(art, titlePlate);
 
         const profileMeta = this.el('div', {
           width: 'min(100%, 420px)', marginTop: '14px',
@@ -2930,31 +2924,59 @@
         // são idênticas; qualidades diferentes continuam separadas.
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const grouped = new Map(QUALITY.map(quality => [quality.id, []]));
-        const makeOrnateFrame = color => {
+        const makeOrnateFrame = (color, qualityId) => {
+          const queen = qualityId === 'rainha';
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360">
             <defs>
-              <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#fff0b5"/><stop offset=".22" stop-color="${color}"/>
-                <stop offset=".52" stop-color="#fff3ca"/><stop offset=".78" stop-color="${color}"/>
-                <stop offset="1" stop-color="#8a5527"/>
+              <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#fff4c8"/>
+                <stop offset=".16" stop-color="${color}"/>
+                <stop offset=".36" stop-color="#fff0bb"/>
+                <stop offset=".58" stop-color="#8b5a2b"/>
+                <stop offset=".78" stop-color="${color}"/>
+                <stop offset="1" stop-color="#fff0c2"/>
               </linearGradient>
-              <filter id="shine"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#392044"/>
+                <stop offset=".5" stop-color="#160e20"/>
+                <stop offset="1" stop-color="#432448"/>
+              </linearGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="2.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             </defs>
-            <path d="M28 4 Q12 4 7 24 L4 44 L4 316 L7 336 Q12 356 28 356 L212 356 Q228 356 233 336 L236 316 L236 44 L233 24 Q228 4 212 4 Z"
-              fill="none" stroke="url(#gold)" stroke-width="7" filter="url(#shine)"/>
-            <path d="M8 45 Q30 42 44 9 M232 45 Q210 42 196 9 M8 315 Q30 318 44 351 M232 315 Q210 318 196 351"
-              fill="none" stroke="url(#gold)" stroke-width="5"/>
-            <path d="M15 25 Q36 25 43 5 Q57 23 78 16 Q68 38 45 43 Q25 42 15 25
-                     M225 25 Q204 25 197 5 Q183 23 162 16 Q172 38 195 43 Q215 42 225 25
-                     M15 335 Q36 335 43 355 Q57 337 78 344 Q68 322 45 317 Q25 318 15 335
-                     M225 335 Q204 335 197 355 Q183 337 162 344 Q172 322 195 317 Q215 318 225 335"
-              fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
-            <path d="M120 2 L129 15 L120 28 L111 15 Z M120 332 L129 345 L120 358 L111 345 Z"
-              fill="${color}" stroke="#fff0bd" stroke-width="2"/>
-            <path d="M7 180 L22 168 L36 180 L22 192 Z M233 180 L218 168 L204 180 L218 192 Z"
-              fill="${color}" stroke="#fff0bd" stroke-width="2"/>
-            <path d="M25 58 Q12 73 22 91 M215 58 Q228 73 218 91 M25 302 Q12 287 22 269 M215 302 Q228 287 218 269"
-              fill="none" stroke="#ffe9ad" stroke-width="2" opacity=".9"/>
+            <!-- Outer card silhouette: one single perimeter, with no inner rectangle. -->
+            <path d="M28 5 Q12 5 8 25 L4 45 L4 315 L8 335 Q12 355 28 355 L212 355 Q228 355 232 335 L236 315 L236 45 L232 25 Q228 5 212 5 Z"
+              fill="none" stroke="url(#metal)" stroke-width="7" filter="url(#glow)"/>
+            <path d="M28 9 Q15 9 12 27 L9 46 L9 314 L12 333 Q15 351 28 351 L212 351 Q225 351 228 333 L231 314 L231 46 L228 27 Q225 9 212 9 Z"
+              fill="none" stroke="#fff0bd" stroke-opacity=".9" stroke-width="1.5"/>
+            <!-- Ornate curled corners and wing-like gold scrollwork. -->
+            <g fill="none" stroke="url(#metal)" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke-width="6" d="M12 48 Q12 17 48 15 Q28 28 42 43 Q54 53 72 33 Q65 61 40 65 Q22 64 12 48Z"/>
+              <path stroke-width="6" d="M228 48 Q228 17 192 15 Q212 28 198 43 Q186 53 168 33 Q175 61 200 65 Q218 64 228 48Z"/>
+              <path stroke-width="6" d="M12 312 Q12 343 48 345 Q28 332 42 317 Q54 307 72 327 Q65 299 40 295 Q22 296 12 312Z"/>
+              <path stroke-width="6" d="M228 312 Q228 343 192 345 Q212 332 198 317 Q186 307 168 327 Q175 299 200 295 Q218 296 228 312Z"/>
+              <path stroke-width="3" d="M15 88 Q34 66 54 83 Q65 95 49 108 Q31 119 20 103 M225 88 Q206 66 186 83 Q175 95 191 108 Q209 119 220 103"/>
+              <path stroke-width="3" d="M15 272 Q34 294 54 277 Q65 265 49 252 Q31 241 20 257 M225 272 Q206 294 186 277 Q175 265 191 252 Q209 241 220 257"/>
+            </g>
+            <!-- Jewel accents around the outer edge. -->
+            <g fill="${color}" stroke="#fff0c2" stroke-width="1.5">
+              <path d="M120 3 L128 15 L120 28 L112 15Z"/>
+              <path d="M120 332 L128 345 L120 357 L112 345Z"/>
+              <path d="M4 180 L17 169 L30 180 L17 191Z"/>
+              <path d="M236 180 L223 169 L210 180 L223 191Z"/>
+              <circle cx="23" cy="23" r="5"/><circle cx="217" cy="23" r="5"/>
+              <circle cx="23" cy="337" r="5"/><circle cx="217" cy="337" r="5"/>
+            </g>
+            <!-- Raised top quality crest and bottom title ribbon, like the reference. -->
+            <path d="M50 11 L77 23 L163 23 L190 11 L202 29 L184 51 L56 51 L38 29Z"
+              fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
+            <path d="M58 17 L182 17" stroke="#fff0bd" stroke-opacity=".7" stroke-width="1.5"/>
+            <path d="M50 315 L73 304 L167 304 L190 315 L178 339 L62 339Z"
+              fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
+            <path d="M65 310 L175 310" stroke="#fff0bd" stroke-opacity=".65" stroke-width="1.5"/>
+            ${queen ? `<g fill="url(#metal)" stroke="#fff0bd" stroke-width="1.5">
+              <path d="M103 5 L94 -3 L101 -1 L108 -9 L120 -1 L132 -9 L139 -1 L146 -3 L137 7Z"/>
+              <circle cx="120" cy="-2" r="4"/>
+            </g>` : ''}
           </svg>`;
           return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
         };
@@ -2967,45 +2989,55 @@
           const matchingCards = grouped.get(quality.id) || [];
           if (!matchingCards.length) continue;
           const stack = this.el('button', {
-            position: 'relative', width: 'min(100%, 164px)', aspectRatio: '2 / 3',
-            justifySelf: 'center', padding: '0', border: '0', borderRadius: '10px',
+            position: 'relative', width: 'min(100%, 184px)', aspectRatio: '2 / 3',
+            justifySelf: 'center', padding: '0', border: '0', borderRadius: '9px',
             backgroundColor: '#100d17',
-            backgroundImage: makeOrnateFrame(quality.color),
+            backgroundImage: makeOrnateFrame(quality.color, quality.id),
             backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
             boxShadow: `0 0 22px ${quality.color}66, 0 8px 20px rgba(0,0,0,.65)`,
-            color: '#f2e4c7', cursor: 'pointer', touchAction: 'manipulation',
+            color: '#fff0c9', cursor: 'pointer', touchAction: 'manipulation',
             overflow: 'visible'
           });
           stack.type = 'button';
           const art = this.el('img', {
-            position: 'absolute', inset: '3%', width: '94%', height: '94%',
-            display: 'block', objectFit: 'cover', objectPosition: 'center 18%',
-            borderRadius: '8px', background: '#10131b'
+            position: 'absolute', left: '5%', top: '14%', width: '90%',
+            height: '72%', display: 'block', objectFit: 'cover',
+            objectPosition: 'center 18%', borderRadius: '3px',
+            background: '#10131b', zIndex: '0'
           });
           art.src = fullResolutionArt;
           art.alt = 'Ilustração da Donzela Slime';
-          const namePlate = this.el('div', {
-            position: 'absolute', left: '15%', right: '15%', bottom: '-2px',
-            minHeight: '28px', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', padding: '2px 4px',
-            color: '#fff0c9', font: 'bold 12px Georgia,serif',
-            textShadow: '0 2px 4px #000',
-            background: `linear-gradient(90deg,transparent,${quality.color} 18%,#26152f 50%,${quality.color} 82%,transparent)`,
-            borderTop: `2px solid ${quality.color}`, borderBottom: `2px solid ${quality.color}`,
-            clipPath: 'polygon(0 0,100% 0,92% 50%,100% 100%,0 100%,8% 50%)',
-            zIndex: '2'
+          const qualityName = this.el('div', {
+            position: 'absolute', left: '22%', right: '22%', top: '3.5%',
+            zIndex: '2', textAlign: 'center', color: '#fff1c9',
+            font: 'bold 12px Georgia,serif', textShadow: '0 2px 4px #000'
           });
-          namePlate.textContent = quality.name;
+          qualityName.textContent = quality.name;
+          const stars = this.el('div', {
+            position: 'absolute', left: '22%', right: '22%', top: '10%',
+            zIndex: '2', textAlign: 'center', color: '#ffd36e',
+            font: 'bold 10px Georgia,serif', letterSpacing: '-1px',
+            textShadow: '0 1px 4px #000'
+          });
+          const starCount = QUALITY.indexOf(quality) + 1;
+          stars.textContent = '★'.repeat(starCount);
+          const titlePlate = this.el('div', {
+            position: 'absolute', left: '22%', right: '22%', bottom: '6%',
+            zIndex: '2', padding: '3px 2px', textAlign: 'center',
+            color: '#fff0c9', font: 'bold 10px Georgia,serif',
+            textShadow: '0 2px 4px #000'
+          });
+          titlePlate.textContent = 'Donzela Slime';
           const quantity = this.el('div', {
-            position: 'absolute', top: '8%', right: '8%', zIndex: '3',
-            minWidth: '30px', padding: '5px 7px',
-            border: `1px solid ${quality.color}`, borderRadius: '15px',
+            position: 'absolute', top: '18%', right: '10%', zIndex: '3',
+            minWidth: '27px', padding: '4px 6px',
+            border: `1px solid ${quality.color}`, borderRadius: '14px',
             background: 'rgba(18,12,22,.96)', color: '#fff0bf',
-            font: 'bold 13px Georgia,serif', textAlign: 'center',
+            font: 'bold 12px Georgia,serif', textAlign: 'center',
             boxShadow: `0 0 9px ${quality.color}88`
           });
           quantity.textContent = `×${matchingCards.length}`;
-          stack.append(art, namePlate, quantity);
+          stack.append(art, qualityName, stars, titlePlate, quantity);
           stack.addEventListener('click', () => this.showFullCard(quality.id));
           this.content.appendChild(stack);
         }
@@ -5621,10 +5653,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v34">
+  <script id="conquistador-v35">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 34,
-    feature: 'Moldura externa ornamental e perfil do bestiário com página deslizante',
+    version: 35,
+    feature: 'Moldura de carta baseada na referência, sem gota rosa; bestiário sem coroa',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
