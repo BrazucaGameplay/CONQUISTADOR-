@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V68</title>
+<title>CONQUISTADOR DE WAIFU'S — V69</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -748,9 +748,9 @@
         const autoAttackBadge = document.createElement('div');
         autoAttackBadge.setAttribute('aria-label', 'Ataque automático — recarga');
         autoAttackBadge.style.position = 'fixed';
-        autoAttackBadge.style.left = 'max(76px, calc(env(safe-area-inset-left) + 76px))';
-        autoAttackBadge.style.right = 'auto';
-        autoAttackBadge.style.bottom = 'max(190px, calc(env(safe-area-inset-bottom) + 174px))';
+        autoAttackBadge.style.left = 'auto';
+        autoAttackBadge.style.right = '70px';
+        autoAttackBadge.style.bottom = 'max(112px, calc(env(safe-area-inset-bottom) + 96px))';
         autoAttackBadge.style.zIndex = '30';
         autoAttackBadge.style.width = '56px';
         autoAttackBadge.style.height = '56px';
@@ -3437,62 +3437,6 @@
         // são idênticas; qualidades diferentes continuam separadas.
         const fullResolutionArt = root.CONQUISTADOR_WAIFU_ART || '';
         const grouped = new Map();
-        const makeOrnateFrame = (color, qualityId) => {
-          const queen = qualityId === 'rainha';
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360">
-            <defs>
-              <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#fff4c8"/>
-                <stop offset=".16" stop-color="${color}"/>
-                <stop offset=".36" stop-color="#fff0bb"/>
-                <stop offset=".58" stop-color="#8b5a2b"/>
-                <stop offset=".78" stop-color="${color}"/>
-                <stop offset="1" stop-color="#fff0c2"/>
-              </linearGradient>
-              <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#392044"/>
-                <stop offset=".5" stop-color="#160e20"/>
-                <stop offset="1" stop-color="#432448"/>
-              </linearGradient>
-              <filter id="glow"><feGaussianBlur stdDeviation="2.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            </defs>
-            <!-- Outer card silhouette: one single perimeter, with no inner rectangle. -->
-            <path d="M28 5 Q12 5 8 25 L4 45 L4 315 L8 335 Q12 355 28 355 L212 355 Q228 355 232 335 L236 315 L236 45 L232 25 Q228 5 212 5 Z"
-              fill="none" stroke="url(#metal)" stroke-width="7" filter="url(#glow)"/>
-            <path d="M28 9 Q15 9 12 27 L9 46 L9 314 L12 333 Q15 351 28 351 L212 351 Q225 351 228 333 L231 314 L231 46 L228 27 Q225 9 212 9 Z"
-              fill="none" stroke="#fff0bd" stroke-opacity=".9" stroke-width="1.5"/>
-            <!-- Ornate curled corners and wing-like gold scrollwork. -->
-            <g fill="none" stroke="url(#metal)" stroke-linecap="round" stroke-linejoin="round">
-              <path stroke-width="6" d="M12 48 Q12 17 48 15 Q28 28 42 43 Q54 53 72 33 Q65 61 40 65 Q22 64 12 48Z"/>
-              <path stroke-width="6" d="M228 48 Q228 17 192 15 Q212 28 198 43 Q186 53 168 33 Q175 61 200 65 Q218 64 228 48Z"/>
-              <path stroke-width="6" d="M12 312 Q12 343 48 345 Q28 332 42 317 Q54 307 72 327 Q65 299 40 295 Q22 296 12 312Z"/>
-              <path stroke-width="6" d="M228 312 Q228 343 192 345 Q212 332 198 317 Q186 307 168 327 Q175 299 200 295 Q218 296 228 312Z"/>
-              <path stroke-width="3" d="M15 88 Q34 66 54 83 Q65 95 49 108 Q31 119 20 103 M225 88 Q206 66 186 83 Q175 95 191 108 Q209 119 220 103"/>
-              <path stroke-width="3" d="M15 272 Q34 294 54 277 Q65 265 49 252 Q31 241 20 257 M225 272 Q206 294 186 277 Q175 265 191 252 Q209 241 220 257"/>
-            </g>
-            <!-- Jewel accents around the outer edge. -->
-            <g fill="${color}" stroke="#fff0c2" stroke-width="1.5">
-              <path d="M120 3 L128 15 L120 28 L112 15Z"/>
-              <path d="M120 332 L128 345 L120 357 L112 345Z"/>
-              <path d="M4 180 L17 169 L30 180 L17 191Z"/>
-              <path d="M236 180 L223 169 L210 180 L223 191Z"/>
-              <circle cx="23" cy="23" r="5"/><circle cx="217" cy="23" r="5"/>
-              <circle cx="23" cy="337" r="5"/><circle cx="217" cy="337" r="5"/>
-            </g>
-            <!-- Raised top quality crest and bottom title ribbon, like the reference. -->
-            <path d="M50 11 L77 23 L163 23 L190 11 L202 29 L184 51 L56 51 L38 29Z"
-              fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
-            <path d="M58 17 L182 17" stroke="#fff0bd" stroke-opacity=".7" stroke-width="1.5"/>
-            <path d="M50 315 L73 304 L167 304 L190 315 L178 339 L62 339Z"
-              fill="url(#plate)" stroke="url(#metal)" stroke-width="4"/>
-            <path d="M65 310 L175 310" stroke="#fff0bd" stroke-opacity=".65" stroke-width="1.5"/>
-            ${queen ? `<g fill="url(#metal)" stroke="#fff0bd" stroke-width="1.5">
-              <path d="M103 5 L94 -3 L101 -1 L108 -9 L120 -1 L132 -9 L139 -1 L146 -3 L137 7Z"/>
-              <circle cx="120" cy="-2" r="4"/>
-            </g>` : ''}
-          </svg>`;
-          return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-        };
         for (const card of cards) {
           const qualityId = QUALITY.some(q => q.id === (card && card.quality)) ? card.quality : 'plebeia';
           const speciesId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
@@ -3509,55 +3453,64 @@
           const speciesName = group.speciesId === 'slime' ? 'Donzela Slime' : group.speciesId;
 
           const stack = this.el('button', {
-            position: 'relative', width: 'min(100%, 184px)', aspectRatio: '2 / 3',
-            justifySelf: 'center', padding: '0', border: '0', borderRadius: '9px',
-            backgroundColor: '#100d17',
-            backgroundImage: makeOrnateFrame(quality.color, quality.id),
-            backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
-            boxShadow: `0 0 22px ${quality.color}66, 0 8px 20px rgba(0,0,0,.65)`,
-            color: '#fff0c9', cursor: 'pointer', touchAction: 'manipulation',
-            overflow: 'visible'
+            position: 'relative', width: 'min(100%, 150px)', aspectRatio: '2 / 3',
+            justifySelf: 'center', display: 'flex', flexDirection: 'column',
+            alignItems: 'stretch', gap: '4px', padding: '7px',
+            boxSizing: 'border-box', border: `3px solid ${quality.color}`,
+            outline: '1px solid rgba(255,240,190,.82)', outlineOffset: '-5px',
+            borderRadius: '12px',
+            background: 'linear-gradient(145deg,rgba(42,35,47,.98),rgba(10,10,16,.99))',
+            boxShadow: `0 0 0 2px #17121d, 0 0 14px ${quality.color}66, 0 7px 16px rgba(0,0,0,.65)`,
+            color: quality.color, cursor: 'pointer', touchAction: 'manipulation',
+            overflow: 'hidden'
           });
           stack.type = 'button';
-          const art = this.el('img', {
-            position: 'absolute', left: '5%', top: '14%', width: '90%',
-            height: '72%', display: 'block', objectFit: 'cover',
-            objectPosition: 'center 18%', borderRadius: '3px',
-            background: '#10131b', zIndex: '0'
-          });
-          art.src = fullResolutionArt;
-          art.alt = `Ilustração de ${speciesName}`;
           const qualityName = this.el('div', {
-            position: 'absolute', left: '22%', right: '22%', top: '3.5%',
-            zIndex: '2', textAlign: 'center', color: '#fff1c9',
-            font: 'bold 12px Georgia,serif', textShadow: '0 2px 4px #000'
+            flex: '0 0 auto', minHeight: '15px', textAlign: 'center',
+            color: quality.color, font: 'bold 11px/1.2 Georgia,serif',
+            textShadow: '0 1px 3px #000'
           });
           qualityName.textContent = quality.name;
           const stars = this.el('div', {
-            position: 'absolute', left: '22%', right: '22%', top: '10%',
-            zIndex: '2', textAlign: 'center', color: '#ffd36e',
-            font: 'bold 10px Georgia,serif', letterSpacing: '-1px',
-            textShadow: '0 1px 4px #000'
+            flex: '0 0 auto', minHeight: '12px', textAlign: 'center',
+            color: quality.color, font: 'bold 10px/1 Georgia,serif',
+            letterSpacing: '1px', textShadow: '0 1px 3px #000'
           });
-          const starCount = QUALITY.indexOf(quality) + 1;
-          stars.textContent = '★'.repeat(starCount);
+          stars.textContent = '★'.repeat(QUALITY.indexOf(quality) + 1);
+          const artWindow = this.el('div', {
+            position: 'relative', flex: '1 1 auto', minHeight: '0',
+            width: '100%', display: 'grid', placeItems: 'center',
+            boxSizing: 'border-box', padding: '3px',
+            border: `1px solid ${quality.color}`,
+            borderRadius: '5px', background: 'rgba(4,8,15,.94)',
+            overflow: 'hidden'
+          });
+          const art = this.el('img', {
+            display: 'block', width: '100%', height: '100%',
+            objectFit: 'contain', objectPosition: 'center',
+            background: '#080c15'
+          });
+          art.src = fullResolutionArt;
+          art.alt = `Ilustração completa de ${speciesName}`;
+          artWindow.appendChild(art);
           const titlePlate = this.el('div', {
-            position: 'absolute', left: '22%', right: '22%', bottom: '6%',
-            zIndex: '2', padding: '3px 2px', textAlign: 'center',
-            color: '#fff0c9', font: 'bold 10px Georgia,serif',
-            textShadow: '0 2px 4px #000'
+            flex: '0 0 auto', minHeight: '23px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1px 2px', textAlign: 'center',
+            color: quality.color, font: 'bold 10px/1.15 Georgia,serif',
+            textShadow: '0 1px 3px #000', overflowWrap: 'anywhere'
           });
           titlePlate.textContent = `${speciesName} · Nv. ${group.level}`;
           const quantity = this.el('div', {
-            position: 'absolute', top: '18%', right: '10%', zIndex: '3',
-            minWidth: '27px', padding: '4px 6px',
-            border: `1px solid ${quality.color}`, borderRadius: '14px',
-            background: 'rgba(18,12,22,.96)', color: '#fff0bf',
-            font: 'bold 12px Georgia,serif', textAlign: 'center',
-            boxShadow: `0 0 9px ${quality.color}88`
+            position: 'absolute', top: '42px', right: '10px', zIndex: '3',
+            minWidth: '25px', padding: '3px 5px',
+            border: `1px solid ${quality.color}`, borderRadius: '12px',
+            background: 'rgba(8,8,14,.94)', color: quality.color,
+            font: 'bold 11px Georgia,serif', textAlign: 'center',
+            boxShadow: `0 0 7px ${quality.color}66`
           });
           quantity.textContent = `×${matchingCards.length}`;
-          stack.append(art, qualityName, stars, titlePlate, quantity);
+          stack.append(qualityName, stars, artWindow, titlePlate, quantity);
           stack.addEventListener('click', () => this.showFullCard(group.key));
           this.content.appendChild(stack);
         }
@@ -3628,39 +3581,41 @@
           height: 'min(61dvh, 470px)', aspectRatio: '2 / 3',
           flex: '0 1 auto', minHeight: '0',
           padding: '9px', boxSizing: 'border-box',
-          border: `5px solid ${quality.color}`,
-          outline: '2px solid rgba(255,240,190,.88)', outlineOffset: '-8px',
-          borderRadius: '22px 22px 12px 12px',
-          background: 'linear-gradient(145deg,#fff0bd,#493047 28%,#17101d 72%,#d4a65b)',
+          border: `4px solid ${quality.color}`,
+          outline: '2px solid rgba(255,240,190,.82)', outlineOffset: '3px',
+          borderRadius: '14px',
+          background: 'linear-gradient(145deg,#302638,#0b0a10)',
+          boxShadow: `0 0 0 3px #24172b, 0 0 18px ${quality.color}66, 0 14px 36px rgba(0,0,0,.8)`,
+          display: 'flex', flexDirection: 'column', gap: '7px',
+          padding: '10px',
           boxShadow: `0 0 0 3px #24172b, 0 0 24px ${quality.color}88, 0 14px 36px rgba(0,0,0,.8)`,
           overflow: 'hidden'
         });
         const art = this.el('img', {
-          position: 'absolute', left: '8px', top: '8px',
-          width: 'calc(100% - 16px)', height: 'calc(100% - 16px)',
-          display: 'block', objectFit: 'cover', objectPosition: 'center 18%',
-          borderRadius: '12px', background: '#10131b'
+          position: 'relative', flex: '1 1 auto', minHeight: '0',
+          width: '100%', height: '100%',
+          display: 'block', objectFit: 'contain', objectPosition: 'center',
+          borderRadius: '5px', background: '#080c15',
+          border: `1px solid ${quality.color}`
         });
         art.src = fullResolutionArt;
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
-          position: 'absolute', top: '12px', left: '12%', right: '12%',
-          zIndex: '2', padding: '5px 4px', textAlign: 'center',
-          color: '#fff0c9', font: 'bold 12px Georgia,serif',
-          background: 'linear-gradient(90deg,transparent,rgba(25,13,30,.94) 18%,rgba(25,13,30,.94) 82%,transparent)',
+          position: 'relative', flex: '0 0 auto', padding: '2px 4px',
+          textAlign: 'center', color: quality.color,
+          font: 'bold 13px Georgia,serif',
           textShadow: '0 2px 4px #000'
         });
         topPlate.textContent = `${quality.name} · ${'★'.repeat(QUALITY.indexOf(quality) + 1)}`;
         const titlePlate = this.el('div', {
-          position: 'absolute', left: '9%', right: '9%', bottom: '13px',
-          zIndex: '2', padding: '8px 5px', textAlign: 'center',
-          color: '#fff0c9', font: 'bold 16px Georgia,serif',
-          background: 'linear-gradient(90deg,transparent,rgba(25,13,30,.96) 12%,rgba(25,13,30,.96) 88%,transparent)',
-          borderTop: `2px solid ${quality.color}`, borderBottom: `2px solid ${quality.color}`,
+          position: 'relative', flex: '0 0 auto', padding: '3px 4px',
+          textAlign: 'center', color: quality.color,
+          font: 'bold 15px Georgia,serif',
+          borderTop: `1px solid ${quality.color}`, borderBottom: `1px solid ${quality.color}`,
           textShadow: '0 2px 4px #000'
         });
         titlePlate.textContent = `${speciesName} · Nv. ${level}`;
-        cardFrame.append(art, topPlate, titlePlate);
+        cardFrame.append(topPlate, art, titlePlate);
         const quantity = this.el('div', {
           color: '#e9d8b7', font: '14px Georgia,serif', textAlign: 'center'
         });
@@ -7217,8 +7172,8 @@
       b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
-    #conquistador-active-skills-v53{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;overflow:visible;z-index:5}
-    #conquistador-active-skills-v53 button{position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c;transform:translate(-50%,-50%) translate(var(--skill-x),var(--skill-y))}
+    #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;width:max-content;height:38px;pointer-events:none;overflow:visible;z-index:5}
+    #conquistador-active-skills-v53 button{position:relative;left:auto;top:auto;flex:0 0 36px;width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center;border:2px solid #c3a96c;color:#f4edcf;box-shadow:0 2px 7px #000b,inset 0 0 0 2px #241d16;pointer-events:auto;touch-action:manipulation;font:18px Georgia;background:#27231c;transform:none}
     #conquistador-active-skills-v53 button.cw53-ready .cw53-icon{animation:cw53gel 1.25s ease-in-out infinite;filter:drop-shadow(0 0 5px #aaff67)}
     #conquistador-active-skills-v53 button.cw53-cast .cw53-icon{animation:cw53cast .48s ease-out}
     @keyframes cw53gel{0%,100%{transform:translateY(1px) scale(.92)}50%{transform:translateY(-2px) scale(1.12)}}
@@ -7229,10 +7184,8 @@
     hud=document.getElementById('conquistador-active-skills-v53');if(hud){buttons=Array.from(hud.querySelectorAll('button'));return true;}
     const cs=getComputedStyle(badge);if(cs.position==='static')badge.style.position='relative';badge.style.overflow='visible';
     hud=document.createElement('div');hud.id='conquistador-active-skills-v53';
-    // Three skill buttons form a 120-degree arc around the lower-left attack control.
-    // The arc stays inward from the left/bottom safe areas on narrow phones.
-    const radial=[[-43,-25],[0,-50],[43,-25]];
-    for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';b.style.setProperty('--skill-x',radial[i][0]+'px');b.style.setProperty('--skill-y',radial[i][1]+'px');const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
+    // Three skills form one centered horizontal row immediately above attack.
+    for(let i=0;i<3;i++){const b=document.createElement('button');b.type='button';const icon=document.createElement('span');icon.className='cw53-icon';icon.textContent='·';b.appendChild(icon);b.addEventListener('click',()=>cast(i,true));buttons.push(b);hud.appendChild(b);}
     badge.appendChild(hud);toast=document.createElement('div');Object.assign(toast.style,{position:'fixed',left:'50%',bottom:'calc(env(safe-area-inset-bottom) + 72px)',transform:'translateX(-50%)',opacity:'0',transition:'opacity .15s',zIndex:'9999',padding:'7px 12px',background:'#211c16',border:'1px solid #c3a96c',borderRadius:'8px',color:'#f5e7bd',font:'12px Georgia',pointerEvents:'none'});document.body.appendChild(toast);render();return true;
   }
   function cleanup(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}if(bootTimer){clearTimeout(bootTimer);bootTimer=null;}unsubscribers.forEach(fn=>{try{fn();}catch(_){}});unsubscribers=[];}
@@ -7249,7 +7202,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V68';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V69';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
