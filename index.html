@@ -799,6 +799,70 @@
         return candidates;
       }
 
+      getMonsterFacing(dx, dy) {
+        // Eight sectors in the same clockwise convention used by the player.
+        const angle = Math.atan2(dy, dx);
+        return (Math.round((angle + Math.PI * 2) / (Math.PI / 4)) % 8);
+      }
+
+      setMonsterAnimation(record, state, dx = 0, dy = 0) {
+        if (!record || !record.sprite || !record.sprite.active) return;
+        const sprite = record.sprite;
+        const animation = record.animation || (record.animation = {
+          state: null, facing: 0, tween: null,
+          baseScaleX: sprite.scaleX || 1, baseScaleY: sprite.scaleY || 1
+        });
+        const facing = (dx || dy) ? this.getMonsterFacing(dx, dy) : animation.facing;
+        if (dx || dy) {
+          animation.facing = facing;
+          // The original monster art is a single-view sprite. Mirror it for
+          // west-facing sectors and retain the eight-sector facing state.
+          sprite.setFlipX(facing === 3 || facing === 4 || facing === 5);
+        }
+        if (animation.state === state) return;
+        if (animation.tween && animation.tween.isPlaying()) animation.tween.stop();
+        animation.tween = null;
+        animation.state = state;
+        const baseX = animation.baseScaleX;
+        const baseY = animation.baseScaleY;
+        sprite.setScale(baseX, baseY);
+        sprite.setAngle(0);
+
+        if (state === 'idle') {
+          // Idle cadence mirrors the hero's 2-frame / 2 FPS loop.
+          animation.tween = this.scene.tweens.add({
+            targets: sprite,
+            scaleX: { from: baseX * 0.985, to: baseX * 1.015 },
+            scaleY: { from: baseY * 0.96, to: baseY * 1.04 },
+            duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut'
+          });
+        } else if (state === 'walk') {
+          // Walk cadence mirrors the hero's 3-frame / 8 FPS loop.
+          animation.tween = this.scene.tweens.add({
+            targets: sprite,
+            scaleX: { from: baseX * 1.06, to: baseX * 0.94 },
+            scaleY: { from: baseY * 0.90, to: baseY * 1.10 },
+            angle: { from: -3, to: 3 },
+            duration: 125, yoyo: true, repeat: -1, ease: 'Sine.InOut'
+          });
+        } else if (state === 'attack') {
+          // Three visual beats (wind-up, strike, recovery), with no change
+          // to damage, range, cooldown, or attack timing.
+          animation.tween = this.scene.tweens.add({
+            targets: sprite,
+            scaleX: { from: baseX * 0.88, to: baseX * 1.22 },
+            scaleY: { from: baseY * 1.12, to: baseY * 0.82 },
+            angle: { from: -5, to: 5 },
+            duration: 100, yoyo: true, repeat: 1, ease: 'Quad.Out',
+            onComplete: () => {
+              if (!sprite.active || !record.alive) return;
+              animation.state = null;
+              this.setMonsterAnimation(record, 'idle');
+            }
+          });
+        }
+      }
+
       spawnOneMonsterForChunk(chunkX, chunkY, monsterId) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
@@ -847,6 +911,10 @@
           definition,
           tile: { x: tile.x, y: tile.y },
           sprite,
+          animation: {
+            state: null, facing: 0, tween: null,
+            baseScaleX: sprite.scaleX || 1, baseScaleY: sprite.scaleY || 1
+          },
           path: [],
           targetKey: null,
           nextPathAt: 0,
@@ -859,6 +927,7 @@
           originChunkY: chunkY
         };
         this.monsters.set(id, record);
+        this.setMonsterAnimation(record, 'idle');
         const population = this.getChunkPopulationState(chunkId);
         population.totalSpawned += 1;
         this.events.emit('monster:spawned', {
@@ -1212,6 +1281,9 @@
       killMonster(record, killerId) {
         if (!record || !record.alive) return false;
         record.alive = false;
+        if (record.animation && record.animation.tween && record.animation.tween.isPlaying()) {
+          record.animation.tween.stop();
+        }
         if (this.approachTargetId === record.id) {
           this.events.emit('player:combat-stop', { targetId: record.id });
           this.approachTargetId = null;
@@ -1352,12 +1424,17 @@
         if (distance > this.aggroRange) {
           record.path = [];
           record.targetKey = null;
+          this.setMonsterAnimation(record, 'idle');
           return;
         }
         if (distance <= this.monsterAttackRange) {
           record.path = [];
+          if (record.animation && record.animation.state !== 'attack') {
+            this.setMonsterAnimation(record, 'idle');
+          }
           if (time >= record.nextAttackAt) {
             record.nextAttackAt = time + this.monsterAttackCooldownMs;
+            this.setMonsterAnimation(record, 'attack', dxToPlayer, dyToPlayer);
             const result = this.status.applyDamage('player', record.definition.damage);
             if (result) {
               this.events.emit('monster:attack', {
@@ -1399,8 +1476,12 @@
             record.sprite.x + dx / distanceToWaypoint * travel,
             record.sprite.y + dy / distanceToWaypoint * travel
           );
+          this.setMonsterAnimation(record, 'walk', dxToPlayer, dyToPlayer);
           record.sprite.setDepth(record.sprite.y + 10);
           break;
+        }
+        if (!target && record.animation && record.animation.state !== 'attack') {
+          this.setMonsterAnimation(record, 'idle');
         }
         const tile = {
           x: Math.floor(record.sprite.x / this.tileSize),
@@ -5653,10 +5734,10 @@
     }
   })();
   </script>
-  <script id="conquistador-v35">
+  <script id="conquistador-v36">
   window.CONQUISTADOR_V30 = Object.freeze({
-    version: 35,
-    feature: 'Moldura de carta baseada na referência, sem gota rosa; bestiário sem coroa',
+    version: 36,
+    feature: 'Animações procedurais Idle, Walk e Attack para monstros',
     gallery: Object.freeze({ stackKey: 'quality', identicalCardsPerQuality: true, fullCardOnTap: true }),
     waifuDrop: Object.freeze({
       monsterId: 'slime', chance: 0.20,
