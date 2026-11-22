@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V121 — CAUSA RAIZ dos 3 bugs da V120: (1) vazio verde = laje createGroundBase verde do tamanho do mundo cobria o fundo escuro -> laje agora escura; (2) árvores = corte da V120 foi só -20% e as manchas dominavam + espalhador 198/207 plantava árvore extra -> manchas quase pela metade, base 0.05, raleio do mapa antigo mais forte; (3) pedrinhas = V120 só removeu pedras SÓLIDAS; o espalhador 198/207 plantava pedrinha em 2,2% da área nova + tile 198 limpo do mapa antigo. Sem manifest novo (manifest é fixo). -->
+<!-- V122 — CAUSA RAIZ: (1) streaming de chunks = o mundo era montado/desmontado por pedaços e a câmera, a visão e os monstros sumiam nas bordas -> o mundo inteiro é renderizado UMA vez, sem streaming; (2) pedrinhas = a limpeza do mapa-base era lista negra (SOLID + 198) e toda variante de pedra escapava -> lista branca: na camada de estruturas do mapa-base só ficam árvores; (3) cache: o mundo renderizado (chão, estruturas, objetos, colisão, estradas) fica salvo no IndexedDB e a próxima abertura usa o cache em vez de regenerar. O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
 <head>
@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V121</title>
+<title>CONQUISTADOR DE WAIFU'S — V122</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V121</div>
+  <div id="version-badge">V122</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4702,18 +4702,16 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           originalUpperObjects[sy][sx] = sourceUpperObjects[index] || 0;
           if (bridgeIds.has(originalStructures[sy][sx])) originalStructures[sy][sx] = 0;
           if (bridgeIds.has(originalUpperObjects[sy][sx])) originalUpperObjects[sy][sx] = 0;
-          // V120 — SEM PEDRINHAS. O mapa-base vinha com um círculo de pedras
-          // (e outras rochas) na camada de estruturas, bloqueando passagem.
-          // Todas as estruturas sólidas do mapa-base são pedras: removidas.
-          // Árvores, chão e pontes ficam intactos. Se alguma estrutura que
-          // você queria manter sumir, fala qual que eu devolvo só ela.
-          if (SOLID_IDS.has(originalStructures[sy][sx])) originalStructures[sy][sx] = 0;
-          if (SOLID_IDS.has(originalUpperObjects[sy][sx])) originalUpperObjects[sy][sx] = 0;
-          // V121 — tile 198 = pedrinha (o mesmo do espalhador removido).
-          // Limpa as pedrinhas decorativas do mapa-base também; árvores,
-          // chão e pontes ficam intactos.
-          if (originalStructures[sy][sx] === 198) originalStructures[sy][sx] = 0;
-          if (originalUpperObjects[sy][sx] === 198) originalUpperObjects[sy][sx] = 0;
+          // V122 — LISTA BRANCA. Na camada de estruturas do mapa-base só
+          // ficam árvores; qualquer outro tile (pedra de QUALQUER id,
+          // sólida ou decorativa) é zerado. A V120/V121 usavam lista negra
+          // (SOLID + 198) e toda variante de pedra voltava a aparecer:
+          // era o loop infinito de correções. Com lista branca não há
+          // variante que escape. Árvores, chão e pontes ficam intactos.
+          // Se alguma estrutura que você queria manter sumir, fala qual
+          // que eu devolvo só ela.
+          if (!TREE_IDS.has(originalStructures[sy][sx])) originalStructures[sy][sx] = 0;
+          if (!TREE_IDS.has(originalUpperObjects[sy][sx])) originalUpperObjects[sy][sx] = 0;
         }
       }
 
@@ -5219,14 +5217,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       widthTiles: 180,
       heightTiles: 180,
       chunkTiles: 30,
-      // V119 — causa raiz do buraco de render: raio 1 (3x3 chunks, 90x90
-      // tiles) era menor que a câmera (~30x60, jogador embaixo). Raio 2
-      // (5x5, 150x150) cobre a câmera com margem em qualquer posição.
-      // Se pesar no celular, a próxima versão vira conjunto pela câmera.
-      chunkLoadRadius: 2,
       mapOffset: 30,
       playerStart: Object.freeze({ x: 45, y: 65 }),
-      worldId: 'overworld-180x180-v115'
+      worldId: 'overworld-180x180-v115',
+      // V122 — chave do cache do mundo renderizado (IndexedDB). NÃO é o
+      // worldId do save: o save valida por worldId e mudar apagaria os saves.
+      // O cache muda quando as regras de geração mudam.
+      renderCacheKey: 'overworld-180x180-v122'
     });
     const PLAYER_CONFIG = Object.freeze({
       frameSize: 32,
@@ -5319,7 +5316,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     const WORLD_WIDTH_TILES = WORLD_CONFIG.widthTiles;
     const WORLD_HEIGHT_TILES = WORLD_CONFIG.heightTiles;
     const CHUNK_TILES = WORLD_CONFIG.chunkTiles;
-    const CHUNK_LOAD_RADIUS = WORLD_CONFIG.chunkLoadRadius;
     const WORLD_WIDTH_PIXELS = WORLD_WIDTH_TILES * TILE_SIZE;
     const WORLD_HEIGHT_PIXELS = WORLD_HEIGHT_TILES * TILE_SIZE;
     const MAP_OFFSET = WORLD_CONFIG.mapOffset;
@@ -6448,6 +6444,104 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
     }
 
+
+    // ===== CACHE DO MUNDO RENDERIZADO (V122) =====
+    // O mundo renderizado (chão, estruturas, objetos, colisão, estradas)
+    // fica salvo no IndexedDB depois da primeira geração. Na próxima
+    // abertura, o jogo usa o cache em vez de buscar o mapa-base e regenerar.
+    // O cache é best-effort: qualquer falha (sem IndexedDB, cota, dado
+    // inválido) cai de volta para a geração normal, sem travar o jogo.
+    // A chave é renderCacheKey (não o worldId do save).
+    function isValidCachedWorld(value) {
+      if (!value || typeof value !== 'object') return false;
+      if (value.width !== WORLD_WIDTH_TILES || value.height !== WORLD_HEIGHT_TILES) return false;
+      const expected = WORLD_WIDTH_TILES * WORLD_HEIGHT_TILES;
+      for (const key of ['ground', 'structures', 'upperObjects', 'blocked']) {
+        if (!Array.isArray(value[key]) || value[key].length !== expected) return false;
+      }
+      if (!Array.isArray(value.roadCells)) return false;
+      return true;
+    }
+
+    function openWorldCacheDB() {
+      return new Promise((resolve, reject) => {
+        if (typeof indexedDB === 'undefined') {
+          reject(new Error('IndexedDB indisponível.'));
+          return;
+        }
+        const request = indexedDB.open('conquistador-world-cache', 1);
+        request.onupgradeneeded = () => {
+          try {
+            if (!request.result.objectStoreNames.contains('worlds')) {
+              request.result.createObjectStore('worlds', { keyPath: 'cacheKey' });
+            }
+          } catch (_) { /* o onerror trata */ }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Falha ao abrir o cache do mundo.'));
+      });
+    }
+
+    function readWorldCache(cacheKey) {
+      const timeout = new Promise(resolve => setTimeout(() => resolve(null), 1500));
+      const read = (async () => {
+        try {
+          const db = await openWorldCacheDB();
+          const value = await new Promise((resolve, reject) => {
+            const tx = db.transaction('worlds', 'readonly');
+            const request = tx.objectStore('worlds').get(cacheKey);
+            request.onsuccess = () => resolve(request.result || null);
+            request.onerror = () => reject(request.error || new Error('Falha ao ler o cache do mundo.'));
+          });
+          try { db.close(); } catch (_) {}
+          return isValidCachedWorld(value) ? value : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      return Promise.race([read, timeout]);
+    }
+
+    function writeWorldCache(cacheKey, worldData) {
+      // Fire-and-forget: nunca trava o jogo. Converte para arrays planos
+      // na hora da chamada, antes de qualquer freeze posterior.
+      try {
+        const flattenRows = rows => {
+          const out = [];
+          for (const row of rows) for (const cell of row) out.push(cell);
+          return out;
+        };
+        const record = {
+          cacheKey,
+          width: WORLD_WIDTH_TILES,
+          height: WORLD_HEIGHT_TILES,
+          ground: flattenRows(worldData.ground),
+          structures: flattenRows(worldData.structures),
+          upperObjects: flattenRows(worldData.upperObjects),
+          blocked: flattenRows(worldData.blocked),
+          roadCells: Array.from(worldData.roadCells || [])
+        };
+        (async () => {
+          try {
+            const db = await openWorldCacheDB();
+            await new Promise((resolve, reject) => {
+              const tx = db.transaction('worlds', 'readwrite');
+              const request = tx.objectStore('worlds').put(record);
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error || new Error('Falha ao gravar o cache do mundo.'));
+            });
+            try { db.close(); } catch (_) {}
+          } catch (_) { /* cache é best-effort */ }
+        })();
+      } catch (_) { /* cache é best-effort */ }
+    }
+
+    function unflattenWorldRows(flat, width, height) {
+      const rows = [];
+      for (let y = 0; y < height; y += 1) rows.push(flat.slice(y * width, (y + 1) * width));
+      return rows;
+    }
+
     class WorldScene extends Phaser.Scene {
       constructor() {
         super('WorldScene');
@@ -6626,7 +6720,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           else if (key === 'hero') this.load.spritesheet(key, url, { frameWidth: 32, frameHeight: 32 });
           else this.load.json(key, url);
         };
-        queueAsset('tiles'); queueAsset('hero'); queueAsset('sampleMap');
+        queueAsset('tiles'); queueAsset('hero');
+        // V122 — com o mundo no cache, o mapa-base não é buscado: o cache
+        // já tem o mundo final. Sem cache, busca normal.
+        if (!isValidCachedWorld(window.__CONQUISTADOR_CACHED_WORLD)) queueAsset('sampleMap');
         // V115 — assets da expansão (data URIs embutidas, não dependem de rede).
         this.load.image('asset-mountain', CUSTOM_ASSETS.mountain);
         this.load.image('asset-pine', CUSTOM_ASSETS.pine);
@@ -6655,12 +6752,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       create() {
         // If any external resource failed, keep its specific diagnostic on screen.
         if (this.assetLoadFailed) return;
-        const sample = this.cache.json.get('sampleMap');
+        // V122 — mundo no cache = sem mapa-base. Sem cache = mapa-base obrigatório.
+        const cachedWorld = isValidCachedWorld(window.__CONQUISTADOR_CACHED_WORLD) ? window.__CONQUISTADOR_CACHED_WORLD : null;
+        const sample = cachedWorld ? null : this.cache.json.get('sampleMap');
         if (!this.textures.exists('tiles') || !this.textures.exists('hero')) {
           showError('Os recursos visuais não foram carregados. Confira a conexão com a internet e recarregue a página.');
           return;
         }
-        if (!sample || !Array.isArray(sample.layers) || sample.layers.length < 3) {
+        if (!cachedWorld && (!sample || !Array.isArray(sample.layers) || sample.layers.length < 3)) {
           showError('O arquivo do mapa não foi recebido ou não contém as três camadas esperadas. Atualize a página e tente novamente.');
           return;
         }
@@ -6668,7 +6767,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         try {
           this.initializeGameSystems();
           this.physics.world.setBounds(0, 0, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
-          this.buildWorld(sample.layers);
+          this.buildWorld(cachedWorld ? null : sample.layers, cachedWorld);
           this.createPlayerAnimations();
           this.createPlayer();
           this.createDungeonEntrance();
@@ -7991,54 +8090,79 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
 
       // ===== SISTEMA DE MUNDO E GERAÇÃO DE TERRENO =====
-      buildWorld(sourceLayers) {
+      buildWorld(sourceLayers, cachedWorld) {
         core.createGroundBase(this, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES, TILE_SIZE, 0x1d2416);
-        this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_WIDTH_TILES, MAP_OFFSET, PLAYER_START, WORLD_HEIGHT_TILES);
 
         this.cliffTileIds = new Set(core.CLIFF_TILE_IDS);
         this.solidStructureTileIds = new Set(core.SOLID_STRUCTURE_TILE_IDS);
         this.treeSpriteIds = new Set(core.TREE_SPRITE_IDS);
 
+        // V122 — SEM STREAMING. O mundo inteiro é gerado e renderizado UMA
+        // vez. Não há chunks de render: o spawn continua usando a grade
+        // 30x30 (chunkGrid) porque os saves e o respawn usam chunkId
+        // "x:y", mas o visual não é mais montado/desmontado por pedaço.
         const columns = Math.ceil(WORLD_WIDTH_TILES / CHUNK_TILES);
         const rows = Math.ceil(WORLD_HEIGHT_TILES / CHUNK_TILES);
-        this.chunkGrid = { width: WORLD_WIDTH_TILES, height: WORLD_HEIGHT_TILES, chunkSize: CHUNK_TILES, columns, rows, chunks: [] };
-        this.chunks = new Map();
+        this.chunkGrid = { width: WORLD_WIDTH_TILES, height: WORLD_HEIGHT_TILES, chunkSize: CHUNK_TILES, columns, rows };
+        // Todos os chunks de spawn ficam "ativos" para sempre: o
+        // syncMonsterChunkVisibility mostra todos os monstros, porque
+        // não há mais chunk de render para descarregar.
         this.activeChunkIds = new Set();
-        this.streamingCenterId = null;
-        this.chunkTexture = this.textures.get('tiles');
-
-        // Global collision remains available to the current whole-world A*.
-        // Each chunk contributes only a compact collision row set here; visual
-        // terrain/object arrays are generated separately for active chunks only.
-        // Uint8Array keeps the persistent navigation grid compact (one byte/tile).
-        this.blocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
         for (let chunkY = 0; chunkY < rows; chunkY += 1) {
           for (let chunkX = 0; chunkX < columns; chunkX += 1) {
-            const collision = core.createChunkBlockedData(
-              this.worldGenerator, chunkX, chunkY, CHUNK_TILES
-            );
-            for (let localY = 0; localY < collision.height; localY += 1) {
-              this.blocked[collision.tileY + localY].set(
-                collision.blocked[localY], collision.tileX
-              );
-            }
-
-            const chunk = {
-              id: collision.id,
-              chunkX,
-              chunkY,
-              tileX: collision.tileX,
-              tileY: collision.tileY,
-              width: collision.width,
-              height: collision.height,
-              ground: null,
-              structures: null,
-              upperObjects: null,
-              state: 'unloaded'
-            };
-            this.chunks.set(chunk.id, chunk);
-            this.chunkGrid.chunks.push(chunk);
+            this.activeChunkIds.add(`${chunkX}:${chunkY}`);
           }
+        }
+        this.worldTexture = this.textures.get('tiles');
+
+        // Dados visuais do mundo inteiro: do cache ou da geração.
+        let worldData;
+        if (cachedWorld) {
+          // Gerador mínimo: região, rio, praia, ponte e minimapa são
+          // funções puras de (x, y) + worldTiles/worldHeight + roadCells.
+          this.worldGenerator = {
+            worldTiles: WORLD_WIDTH_TILES,
+            worldHeight: WORLD_HEIGHT_TILES,
+            mapOffset: MAP_OFFSET,
+            roadCells: new Set(cachedWorld.roadCells || [])
+          };
+          worldData = {
+            ground: unflattenWorldRows(cachedWorld.ground, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES),
+            structures: unflattenWorldRows(cachedWorld.structures, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES),
+            upperObjects: unflattenWorldRows(cachedWorld.upperObjects, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES)
+          };
+          this.blocked = [];
+          const flatBlocked = cachedWorld.blocked;
+          for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+            this.blocked.push(new Uint8Array(flatBlocked.slice(tileY * WORLD_WIDTH_TILES, (tileY + 1) * WORLD_WIDTH_TILES)));
+          }
+        } else {
+          this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_WIDTH_TILES, MAP_OFFSET, PLAYER_START, WORLD_HEIGHT_TILES);
+          // Uma única geração do mundo inteiro (chunk 0,0 do tamanho do mundo).
+          worldData = core.createChunkData(this.worldGenerator, 0, 0, WORLD_WIDTH_TILES, { includeBlocked: false });
+          // Colisão global: a mesma grade compacta que a V121 já montava,
+          // agora construída de uma vez (não por chunk de render).
+          this.blocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
+          for (let chunkY = 0; chunkY < rows; chunkY += 1) {
+            for (let chunkX = 0; chunkX < columns; chunkX += 1) {
+              const collision = core.createChunkBlockedData(
+                this.worldGenerator, chunkX, chunkY, CHUNK_TILES
+              );
+              for (let localY = 0; localY < collision.height; localY += 1) {
+                this.blocked[collision.tileY + localY].set(
+                  collision.blocked[localY], collision.tileX
+                );
+              }
+            }
+          }
+          // Salva o mundo renderizado no cache (best-effort, em segundo plano).
+          writeWorldCache(WORLD_CONFIG.renderCacheKey, {
+            ground: worldData.ground,
+            structures: worldData.structures,
+            upperObjects: worldData.upperObjects,
+            blocked: this.blocked,
+            roadCells: this.worldGenerator.roadCells
+          });
         }
 
         // Freeze a centre-tile collision snapshot for degraded/manual navigation.
@@ -8082,45 +8206,15 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         }
         this.initialPlayerPosition = savedPosition || fallbackPosition;
 
-        // Load the neighbourhood around the actual initial position.
-        this.updateChunkStreaming(true);
-      }
-
-      releaseChunkData(chunk) {
-        if (!chunk) return false;
-        if (chunk.state === 'loaded') {
-          throw new Error(`O chunk ${chunk.id} precisa ser descarregado antes de liberar seus dados visuais.`);
-        }
-        chunk.ground = null;
-        chunk.structures = null;
-        chunk.upperObjects = null;
-        chunk.state = 'unloaded';
-        return true;
-      }
-
-      rebuildMissingChunkData(chunks) {
-        for (const chunk of chunks || []) {
-          if (!chunk || (Array.isArray(chunk.ground) && Array.isArray(chunk.structures) &&
-              Array.isArray(chunk.upperObjects))) continue;
-
-          // Rebuild only visual layers. Collision is authoritative in the compact
-          // world grid and is never regenerated or copied into render chunk data.
-          const data = core.createChunkData(
-            this.worldGenerator, chunk.chunkX, chunk.chunkY, this.chunkGrid.chunkSize,
-            { includeBlocked: false }
-          );
-          chunk.ground = data.ground;
-          chunk.structures = data.structures;
-          chunk.upperObjects = data.upperObjects;
-          chunk.state = 'prepared';
-        }
+        // Render the whole world once.
+        this.loadWorldRender(worldData);
       }
 
       getTileFrame(tileId) {
         const frameName = `tile-${tileId}`;
-        if (!this.chunkTexture.has(frameName)) {
+        if (!this.worldTexture.has(frameName)) {
           const frameIndex = tileId - 1;
-          this.chunkTexture.add(
+          this.worldTexture.add(
             frameName,
             0,
             (frameIndex % 27) * TILE_SIZE,
@@ -8132,51 +8226,50 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         return frameName;
       }
 
-      attachChunkCollider(chunk) {
-        if (!this.player || !chunk || chunk.state !== 'loaded' || !chunk.collisionLayer || chunk.collider) return;
-        chunk.collider = this.physics.add.collider(this.player, chunk.collisionLayer);
+      attachWorldCollider() {
+        // V122 — UM colisor só: jogador x camada de colisão do mundo inteiro.
+        if (!this.player || !this.worldCollisionLayer || this.worldCollider) return;
+        this.worldCollider = this.physics.add.collider(this.player, this.worldCollisionLayer);
       }
 
-      loadChunk(chunk) {
-        if (!chunk || chunk.state === 'loaded') return;
-        if (!Array.isArray(chunk.ground) || !Array.isArray(chunk.structures) ||
-            !Array.isArray(chunk.upperObjects)) {
-          throw new Error(`Os dados visuais do chunk ${chunk.id} não foram reconstruídos antes do carregamento.`);
+      loadWorldRender(worldData) {
+        if (!worldData || !Array.isArray(worldData.ground) || !Array.isArray(worldData.structures) ||
+            !Array.isArray(worldData.upperObjects)) {
+          throw new Error('Os dados visuais do mundo não foram gerados antes da renderização.');
         }
 
-        const worldX = chunk.tileX * TILE_SIZE;
-        const worldY = chunk.tileY * TILE_SIZE;
-        const drawGround = chunk.ground.map(row => row.slice());
+        // V122 — o mundo inteiro é renderizado UMA vez: um único tilemap de
+        // chão, uma única camada de colisão e as imagens de estruturas.
+        // Não há unload: nada é desmontado quando o jogador anda.
+        const drawGround = worldData.ground.map(row => row.slice());
         const visualObjects = [];
 
         // Cliff tiles are separate depth-sorted objects, preserving their exact cells.
-        for (let localY = 0; localY < chunk.height; localY += 1) {
-          for (let localX = 0; localX < chunk.width; localX += 1) {
-            const tileId = drawGround[localY][localX];
+        for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+          for (let tileX = 0; tileX < WORLD_WIDTH_TILES; tileX += 1) {
+            const tileId = drawGround[tileY][tileX];
             if (!this.cliffTileIds.has(tileId)) continue;
-            const worldTileX = chunk.tileX + localX;
-            const worldTileY = chunk.tileY + localY;
             const cliff = this.add.image(
-              worldTileX * TILE_SIZE + 8,
-              worldTileY * TILE_SIZE + 8,
+              tileX * TILE_SIZE + 8,
+              tileY * TILE_SIZE + 8,
               'tiles',
               this.getTileFrame(tileId)
-            ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
+            ).setDepth(tileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(cliff);
-            drawGround[localY][localX] = 0;
+            drawGround[tileY][tileX] = 0;
           }
         }
 
-        const groundRecord = this.createTileLayer(drawGround, 2, worldX, worldY);
+        const groundRecord = this.createTileLayer(drawGround, 2, 0, 0);
 
         // Structures and oversized tree sprites are owned by the chunk containing
         // their trunk/base cell. Their existing world depth is preserved.
-        for (let localY = 0; localY < chunk.height; localY += 1) {
-          for (let localX = 0; localX < chunk.width; localX += 1) {
-            const tileId = chunk.structures[localY][localX];
+        for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+          for (let tileX = 0; tileX < WORLD_WIDTH_TILES; tileX += 1) {
+            const tileId = worldData.structures[tileY][tileX];
             if (!tileId) continue;
-            const worldTileX = chunk.tileX + localX;
-            const worldTileY = chunk.tileY + localY;
+            const worldTileX = tileX;
+            const worldTileY = tileY;
             // V115 — asset real (montanha, pico de gelo, pinheiro, árvore
             // congelada): desenha a textura do asset, ancorada no centro
             // da base, em vez de um tile do tileset.
@@ -8211,28 +8304,23 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           }
         }
 
-        for (let localY = 0; localY < chunk.height; localY += 1) {
-          for (let localX = 0; localX < chunk.width; localX += 1) {
-            const tileId = chunk.upperObjects[localY][localX];
+        for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+          for (let tileX = 0; tileX < WORLD_WIDTH_TILES; tileX += 1) {
+            const tileId = worldData.upperObjects[tileY][tileX];
             if (!tileId) continue;
-            const worldTileX = chunk.tileX + localX;
-            const worldTileY = chunk.tileY + localY;
             const image = this.add.image(
-              worldTileX * TILE_SIZE + 8,
-              worldTileY * TILE_SIZE + 8,
+              tileX * TILE_SIZE + 8,
+              tileY * TILE_SIZE + 8,
               'tiles',
               this.getTileFrame(tileId)
-            ).setDepth(worldTileY * TILE_SIZE + TILE_SIZE);
+            ).setDepth(tileY * TILE_SIZE + TILE_SIZE);
             visualObjects.push(image);
           }
         }
 
-        // Collision is sliced from the compact authoritative world grid. Only
-        // active chunks get a Phaser collider; A* reads the same global data.
-        const localBlocked = core.extractChunkBlocked(
-          this.blocked, chunk.tileX, chunk.tileY, chunk.width, chunk.height
-        );
-        const collisionData = core.toCollisionLayer(localBlocked);
+        // Collision comes from the compact authoritative world grid. A* reads
+        // the same global data; there is a single Phaser collider for the player.
+        const collisionData = core.toCollisionLayer(this.blocked);
         const collisionMap = this.make.tilemap({
           data: collisionData,
           tileWidth: TILE_SIZE,
@@ -8240,84 +8328,17 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           insertNull: true
         });
         const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
-        const collisionLayer = collisionMap.createLayer(0, collisionTileset, worldX, worldY);
+        const collisionLayer = collisionMap.createLayer(0, collisionTileset, 0, 0);
         collisionLayer.setAlpha(0);
         collisionLayer.setDepth(10000);
         collisionMap.setCollision(1, true, true, collisionLayer, true);
 
-        chunk.worldX = worldX;
-        chunk.worldY = worldY;
-        chunk.groundMap = groundRecord.map;
-        chunk.groundLayer = groundRecord.layer;
-        chunk.collisionMap = collisionMap;
-        chunk.collisionLayer = collisionLayer;
-        chunk.visualObjects = visualObjects;
-        chunk.collider = null;
-        chunk.state = 'loaded';
-        this.activeChunkIds.add(chunk.id);
-        this.attachChunkCollider(chunk);
-      }
-
-      unloadChunk(chunk) {
-        if (!chunk || chunk.state !== 'loaded') return;
-
-        // Remove physics first, then release visual objects and both tilemaps.
-        if (chunk.collider) {
-          chunk.collider.destroy();
-          chunk.collider = null;
-        }
-        for (const object of chunk.visualObjects || []) {
-          if (object && object.active) object.destroy();
-        }
-        if (chunk.groundLayer) chunk.groundLayer.destroy();
-        if (chunk.groundMap) chunk.groundMap.destroy();
-        if (chunk.collisionLayer) chunk.collisionLayer.destroy();
-        if (chunk.collisionMap) chunk.collisionMap.destroy();
-
-        chunk.groundMap = null;
-        chunk.groundLayer = null;
-        chunk.collisionMap = null;
-        chunk.collisionLayer = null;
-        chunk.visualObjects = [];
-        chunk.state = 'unloaded';
-        this.activeChunkIds.delete(chunk.id);
-        // Free visual tile arrays; the compact global navigation grid remains.
-        this.releaseChunkData(chunk);
-      }
-
-      updateChunkStreaming(force = false) {
-        const playerTile = this.player
-          ? core.worldToTile(this.player.x, this.player.y, TILE_SIZE)
-          : (this.initialPlayerPosition
-              ? core.worldToTile(this.initialPlayerPosition.x, this.initialPlayerPosition.y, TILE_SIZE)
-              : PLAYER_START);
-        const center = core.getChunkAtTile(
-          playerTile.x,
-          playerTile.y,
-          this.chunkGrid.chunkSize,
-          this.chunkGrid.columns,
-          this.chunkGrid.rows
-        );
-        if (!center) return;
-        if (!force && center.id === this.streamingCenterId) return;
-
-        const plan = core.planChunkStreaming(
-          center.chunkX,
-          center.chunkY,
-          this.chunkGrid.columns,
-          this.chunkGrid.rows,
-          CHUNK_LOAD_RADIUS,
-          this.activeChunkIds
-        );
-
-        // Rebuild only missing data, once for the whole transition. Load first,
-        // unload second: the player never crosses a seam before the neighbouring
-        // chunk's ground and collider are available.
-        const chunksToLoad = plan.load.map(id => this.chunks.get(id)).filter(Boolean);
-        this.rebuildMissingChunkData(chunksToLoad);
-        for (const chunk of chunksToLoad) this.loadChunk(chunk);
-        for (const id of plan.unload) this.unloadChunk(this.chunks.get(id));
-        this.streamingCenterId = center.id;
+        this.worldGroundMap = groundRecord.map;
+        this.worldGroundLayer = groundRecord.layer;
+        this.worldCollisionMap = collisionMap;
+        this.worldCollisionLayer = collisionLayer;
+        this.worldVisualObjects = visualObjects;
+        this.worldCollider = null;
       }
 
       createTileLayer(data, depth, worldX = 0, worldY = 0) {
@@ -8435,7 +8456,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           this.degradedWarningEvent.remove(false);
           this.degradedWarningEvent = null;
         }
-        for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
+        this.attachWorldCollider();
         if (this.spawnWarning) {
           this.spawnWarning.destroy();
           this.spawnWarning = null;
@@ -8972,7 +8993,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.player.setDepth(y + 12);
 
         this.createDestinationMarker();
-        for (const id of this.activeChunkIds) this.attachChunkCollider(this.chunks.get(id));
+        this.attachWorldCollider();
         if (this.spawnCollisionDegraded) {
           this.spawnWarning = this.add.text(8, 8,
             'MODO DE RECUPERAÇÃO: colisões indisponíveis',
@@ -9446,7 +9467,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this._pathRevalidatedThisFrame = false;
         this._lastPathRevalidationResult = null;
         try {
-        this.updateChunkStreaming();
         this.refreshStuckDestinationLock();
         const collisionRecovered = this.updateDegradedCollisionState();
         if (collisionRecovered) {
@@ -9650,6 +9670,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     // menu e interiores podem ser adicionados sem alterar o motor.
     const GAME_SCENES = [WorldScene, DungeonScene];
 
+    (async () => {
+      // V122 — lê o mundo em cache antes de criar o jogo (best-effort, com
+      // timeout: se falhar, o jogo gera o mundo normalmente).
+      window.__CONQUISTADOR_CACHED_WORLD = await readWorldCache(WORLD_CONFIG.renderCacheKey);
     try {
       const game = new Phaser.Game(createPhaserConfig(GAME_SCENES));
       // Future systems are attached through the scene extensionAPI after create;
@@ -9772,6 +9796,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     } catch (error) {
       showError(error && error.message ? error.message : 'Erro ao iniciar o jogo.');
     }
+    })();
   })();
   </script>
 <script id="conquistador-v46">
