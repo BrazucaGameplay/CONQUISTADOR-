@@ -1,9 +1,9 @@
 {
   "name": "CONQUISTADOR DE WAIFU'S (TESTE)",
   "short_name": "CONQUISTADOR TESTE",
-  "description": "V119: streaming consertado (raio 2), densidade da V118 revertida, clique duplo da câmera.",
+  "description": "V120: menos árvores, sem pedrinhas, vazio escuro e monstro só no chunk carregado.",
   "lang": "pt-BR",
-  "start_url": "./index-V119.html",
+  "start_url": "./index-V120.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
