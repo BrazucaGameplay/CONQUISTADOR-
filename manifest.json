@@ -1,9 +1,9 @@
 {
   "name": "CONQUISTADOR DE WAIFU'S (TESTE)",
   "short_name": "CONQUISTADOR TESTE",
-  "description": "Versão de teste da expansão: montanha verde a leste, gelo ao sul, sem vulcão.",
+  "description": "V119: streaming consertado (raio 2), densidade da V118 revertida, clique duplo da câmera.",
   "lang": "pt-BR",
-  "start_url": "./index-V116.html",
+  "start_url": "./index-V119.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

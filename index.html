@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V118 — chão com variação (3 neves, 3 montanhas), gelo e montanha povoados (picos + árvores congeladas + pinheiros com densidade base), floresta da expansão com densidade base, clareira da entrada livre e colisão dos picos no gelo original. Ao subir, renomear para index.html. -->
+<!-- V119 — streaming: raio de carga 1→2 (cobre a câmera); densidade da V118 revertida (base 0.10, picos/árvores extras removidos); clique após arrastar: 1 clique = câmera volta + anda, 2 cliques = câmera volta sem mudar o destino. Mapa antigo congelado. -->
 
 <html lang="pt-BR">
 <head>
@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V118</title>
+<title>CONQUISTADOR DE WAIFU'S — V119</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V118</div>
+  <div id="version-badge">V119</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4191,10 +4191,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 142, y: 68 },
       { x: 168, y: 58 },
       { x: 158, y: 80 },
-      { x: 172, y: 30 },
-      // V118 — a montanha tinha só 6 picos. Mais 6, longe da trilha.
-      { x: 140, y: 8 }, { x: 175, y: 12 }, { x: 138, y: 55 },
-      { x: 168, y: 72 }, { x: 150, y: 82 }, { x: 178, y: 38 }
+      { x: 172, y: 30 }
+      // V119 — removidos os 6 picos que a V118 adicionou (remendo para o
+      // buraco do streaming). Com o streaming consertado, 6 picos bastam.
     ];
     // V115 — PICOS DE GELO soltos no gelo (sul). Mesmo modelo dos picos
     // da montanha, com o asset de pico de gelo.
@@ -4205,31 +4204,16 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 70, y: 170 },
       { x: 125, y: 155 },
       { x: 25, y: 160 },
-      { x: 160, y: 160 },
-      // V118 — o gelo tinha só 7 picos para ~15 mil tiles: uma tela inteira
-      // mostrava no máximo um. Mais 10, longe das estradas e dos outros picos.
-      { x: 10, y: 120 }, { x: 115, y: 145 }, { x: 165, y: 140 },
-      { x: 15, y: 105 }, { x: 55, y: 170 }, { x: 175, y: 170 },
-      { x: 100, y: 105 }, { x: 35, y: 150 }, { x: 135, y: 110 },
-      { x: 65, y: 125 }
+      { x: 160, y: 160 }
+      // V119 — removidos os 10 picos que a V118 adicionou (remendo).
     ];
     // V115 — ÁRVORES CONGELADAS solitárias no gelo: uma por lugar, longe
     // umas das outras e das estradas, maiores que os pinheiros.
     const FROZEN_TREES = [
       { x: 50, y: 110 }, { x: 110, y: 120 }, { x: 150, y: 115 },
       { x: 30, y: 140 }, { x: 80, y: 140 }, { x: 130, y: 150 },
-      { x: 60, y: 155 }, { x: 100, y: 170 }, { x: 150, y: 175 }, { x: 20, y: 175 },
-      // V118 — o gelo tinha só 10 árvores congeladas: vazio demais. Mais 34,
-      // espalhadas por todo o gelo, longe das estradas e dos picos.
-      { x: 12, y: 115 }, { x: 22, y: 128 }, { x: 8, y: 145 }, { x: 18, y: 168 },
-      { x: 38, y: 118 }, { x: 68, y: 108 }, { x: 95, y: 108 }, { x: 120, y: 112 },
-      { x: 140, y: 125 }, { x: 165, y: 125 }, { x: 170, y: 150 }, { x: 45, y: 135 },
-      { x: 58, y: 148 }, { x: 75, y: 152 }, { x: 88, y: 140 }, { x: 105, y: 140 },
-      { x: 118, y: 158 }, { x: 142, y: 165 }, { x: 168, y: 118 }, { x: 28, y: 120 },
-      { x: 8, y: 132 }, { x: 115, y: 165 }, { x: 92, y: 122 }, { x: 70, y: 132 },
-      { x: 48, y: 160 }, { x: 35, y: 168 }, { x: 100, y: 152 }, { x: 158, y: 145 },
-      { x: 128, y: 118 }, { x: 18, y: 150 }, { x: 78, y: 115 }, { x: 52, y: 125 },
-      { x: 148, y: 155 }, { x: 5, y: 160 }
+      { x: 60, y: 155 }, { x: 100, y: 170 }, { x: 150, y: 175 }, { x: 20, y: 175 }
+      // V119 — removidas as 34 árvores que a V118 adicionou (remendo).
     ];
     // V115 — manchas de pinheiros na montanha e na transição.
     const PINE_PATCHES = [
@@ -4475,11 +4459,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const ny = (y - patch.y) / patch.ry;
         if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
       }
-      // V118 — a floresta da expansão estava vazia: as manchas só cobriam
-      // oeste/norte. Fora das manchas, a floresta agora tem densidade
-      // base 0.22 (a transição continua rala, só com o raleio).
+            // V119 — a base 0.22 da V118 era remendo para o buraco do streaming:
+      // com o streaming consertado, ela virava parede de árvore. Base 0.10:
+      // floresta legível, chão visível. Não volta ao zero da V117 (entre
+      // as manchas ficava vazio). As manchas continuam iguais.
       if (!density) {
-        if (region === 'forest') density = 0.22;
+        if (region === 'forest') density = 0.10;
         else if (stableNoise(x, y, 97) < 0.035) density = 0.32;
       }
       if (!density || stableNoise(x, y, 103) > density) return 0;
@@ -4565,9 +4550,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const ny = (y - patch.y) / patch.ry;
         if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
       }
-      // V118 — os pinheiros só nasciam nas 5 manchas: a montanha ficava
-      // vazia fora delas. Agora a montanha inteira tem densidade base 0.20.
-      if (!density && region === 'mountain') density = 0.20;
+            // V119 — mesmo motivo da floresta: base 0.20 da V118 era remendo.
+      // Base 0.10; as manchas de pinheiro continuam iguais.
+      if (!density && region === 'mountain') density = 0.10;
       if (!density || stableNoise(x, y, 203) > density) return 0;
       if (checkSeal) {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -5194,7 +5179,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       widthTiles: 180,
       heightTiles: 180,
       chunkTiles: 30,
-      chunkLoadRadius: 1,
+      // V119 — causa raiz do buraco de render: raio 1 (3x3 chunks, 90x90
+      // tiles) era menor que a câmera (~30x60, jogador embaixo). Raio 2
+      // (5x5, 150x150) cobre a câmera com margem em qualquer posição.
+      // Se pesar no celular, a próxima versão vira conjunto pela câmera.
+      chunkLoadRadius: 2,
       mapOffset: 30,
       playerStart: Object.freeze({ x: 45, y: 65 }),
       worldId: 'overworld-180x180-v115'
@@ -6646,6 +6635,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           // jogador — igual a dungeon (V107). Antes, qualquer arrastar era
           // um toque e o jogador andava sem voce querer.
           this.worldPan = { active: false, panning: false, startX: 0, startY: 0, lastX: 0, lastY: 0 };
+          // V119 — clique após arrastar: distingue 1 clique (câmera volta +
+          // anda) de 2 cliques (câmera volta sem mudar o destino).
+          this.cameraTap = { x: 0, y: 0, time: 0, world: null, timer: null };
           this.input.on('pointerdown', this.onWorldPointerDown, this);
           this.input.on('pointermove', this.onWorldPointerMove, this);
           this.input.on('pointerup', this.onWorldPointerUp, this);
@@ -9251,6 +9243,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           if (Math.hypot(pointer.x - this.worldPan.startX, pointer.y - this.worldPan.startY) < 12) return;
           this.worldPan.panning = true;
           this.cameras.main.stopFollow();
+          // V119 — arrastar cancela o clique simples pendente: quem arrasta
+          // está olhando, não confirmando o toque anterior.
+          this.cancelPendingCameraTap();
         }
         const cam = this.cameras.main;
         const zoom = cam.zoom || 1;
@@ -9264,15 +9259,71 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.worldPan.active = false;
         this.worldPan.panning = false;
         if (wasPanning || !this.player) return;
-        // Toque (sem arrastar): camera volta a seguir o jogador e ele anda.
-        this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
-        this.onMapTap(pointer);
+        // Botão direito: câmera volta, sem andar (como na V118).
+        if (pointer.rightButtonDown()) {
+          this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+          return;
+        }
+        const cam = this.cameras.main;
+        pointer.updateWorldPoint(cam);
+        const tapWorld = { x: pointer.worldX, y: pointer.worldY };
+        // V119 — clique após arrastar: 1 clique = câmera volta + anda;
+        // 2 cliques rápidos = câmera volta SEM mudar o destino.
+        // Câmera seguindo: toque imediato, como antes.
+        if (cam._follow) {
+          cam.startFollow(this.player, true, 0.12, 0.12);
+          this.onMapTap(pointer, tapWorld);
+          return;
+        }
+        // Câmera solta (após arrastar): espera 300ms para distinguir
+        // 1 clique de 2 cliques. O ponto do toque é capturado AGORA:
+        // o pointer é reutilizado, ler depois daria a posição nova.
+        const now = this.time.now;
+        const previous = this.cameraTap;
+        const isDouble = previous && previous.timer &&
+          (now - previous.time) < 300 &&
+          Math.hypot(pointer.x - previous.x, pointer.y - previous.y) < 24;
+        if (isDouble) {
+          this.cancelPendingCameraTap();
+          previous.time = 0;
+          cam.startFollow(this.player, true, 0.12, 0.12);
+          return;
+        }
+        // 1º clique, ou 2 toques longe um do outro: o anterior é absorvido
+        // e só o mais recente vale — o destino final é o do último toque.
+        this.cancelPendingCameraTap();
+        const tap = { x: pointer.x, y: pointer.y, time: now, world: tapWorld, timer: null };
+        tap.timer = this.time.delayedCall(300, () => {
+          if (this.cameraTap === tap) this.cameraTap.timer = null;
+          cam.startFollow(this.player, true, 0.12, 0.12);
+          this.onMapTap(pointer, tap.world);
+        });
+        this.cameraTap = tap;
       }
 
-      onMapTap(pointer) {
-        if (pointer.rightButtonDown()) return;
-        pointer.updateWorldPoint(this.cameras.main);
-        const destination = core.worldToTile(pointer.worldX, pointer.worldY, TILE_SIZE);
+      cancelPendingCameraTap() {
+        if (this.cameraTap && this.cameraTap.timer) {
+          this.cameraTap.timer.remove();
+          this.cameraTap.timer = null;
+        }
+      }
+
+      onMapTap(pointer, worldPoint) {
+        // worldPoint = ponto capturado no momento do toque (o clique após
+        // arrastar espera 300ms; ler o pointer depois daria a posição nova).
+        // Sem worldPoint, o toque é imediato e o ponto vem do pointer.
+        if (!worldPoint && pointer.rightButtonDown()) return;
+        let tapWorldX;
+        let tapWorldY;
+        if (worldPoint) {
+          tapWorldX = worldPoint.x;
+          tapWorldY = worldPoint.y;
+        } else {
+          pointer.updateWorldPoint(this.cameras.main);
+          tapWorldX = pointer.worldX;
+          tapWorldY = pointer.worldY;
+        }
+        const destination = core.worldToTile(tapWorldX, tapWorldY, TILE_SIZE);
         // Invalid taps are ignored: they must not cancel a valid route already in progress.
         if (destination.x < 0 || destination.y < 0 ||
             destination.x >= WORLD_WIDTH_TILES || destination.y >= WORLD_HEIGHT_TILES) return;
