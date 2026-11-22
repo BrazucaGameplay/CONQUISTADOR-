@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V102</title>
+<title>CONQUISTADOR DE WAIFU'S — V103</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V102</div>
+  <div id="version-badge">V103</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4896,6 +4896,808 @@
       return;
     }
 
+
+    // ===== V103 — DUNGEON: CIDADE ABANDONADA =====
+    // Cena Phaser SEPARADA. A dungeon NUNCA toca o mundo aberto:
+    // mapa, colisao, camera e monstros sao proprios desta cena.
+    // O unico contato com o mundo aberto e:
+    //  - GAME_RUNTIME (eventBus/status/level/save), que vive FORA das cenas;
+    //  - a posicao de retorno, guardada ao entrar.
+    // O save NUNCA grava a posicao dentro da dungeon: o WorldScene fica
+    // pausado (sem update, sem auto-save) enquanto a dungeon esta ativa.
+    // Visual: cidade ABANDONADA, nao assombrada — dia claro, pedra rachada,
+    // muros em ruina e a FLORESTA invadindo a cidade (arvores, musgo, hera).
+    // Regra anti-parede-invisivel: TODA celula bloqueada tem algo visivel
+    // em cima (muro, tronco, arvore ou entulho). Nada de bloqueio pelado.
+    const DUNGEON_SCENE_CONFIG = Object.freeze({
+      id: 'cidade-abandonada',
+      name: 'Cidade Abandonada',
+      recommendedLevel: 5,
+      width: 36,
+      height: 30,
+      entranceTile: Object.freeze({ x: 45, y: 45 }),
+      arrivalTile: Object.freeze({ x: 18, y: 5 }),
+      exitTile: Object.freeze({ x: 18, y: 3 }),
+      bossTile: Object.freeze({ x: 18, y: 25 }),
+      boss: Object.freeze({
+        monsterId: 'monkey', name: 'Macaco Brutamonte', level: 8,
+        hp: 600, attack: 18, defense: 2, xp: 120,
+        displayWidth: 54, displayHeight: 58, speed: 42, attackSpeed: 0.6,
+        slam: Object.freeze({
+          radiusTiles: 2.2, triggerTiles: 3.5, windupMs: 900,
+          cooldownMs: 4200, damage: 26,
+          enrageBelowHpPercent: 50, enrageCooldownMs: 2600
+        })
+      }),
+      rooms: Object.freeze([
+        Object.freeze({
+          key: 'room1', name: 'SALA 1 — RUÍNAS',
+          rect: Object.freeze({ x0: 1, y0: 1, x1: 34, y1: 10 }),
+          gate: Object.freeze({ tiles: Object.freeze([{ x: 17, y: 11 }, { x: 18, y: 11 }, { x: 19, y: 11 }]) }),
+          monkeys: Object.freeze([
+            { x: 8, y: 5, level: 2 }, { x: 28, y: 5, level: 2 },
+            { x: 12, y: 8, level: 2 }, { x: 24, y: 8, level: 2 }
+          ])
+        }),
+        Object.freeze({
+          key: 'room2', name: 'SALA 2 — PRAÇA TOMADA',
+          rect: Object.freeze({ x0: 1, y0: 12, x1: 34, y1: 19 }),
+          gate: Object.freeze({ tiles: Object.freeze([{ x: 17, y: 20 }, { x: 18, y: 20 }, { x: 19, y: 20 }]) }),
+          monkeys: Object.freeze([
+            { x: 8, y: 14, level: 3 }, { x: 28, y: 14, level: 3 }, { x: 18, y: 16, level: 3 },
+            { x: 12, y: 18, level: 3 }, { x: 24, y: 18, level: 3 }
+          ])
+        }),
+        Object.freeze({
+          key: 'room3', name: 'SALA 3 — TRONO DO BRUTAMONTE',
+          rect: Object.freeze({ x0: 1, y0: 21, x1: 34, y1: 28 }),
+          gate: null,
+          monkeys: Object.freeze([])
+        })
+      ])
+    });
+
+    function dungeonHash(x, y, salt) {
+      const v = Math.sin((x + salt * 17.17) * 127.1 + (y - salt * 9.31) * 311.7) * 43758.5453123;
+      return v - Math.floor(v);
+    }
+
+    // Layout puro (sem Phaser): testavel em Node. Toda celula bloqueada
+    // carrega um visual visivel — essa e a regra anti-parede-invisivel.
+    function buildDungeonLayout() {
+      const W = DUNGEON_SCENE_CONFIG.width;
+      const H = DUNGEON_SCENE_CONFIG.height;
+      const blocked = Array.from({ length: H }, () => Array(W).fill(0));
+      const visual = Array.from({ length: H }, () => Array(W).fill(null));
+      const gateTiles = new Set();
+      for (const room of DUNGEON_SCENE_CONFIG.rooms) {
+        if (room.gate) for (const t of room.gate.tiles) gateTiles.add(t.x + ',' + t.y);
+      }
+      // Tiles que nunca podem virar arvore/entulho: chegada, saida, chefe,
+      // spawns, corredor do chefe e a faixa de aproximacao de cada portao.
+      const protectedTiles = new Set();
+      const protect = (x, y) => { protectedTiles.add(x + ',' + y); };
+      protect(DUNGEON_SCENE_CONFIG.arrivalTile.x, DUNGEON_SCENE_CONFIG.arrivalTile.y);
+      protect(DUNGEON_SCENE_CONFIG.exitTile.x, DUNGEON_SCENE_CONFIG.exitTile.y);
+      protect(18, 4);
+      protect(DUNGEON_SCENE_CONFIG.bossTile.x, DUNGEON_SCENE_CONFIG.bossTile.y);
+      for (let y = 21; y <= 25; y += 1) protect(18, y);
+      for (const room of DUNGEON_SCENE_CONFIG.rooms) {
+        for (const m of room.monkeys) protect(m.x, m.y);
+        if (room.gate) {
+          for (const t of room.gate.tiles) {
+            protect(t.x, t.y - 1); protect(t.x, t.y + 1);
+          }
+        }
+      }
+      for (let y = 0; y < H; y += 1) {
+        for (let x = 0; x < W; x += 1) {
+          const key = x + ',' + y;
+          const border = x === 0 || x === W - 1 || y === 0 || y === H - 1;
+          const divider = (y === 11 || y === 20) && !gateTiles.has(key);
+          const isGate = gateTiles.has(key);
+          if (border || divider) {
+            blocked[y][x] = 1;
+            visual[y][x] = { kind: 'wall', moss: dungeonHash(x, y, 77) < 0.45 };
+          } else if (isGate) {
+            blocked[y][x] = 1;
+            visual[y][x] = { kind: 'gate' };
+          } else if (protectedTiles.has(key)) {
+            visual[y][x] = { kind: 'street', shade: dungeonHash(x, y, 51) < 0.5 ? 0x8a7a5f : 0x7d6f55, crack: dungeonHash(x, y, 52) < 0.3 };
+          } else {
+            const nearWall = x === 1 || x === W - 2 || y === 1 || y === H - 2 || y === 10 || y === 12 || y === 19 || y === 21;
+            const h = dungeonHash(x, y, 41);
+            if (nearWall && h < 0.35) {
+              blocked[y][x] = 1;
+              visual[y][x] = { kind: 'tree', canopy: dungeonHash(x, y, 43) < 0.5 ? 0x2f6b33 : 0x3f7d3a };
+            } else if (h < 0.06) {
+              blocked[y][x] = 1;
+              visual[y][x] = { kind: 'rubble' };
+            } else if (h < 0.16) {
+              blocked[y][x] = 1;
+              visual[y][x] = { kind: 'tree', canopy: dungeonHash(x, y, 43) < 0.5 ? 0x2f6b33 : 0x3f7d3a };
+            } else if (h < 0.5) {
+              visual[y][x] = { kind: 'overgrown', shade: dungeonHash(x, y, 47) < 0.5 ? 0x5d8a4a : 0x6fa055 };
+            } else {
+              visual[y][x] = { kind: 'street', shade: dungeonHash(x, y, 51) < 0.5 ? 0x8a7a5f : 0x7d6f55, crack: dungeonHash(x, y, 52) < 0.3 };
+            }
+          }
+        }
+      }
+      // O portao colide SOMENTE pelos corpos fisicos (troncos). Abrir o
+      // portao = destruir os corpos — sem rebuild de grade, sem rebuild de A*.
+      const collision = blocked.map(row => row.slice());
+      for (const key of gateTiles) {
+        const [gx, gy] = key.split(',').map(Number);
+        collision[gy][gx] = 0;
+      }
+      return {
+        width: W, height: H, blocked, collision, visual,
+        gates: DUNGEON_SCENE_CONFIG.rooms.filter(room => room.gate).map(room => ({
+          roomKey: room.key, tiles: room.gate.tiles.slice(), opened: false
+        })),
+        gateTileSet: gateTiles,
+        arrivalTile: DUNGEON_SCENE_CONFIG.arrivalTile,
+        exitTile: DUNGEON_SCENE_CONFIG.exitTile,
+        bossTile: DUNGEON_SCENE_CONFIG.bossTile
+      };
+    }
+
+    function dungeonFindPath(blocked, start, goal) {
+      const H = blocked.length;
+      const W = H ? blocked[0].length : 0;
+      if (!W || !H) return [];
+      if (start.x < 0 || start.x >= W || start.y < 0 || start.y >= H) return [];
+      if (goal.x < 0 || goal.x >= W || goal.y < 0 || goal.y >= H) return [];
+      if (blocked[goal.y][goal.x] !== 0) return [];
+      const prev = Array.from({ length: H }, () => Array(W).fill(null));
+      const queue = [{ x: start.x, y: start.y }];
+      prev[start.y][start.x] = { x: -1, y: -1 };
+      const dirs = [
+        { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
+        { x: 1, y: 1 }, { x: -1, y: 1 }, { x: 1, y: -1 }, { x: -1, y: -1 }
+      ];
+      while (queue.length) {
+        const cur = queue.shift();
+        if (cur.x === goal.x && cur.y === goal.y) break;
+        for (const d of dirs) {
+          const nx = cur.x + d.x;
+          const ny = cur.y + d.y;
+          if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+          if (blocked[ny][nx] !== 0 || prev[ny][nx]) continue;
+          prev[ny][nx] = cur;
+          queue.push({ x: nx, y: ny });
+        }
+      }
+      if (!prev[goal.y][goal.x]) return [];
+      const path = [];
+      let cur = { x: goal.x, y: goal.y };
+      while (!(cur.x === start.x && cur.y === start.y)) {
+        path.unshift(cur);
+        cur = prev[cur.y][cur.x];
+        if (!cur || cur.x === -1) return [];
+      }
+      return path;
+    }
+
+    function dungeonNearestWalkable(blocked, x, y, radius = 3) {
+      const H = blocked.length;
+      const W = H ? blocked[0].length : 0;
+      for (let r = 0; r <= radius; r += 1) {
+        for (let dy = -r; dy <= r; dy += 1) {
+          for (let dx = -r; dx <= r; dx += 1) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+            if (blocked[ny][nx] === 0) return { x: nx, y: ny };
+          }
+        }
+      }
+      return null;
+    }
+
+    class DungeonScene extends Phaser.Scene {
+      constructor() {
+        super('DungeonScene');
+        this.layout = null;
+        this.returnTile = { x: 45, y: 45 };
+        this.path = [];
+        this.monsters = [];
+        this.gates = [];
+        this.exiting = false;
+        this.facingRow = 0;
+        this.nextPlayerAttackAt = 0;
+        this.slamTelegraph = null;
+        this.slamPending = null;
+        this.nextBossSlamAt = 0;
+        this.bossEnraged = false;
+        this.toastText = null;
+        this.eventBus = null;
+        this.statusSystem = null;
+        this.saveSystem = null;
+      }
+
+      create(data) {
+        this.returnTile = (data && data.returnTile) || { x: 45, y: 45 };
+        this.eventBus = GAME_RUNTIME.eventBus;
+        this.statusSystem = GAME_RUNTIME.statusSystem;
+        this.saveSystem = GAME_RUNTIME.saveSystem;
+        this.layout = buildDungeonLayout();
+        this.hideOverworldHud();
+        this.events.once('shutdown', () => this.restoreOverworldHud());
+        this.cameras.main.setBackgroundColor('#1d2416');
+        this.physics.world.setBounds(0, 0, this.layout.width * TILE_SIZE, this.layout.height * TILE_SIZE);
+        this.input.mouse.disableContextMenu();
+        this.drawDungeonVisuals();
+        this.buildCollisionLayer();
+        this.buildGates();
+        this.buildLabels();
+        this.buildPlayer();
+        this.buildMonsters();
+        this.buildHud();
+        this.physics.add.collider(this.player, this.collisionLayer);
+        this.physics.add.collider(this.player, this.gateBodies);
+        for (const monster of this.monsters) this.physics.add.collider(monster.sprite, this.collisionLayer);
+        this.input.on('pointerdown', this.onDungeonTap, this);
+        this.showToast('🏚 Você entrou na Cidade Abandonada', 2600);
+      }
+
+      hideOverworldHud() {
+        const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+        hide('conquistador-main-menu');
+        hide('conquistador-minimap');
+        hide('conquistador-player-status-entry');
+      }
+
+      restoreOverworldHud() {
+        const show = (id, display) => { const el = document.getElementById(id); if (el) el.style.display = display; };
+        show('conquistador-main-menu', 'flex');
+        show('conquistador-minimap', 'block');
+        show('conquistador-player-status-entry', 'flex');
+      }
+
+      drawDungeonVisuals() {
+        const g = this.add.graphics();
+        g.setDepth(0);
+        const L = this.layout;
+        for (let y = 0; y < L.height; y += 1) {
+          for (let x = 0; x < L.width; x += 1) {
+            const v = L.visual[y][x];
+            const px = x * TILE_SIZE;
+            const py = y * TILE_SIZE;
+            if (v.kind === 'wall') {
+              // Muro de predio em ruina: pedra, reboco caido, musgo e hera.
+              g.fillStyle(0x6f6a5e, 1); g.fillRect(px, py, 16, 16);
+              g.fillStyle(0x565146, 1); g.fillRect(px, py + 13, 16, 3);
+              g.fillStyle(0x7d786c, 1); g.fillRect(px, py, 16, 2);
+              if (v.moss) {
+                g.fillStyle(0x4a7a3a, 1); g.fillRect(px + 2, py + 1, 7, 4);
+                g.fillRect(px + 9, py + 8, 5, 3);
+                g.fillStyle(0x5d8a4a, 1); g.fillRect(px + 11, py + 2, 3, 5);
+              }
+            } else if (v.kind === 'gate') {
+              // Chao de terra + tronco caido coberto de musgo (o tronco em si
+              // e desenhado aqui; o corpo fisico e invisivel, por baixo).
+              g.fillStyle(0x7d6a4f, 1); g.fillRect(px, py, 16, 16);
+              g.fillStyle(0x6b4423, 1); g.fillRect(px, py + 3, 16, 10);
+              g.fillStyle(0x4a7a3a, 1); g.fillRect(px + 3, py + 3, 5, 3);
+              g.fillRect(px + 10, py + 10, 4, 2);
+              g.fillStyle(0x8a5a2b, 1); g.fillRect(px, py + 3, 2, 10);
+            } else if (v.kind === 'street') {
+              // Calcamento rachado de pedra.
+              g.fillStyle(v.shade, 1); g.fillRect(px, py, 16, 16);
+              if (v.crack) { g.fillStyle(0x4a4033, 1); g.fillRect(px + 3, py + 7, 10, 1); g.fillRect(px + 7, py + 3, 1, 9); }
+            } else if (v.kind === 'overgrown') {
+              // Grama e mato tomando a rua.
+              g.fillStyle(v.shade, 1); g.fillRect(px, py, 16, 16);
+              g.fillStyle(0x4a7a3a, 1); g.fillRect(px + 2, py + 4, 3, 3);
+              g.fillRect(px + 10, py + 9, 4, 3);
+            } else if (v.kind === 'rubble') {
+              // Entulho visivel: telhas e pedras quebradas.
+              g.fillStyle(0x7d6a4f, 1); g.fillRect(px, py, 16, 16);
+              g.fillStyle(0x8a8a86, 1); g.fillRect(px + 2, py + 3, 5, 4);
+              g.fillRect(px + 9, py + 8, 6, 4);
+              g.fillStyle(0x6a6a66, 1); g.fillRect(px + 5, py + 10, 4, 3);
+              g.fillStyle(0x4a7a3a, 1); g.fillRect(px + 12, py + 2, 3, 3);
+            } else if (v.kind === 'tree') {
+              // Arvore crescendo dentro da cidade: tronco + copa.
+              g.fillStyle(0x5d8a4a, 1); g.fillRect(px, py, 16, 16);
+              g.fillStyle(0x6b4423, 1); g.fillRect(px + 6, py + 9, 4, 6);
+              g.fillStyle(v.canopy, 1); g.fillCircle(px + 8, py + 7, 7);
+              g.fillStyle(0x4a7a3a, 1); g.fillCircle(px + 6, py + 5, 3);
+              g.fillStyle(0x2f6b33, 1); g.fillCircle(px + 10, py + 9, 3);
+            }
+          }
+        }
+      }
+
+      buildCollisionLayer() {
+        const data = core.toCollisionLayer(this.layout.collision);
+        const map = this.make.tilemap({
+          data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true
+        });
+        const tileset = map.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+        const layer = map.createLayer(0, tileset, 0, 0);
+        layer.setAlpha(0);
+        layer.setDepth(10000);
+        map.setCollision(1, true, true, layer, true);
+        this.collisionLayer = layer;
+      }
+
+      buildGates() {
+        this.gateBodies = [];
+        this.gateLabels = [];
+        for (const gate of this.layout.gates) {
+          const bodies = [];
+          for (const t of gate.tiles) {
+            const rect = this.add.rectangle(
+              (t.x + 0.5) * TILE_SIZE, (t.y + 0.5) * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x6b4423, 0
+            );
+            rect.setDepth(50);
+            this.physics.add.existing(rect, true);
+            bodies.push(rect);
+            this.gateBodies.push(rect);
+          }
+          const mid = gate.tiles[Math.floor(gate.tiles.length / 2)];
+          const label = this.add.text(
+            (mid.x + 0.5) * TILE_SIZE, (mid.y + 0.5) * TILE_SIZE - 16, '🪵 TRONCO CAÍDO', {
+              fontFamily: 'system-ui, sans-serif', fontSize: '8px', fontStyle: 'bold', color: '#ffe9b0',
+              backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 4, y: 2 }, align: 'center'
+            }
+          ).setOrigin(0.5, 1).setDepth(200);
+          this.gateLabels.push({ gate, bodies, label });
+          gate.bodies = bodies;
+          gate.label = label;
+        }
+      }
+
+      buildLabels() {
+        for (const room of DUNGEON_SCENE_CONFIG.rooms) {
+          const cx = ((room.rect.x0 + room.rect.x1) / 2 + 0.5) * TILE_SIZE;
+          const cy = (room.rect.y0 + 0.5) * TILE_SIZE - 10;
+          this.add.text(cx, cy, room.name, {
+            fontFamily: 'Georgia, serif', fontSize: '10px', fontStyle: 'bold', color: '#ffe9b0',
+            backgroundColor: 'rgba(20,14,8,.6)', padding: { x: 6, y: 3 }, align: 'center'
+          }).setOrigin(0.5, 1).setDepth(200);
+        }
+        const exit = DUNGEON_SCENE_CONFIG.exitTile;
+        const exitText = this.add.text(
+          (exit.x + 0.5) * TILE_SIZE, (exit.y + 0.5) * TILE_SIZE - 14, '🚪 SAÍDA', {
+            fontFamily: 'system-ui, sans-serif', fontSize: '9px', fontStyle: 'bold', color: '#ffe9b0',
+            backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 5, y: 3 }, align: 'center'
+          }
+        ).setOrigin(0.5, 1).setDepth(200);
+        exitText.setInteractive({ useHandCursor: true });
+        exitText.on('pointerdown', () => this.exitDungeon(false));
+      }
+
+      tileToWorld(tile) {
+        return {
+          x: (tile.x + 0.5) * TILE_SIZE,
+          y: (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y
+        };
+      }
+
+      playerBodyTile() {
+        return {
+          x: Math.floor(this.player.x / TILE_SIZE),
+          y: Math.floor((this.player.y + PLAYER_BODY_CENTER_OFFSET_Y) / TILE_SIZE)
+        };
+      }
+
+      roomKeyOfTile(tile) {
+        for (const room of DUNGEON_SCENE_CONFIG.rooms) {
+          if (tile.x >= room.rect.x0 && tile.x <= room.rect.x1 &&
+              tile.y >= room.rect.y0 && tile.y <= room.rect.y1) return room.key;
+        }
+        return null;
+      }
+
+      buildPlayer() {
+        const spawn = this.tileToWorld(DUNGEON_SCENE_CONFIG.arrivalTile);
+        this.player = this.physics.add.sprite(spawn.x, spawn.y, 'hero', 0);
+        this.textures.get('hero').setFilter(Phaser.Textures.FilterMode.LINEAR);
+        this.player.setScale(1.12);
+        this.player.setOrigin(PLAYER_ORIGIN_X, PLAYER_ORIGIN_Y);
+        this.player.body.setSize(PLAYER_BODY_WIDTH, PLAYER_BODY_HEIGHT);
+        this.player.body.setOffset(PLAYER_BODY_OFFSET_X, PLAYER_BODY_OFFSET_Y);
+        this.player.setCollideWorldBounds(true);
+        this.player.setDepth(100);
+        this.player.anims.play('idle-0');
+        const camera = this.cameras.main;
+        camera.setBounds(0, 0, this.layout.width * TILE_SIZE, this.layout.height * TILE_SIZE);
+        camera.centerOn(this.player.x, this.player.y);
+        camera.setLerp(0.12, 0.12);
+        camera.startFollow(this.player, true, 0.12, 0.12);
+      }
+
+      monkeyTextureKey() {
+        const key = 'conquistador-monster-monkey-v2';
+        if (this.textures.exists(key)) return key;
+        if (!this.textures.exists('dungeon-monkey-fallback')) {
+          const g = this.make.graphics({ x: 0, y: 0, add: false });
+          g.fillStyle(0x8a5a2b, 1); g.fillCircle(16, 16, 14);
+          g.fillStyle(0x2b1a0e, 1); g.fillCircle(12, 12, 2);
+          g.fillCircle(20, 12, 2);
+          g.generateTexture('dungeon-monkey-fallback', 32, 32);
+          g.destroy();
+        }
+        return 'dungeon-monkey-fallback';
+      }
+
+      buildMonsters() {
+        const base = (GAME_RUNTIME.data.MONSTERS && GAME_RUNTIME.data.MONSTERS.monkey) || {};
+        const monkeyStats = (level) => {
+          const hp = Number(base.hp) || 30;
+          const atk = Number(base.damage ?? base.attack) || 6;
+          const def = Number(base.defense) || 0;
+          const xp = Number(base.xp) || 10;
+          if (level === 2) return { hp: Math.max(1, Math.round(hp * 1.5)), attack: Math.max(0, Math.round(atk * 1.25)), defense: def, xp: Math.max(0, Math.round(xp * 1.5)) };
+          if (level === 3) return { hp: Math.max(1, Math.round(hp * 2.2)), attack: Math.max(0, Math.round(atk * 1.5)), defense: def + 1, xp: Math.max(0, Math.round(xp * 2)) };
+          return { hp, attack: atk, defense: def, xp };
+        };
+        const key = this.monkeyTextureKey();
+        let counter = 0;
+        const spawnMonster = (tile, roomKey, stats, display, isBoss) => {
+          counter += 1;
+          const id = 'dungeon-monster-' + counter;
+          const pos = this.tileToWorld(tile);
+          const sprite = this.physics.add.sprite(pos.x, pos.y, key, 0);
+          sprite.setDisplaySize(display.width, display.height);
+          sprite.setOrigin(0.5, 0.86);
+          sprite.setDepth(100);
+          sprite.body.setSize(18, 12);
+          sprite.body.setOffset(6, 9);
+          sprite.setCollideWorldBounds(true);
+          const label = this.add.text(pos.x, pos.y - display.height - 2, isBoss ? 'BRUTAMONTE' : String(stats.level || ''), {
+            fontFamily: 'system-ui, sans-serif', fontSize: isBoss ? '10px' : '8px',
+            fontStyle: isBoss ? 'bold' : 'normal', color: isBoss ? '#ffb0b0' : '#f1f4ed',
+            stroke: '#17251b', strokeThickness: 2, align: 'center'
+          }).setOrigin(0.5, 1).setDepth(110);
+          const hpBarWidth = Math.max(30, display.width + 6);
+          const hpBarBg = this.add.rectangle(pos.x, pos.y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
+          hpBarBg.setDepth(111);
+          hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
+          const hpBarFill = this.add.rectangle(pos.x - hpBarWidth / 2, pos.y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
+          hpBarFill.setOrigin(0, 0.5);
+          hpBarFill.setDepth(112);
+          const record = {
+            id, roomKey, level: stats.level || 1, isBoss: Boolean(isBoss),
+            monsterId: 'monkey', name: isBoss ? DUNGEON_SCENE_CONFIG.boss.name : 'Macaco',
+            hp: stats.hp, maxHp: stats.hp, attack: stats.attack, defense: stats.defense,
+            xpReward: stats.xp, speed: stats.speed || 50, attackSpeed: stats.attackSpeed || 1,
+            sprite, label, hpBarBg, hpBarFill, hpBarWidth, alive: true, nextAttackAt: 0
+          };
+          this.monsters.push(record);
+          if (isBoss) this.bossRecord = record;
+          return record;
+        };
+        for (const room of DUNGEON_SCENE_CONFIG.rooms) {
+          for (const m of room.monkeys) {
+            const stats = monkeyStats(m.level);
+            spawnMonster({ x: m.x, y: m.y }, room.key, {
+              ...stats, level: m.level, speed: Number(base.speed) || 50,
+              attackSpeed: Number(base.attackSpeed) || 1
+            }, { width: 30, height: 24 }, false);
+          }
+        }
+        const bossCfg = DUNGEON_SCENE_CONFIG.boss;
+        spawnMonster(DUNGEON_SCENE_CONFIG.bossTile, 'room3', {
+          hp: bossCfg.hp, attack: bossCfg.attack, defense: bossCfg.defense,
+          xp: bossCfg.xp, level: bossCfg.level, speed: bossCfg.speed,
+          attackSpeed: bossCfg.attackSpeed
+        }, { width: bossCfg.displayWidth, height: bossCfg.displayHeight }, true);
+      }
+
+      buildHud() {
+        this.hudTitle = this.add.text(8, 8, '🏚 CIDADE ABANDONADA', {
+          fontFamily: 'Georgia, serif', fontSize: '12px', fontStyle: 'bold', color: '#ffe9b0',
+          backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 7, y: 4 }
+        }).setScrollFactor(0).setDepth(1000);
+        this.hpBarBg = this.add.rectangle(8, 30, 128, 14, 0x1a0f0f, 1);
+        this.hpBarBg.setOrigin(0, 0).setScrollFactor(0).setDepth(1000);
+        this.hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
+        this.hpBarFill = this.add.rectangle(9, 31, 126, 12, 0x3ddc5f, 1);
+        this.hpBarFill.setOrigin(0, 0.5).setScrollFactor(0).setDepth(1001);
+        this.hpLabel = this.add.text(10, 30, '', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '10px', fontStyle: 'bold', color: '#ffffff'
+        }).setOrigin(0, 0).setScrollFactor(0).setDepth(1002);
+        this.bossBarBg = this.add.rectangle(this.cameras.main.width / 2 - 64, 8, 128, 12, 0x1a0f0f, 1);
+        this.bossBarBg.setOrigin(0, 0).setScrollFactor(0).setDepth(1000).setVisible(false);
+        this.bossBarBg.setStrokeStyle(1, 0x000000, 0.85);
+        this.bossBarFill = this.add.rectangle(this.cameras.main.width / 2 - 63, 9, 126, 10, 0xd43a3a, 1);
+        this.bossBarFill.setOrigin(0, 0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
+        this.bossBarLabel = this.add.text(this.cameras.main.width / 2, 8, 'BRUTAMONTE', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '9px', fontStyle: 'bold', color: '#ffffff', align: 'center'
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1002).setVisible(false);
+        const exitBtn = this.add.text(this.cameras.main.width - 8, 8, '🚪 SAIR', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+          backgroundColor: 'rgba(20,14,8,.8)', padding: { x: 8, y: 5 }
+        }).setOrigin(1, 0).setScrollFactor(0).setDepth(1000);
+        exitBtn.setInteractive({ useHandCursor: true });
+        exitBtn.on('pointerdown', () => this.exitDungeon(false));
+        this.refreshHud();
+      }
+
+      refreshHud() {
+        if (!this.hpBarFill) return;
+        const hp = this.statusSystem.getStat('player', 'hp') ?? 0;
+        const maxHp = this.statusSystem.getStat('player', 'maxHp') ?? 1;
+        this.hpBarFill.scaleX = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
+        this.hpLabel.setText('HP ' + Math.ceil(hp) + '/' + Math.ceil(maxHp));
+        const boss = this.bossRecord;
+        if (boss && boss.alive && boss.hp < boss.maxHp) {
+          this.bossBarBg.setVisible(true);
+          this.bossBarFill.setVisible(true);
+          this.bossBarLabel.setVisible(true);
+          this.bossBarFill.scaleX = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+        }
+      }
+
+      showToast(message, duration = 2200) {
+        if (this.toastText && this.toastText.active) {
+          this.toastText.destroy();
+        }
+        this.toastText = this.add.text(
+          this.cameras.main.width / 2, 56, message, {
+            fontFamily: 'Georgia, serif', fontSize: '12px', fontStyle: 'bold', color: '#ffe9b0',
+            backgroundColor: 'rgba(20,14,8,.8)', padding: { x: 10, y: 6 }, align: 'center'
+          }
+        ).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1100);
+        this.tweens.add({
+          targets: this.toastText, alpha: 0, delay: Math.max(0, duration - 500),
+          duration: 500, onComplete: () => { if (this.toastText && this.toastText.active) this.toastText.destroy(); }
+        });
+      }
+
+      damageNumber(monster, damage) {
+        const text = this.add.text(monster.sprite.x, monster.sprite.y - 26, '-' + damage, {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe066',
+          stroke: '#201a08', strokeThickness: 3
+        }).setOrigin(0.5, 1).setDepth(300);
+        this.tweens.add({
+          targets: text, y: text.y - 14, alpha: 0, duration: 700,
+          onComplete: () => { if (text.active) text.destroy(); }
+        });
+      }
+
+      onDungeonTap(pointer) {
+        if (this.exiting || !this.player) return;
+        const tile = {
+          x: Math.floor(pointer.worldX / TILE_SIZE),
+          y: Math.floor(pointer.worldY / TILE_SIZE)
+        };
+        if (tile.x < 0 || tile.x >= this.layout.width || tile.y < 0 || tile.y >= this.layout.height) return;
+        let goal = tile;
+        if (this.layout.blocked[tile.y][tile.x] !== 0) {
+          if (this.layout.gateTileSet.has(tile.x + ',' + tile.y)) {
+            this.showToast('🪵 O tronco caído bloqueia a passagem.', 1800);
+          }
+          goal = dungeonNearestWalkable(this.layout.blocked, tile.x, tile.y);
+          if (!goal) return;
+        }
+        const start = this.playerBodyTile();
+        const path = dungeonFindPath(this.layout.blocked, start, goal);
+        if (path.length) this.path = path;
+      }
+
+      updatePlayerMovement() {
+        if (!this.path.length) {
+          this.player.body.setVelocity(0, 0);
+          this.player.anims.play('idle-' + this.facingRow, true);
+          return;
+        }
+        const target = this.path[0];
+        const dest = this.tileToWorld(target);
+        const dx = dest.x - this.player.x;
+        const dy = dest.y - this.player.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 5) {
+          this.path.shift();
+          if (!this.path.length) {
+            this.player.body.setVelocity(0, 0);
+            this.player.anims.play('idle-' + this.facingRow, true);
+          }
+          return;
+        }
+        const speed = this.statusSystem.getStat('player', 'moveSpeed') || 110;
+        this.player.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
+        this.facingRow = core.directionRow(dx, dy);
+        this.player.anims.play('walk-' + this.facingRow, true);
+      }
+
+      updatePlayerAttack(now) {
+        if (now < this.nextPlayerAttackAt) return;
+        const playerRoom = this.roomKeyOfTile(this.playerBodyTile());
+        let nearest = null;
+        let nearestDist = Infinity;
+        for (const monster of this.monsters) {
+          if (!monster.alive || monster.roomKey !== playerRoom) continue;
+          const dist = Math.hypot(monster.sprite.x - this.player.x, monster.sprite.y - this.player.y);
+          if (dist < nearestDist) { nearestDist = dist; nearest = monster; }
+        }
+        if (!nearest || nearestDist > 52) return;
+        const attack = this.statusSystem.getStat('player', 'attack') ?? 1;
+        const penetration = this.statusSystem.getStat('player', 'penetration') ?? 0;
+        const damage = Math.max(1, Math.round(attack - Math.max(0, nearest.defense - penetration)));
+        nearest.hp = Math.max(0, nearest.hp - damage);
+        this.damageNumber(nearest, damage);
+        nearest.sprite.setTintFill(0xffffff);
+        this.time.delayedCall(80, () => { if (nearest.sprite.active) nearest.sprite.clearTint(); });
+        const attackSpeed = this.statusSystem.getStat('player', 'attackSpeed') || 1;
+        this.nextPlayerAttackAt = now + 1000 / Math.max(0.1, attackSpeed);
+        if (nearest.hp <= 0) this.killMonster(nearest);
+      }
+
+      updateMonsters(now) {
+        const playerRoom = this.roomKeyOfTile(this.playerBodyTile());
+        const playerDef = this.statusSystem.getStat('player', 'defense') ?? 0;
+        for (const monster of this.monsters) {
+          if (!monster.alive) continue;
+          monster.label.setPosition(monster.sprite.x, monster.sprite.y - monster.sprite.displayHeight - 2);
+          monster.hpBarBg.setPosition(monster.sprite.x, monster.sprite.y + 6);
+          monster.hpBarFill.setPosition(monster.sprite.x - monster.hpBarWidth / 2, monster.sprite.y + 6);
+          monster.hpBarFill.scaleX = Math.max(0, Math.min(1, monster.hp / monster.maxHp));
+          // Cada sala e um territorio: monstro so age dentro da propria sala.
+          // Assim ninguem atravessa parede nem ataca atraves do tronco.
+          if (monster.roomKey !== playerRoom) {
+            monster.sprite.body.setVelocity(0, 0);
+            continue;
+          }
+          const dx = this.player.x - monster.sprite.x;
+          const dy = this.player.y - monster.sprite.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 260) {
+            monster.sprite.body.setVelocity(0, 0);
+            continue;
+          }
+          if (dist > 30) {
+            monster.sprite.body.setVelocity((dx / dist) * monster.speed, (dy / dist) * monster.speed);
+            continue;
+          }
+          monster.sprite.body.setVelocity(0, 0);
+          if (now < monster.nextAttackAt) continue;
+          const damage = Math.max(1, Math.round(monster.attack - Math.max(0, playerDef - 0)));
+          this.statusSystem.applyDamage('player', damage, monster.id);
+          this.cameras.main.shake(80, 0.006);
+          monster.nextAttackAt = now + 1000 / Math.max(0.1, monster.attackSpeed);
+        }
+      }
+
+      updateBossSlam(now) {
+        const boss = this.bossRecord;
+        if (!boss || !boss.alive) return;
+        if (!this.bossEnraged && boss.hp < boss.maxHp * (DUNGEON_SCENE_CONFIG.boss.slam.enrageBelowHpPercent / 100)) {
+          this.bossEnraged = true;
+          boss.sprite.setTint(0xff7777);
+          this.showToast('🔴 BRUTAMONTE FICOU FURIOSO!', 2400);
+        }
+        if (this.roomKeyOfTile(this.playerBodyTile()) !== 'room3') return;
+        const slam = DUNGEON_SCENE_CONFIG.boss.slam;
+        if (this.slamPending) {
+          if (now < this.slamPending.at) return;
+          const dist = Math.hypot(this.player.x - boss.sprite.x, this.player.y - boss.sprite.y);
+          if (this.slamTelegraph && this.slamTelegraph.active) this.slamTelegraph.destroy();
+          this.slamTelegraph = null;
+          this.slamPending = null;
+          if (dist <= slam.radiusTiles * TILE_SIZE) {
+            this.statusSystem.applyDamage('player', slam.damage, boss.id);
+            this.cameras.main.shake(160, 0.02);
+            this.showToast('💥 PANCADA SÍSMICA!', 1400);
+          }
+          this.nextBossSlamAt = now + (this.bossEnraged ? slam.enrageCooldownMs : slam.cooldownMs);
+          return;
+        }
+        if (now < this.nextBossSlamAt) return;
+        const dist = Math.hypot(this.player.x - boss.sprite.x, this.player.y - boss.sprite.y);
+        if (dist > slam.triggerTiles * TILE_SIZE) return;
+        // Preparacao visivel: circulo vermelho no chao por 900ms.
+        this.slamTelegraph = this.add.circle(
+          boss.sprite.x, boss.sprite.y, slam.radiusTiles * TILE_SIZE, 0xff2222, 0.32
+        );
+        this.slamTelegraph.setStrokeStyle(2, 0xff2222, 0.9);
+        this.slamTelegraph.setDepth(150);
+        this.slamPending = { at: now + slam.windupMs };
+      }
+
+      killMonster(monster) {
+        if (!monster || !monster.alive) return;
+        monster.alive = false;
+        monster.sprite.body.setVelocity(0, 0);
+        const tile = {
+          x: Math.floor(monster.sprite.x / TILE_SIZE),
+          y: Math.floor(monster.sprite.y / TILE_SIZE)
+        };
+        // XP pelo mesmo evento que o mundo usa — LevelSystem e o unico ouvinte.
+        this.eventBus.emit('entity:die', {
+          entityId: monster.id, killerId: 'player', monsterId: monster.monsterId,
+          level: monster.level, xp: monster.xpReward, tile
+        });
+        this.grantDrop(monster);
+        this.tweens.add({
+          targets: monster.sprite, alpha: 0, scaleX: 0.35, scaleY: 0.35, duration: 220,
+          onComplete: () => {
+            if (monster.sprite.active) monster.sprite.destroy();
+            if (monster.label.active) monster.label.destroy();
+            if (monster.hpBarBg.active) monster.hpBarBg.destroy();
+            if (monster.hpBarFill.active) monster.hpBarFill.destroy();
+          }
+        });
+        if (monster.isBoss) {
+          this.recordBossKill();
+          this.showToast('🏆 BRUTAMONTE DERROTADO!', 3200);
+          return;
+        }
+        this.checkRoomCleared(monster.roomKey);
+      }
+
+      grantDrop(monster) {
+        try {
+          const progress = this.saveSystem.getProgressData() || {};
+          const items = Array.isArray(progress.items) ? progress.items.map(item => ({ ...item })) : [];
+          const dropId = 'monkey_fur';
+          const existing = items.find(item => item && item.id === dropId);
+          if (existing) existing.quantity = Math.max(0, Number(existing.quantity) || 0) + 1;
+          else items.push({ id: dropId, quantity: 1 });
+          this.eventBus.emit('progress:changed', { section: 'items', data: items });
+          const name = (GAME_RUNTIME.data.ITEMS && GAME_RUNTIME.data.ITEMS[dropId] && GAME_RUNTIME.data.ITEMS[dropId].name) || dropId;
+          this.showToast(name + ' +1', 1800);
+        } catch (error) { /* O drop nunca pode quebrar a dungeon. */ }
+      }
+
+      recordBossKill() {
+        try {
+          const progress = this.saveSystem.getProgressData() || {};
+          const dungeons = (progress.dungeons && typeof progress.dungeons === 'object')
+            ? { ...progress.dungeons } : {};
+          const prev = dungeons['cidade-abandonada'] || {};
+          dungeons['cidade-abandonada'] = {
+            cleared: true,
+            bossKills: (Number(prev.bossKills) || 0) + 1
+          };
+          this.eventBus.emit('progress:changed', { section: 'dungeons', data: dungeons });
+        } catch (error) { /* O progresso nunca pode quebrar a dungeon. */ }
+      }
+
+      checkRoomCleared(roomKey) {
+        const gate = this.layout.gates.find(g => g.roomKey === roomKey);
+        if (!gate || gate.opened) return;
+        const remaining = this.monsters.some(m => m.alive && m.roomKey === roomKey && !m.isBoss);
+        if (remaining) return;
+        gate.opened = true;
+        for (const body of gate.bodies) if (body.active) body.destroy();
+        if (gate.label && gate.label.active) gate.label.destroy();
+        for (const t of gate.tiles) this.layout.blocked[t.y][t.x] = 0;
+        this.showToast('🪵 O tronco caiu! A passagem abriu.', 2600);
+      }
+
+      exitDungeon(defeated) {
+        if (this.exiting) return;
+        this.exiting = true;
+        if (defeated) {
+          // Morreu na dungeon: volta para a entrada com HP cheio.
+          this.statusSystem.heal('player', 999999);
+          this.showToast('Você caiu... voltou para a entrada.', 2000);
+        }
+        this.restoreOverworldHud();
+        this.scene.resume('WorldScene');
+        this.scene.setVisible(true, 'WorldScene');
+        this.scene.stop();
+      }
+
+      update() {
+        if (this.exiting || !this.player) return;
+        const now = this.time.now;
+        this.updatePlayerMovement();
+        this.updatePlayerAttack(now);
+        this.updateMonsters(now);
+        this.updateBossSlam(now);
+        this.refreshHud();
+        const hp = this.statusSystem.getStat('player', 'hp');
+        if (hp !== null && hp !== undefined && hp <= 0) this.exitDungeon(true);
+      }
+    }
+
     class WorldScene extends Phaser.Scene {
       constructor() {
         super('WorldScene');
@@ -5103,6 +5905,7 @@
           this.buildWorld(sample.layers);
           this.createPlayerAnimations();
           this.createPlayer();
+          this.createDungeonEntrance();
           this.setupCamera();
           this.input.mouse.disableContextMenu();
           this.input.on('pointerdown', this.onMapTap, this);
@@ -7374,6 +8177,106 @@
         this.savePlayerPositionSafely(true);
       }
 
+
+      // ===== V103 — DUNGEON: entrada na cidade (45,45) =====
+      // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
+      // aberto muda: a dungeon vive na DungeonScene, cena separada.
+      createDungeonEntrance() {
+        const tile = DUNGEON_SCENE_CONFIG.entranceTile;
+        const x = (tile.x + 0.5) * TILE_SIZE;
+        const y = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+        this.dungeonEntranceText = this.add.text(x, y - 18, '🏚 CIDADE ABANDONADA', {
+          fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+          backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 6, y: 3 }, align: 'center'
+        }).setOrigin(0.5, 1).setDepth(10000);
+        this.dungeonEntranceText.setInteractive({ useHandCursor: true });
+        this.dungeonEntranceText.on('pointerdown', () => this.openDungeonPanel());
+        this.createDungeonPanel();
+      }
+
+      createDungeonPanel() {
+        const backdrop = document.createElement('div');
+        backdrop.id = 'conquistador-dungeon-panel';
+        Object.assign(backdrop.style, {
+          position: 'fixed', inset: '0', zIndex: '500', display: 'none',
+          alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.55)',
+          padding: '16px', fontFamily: 'Georgia, "Times New Roman", serif'
+        });
+        const section = document.createElement('section');
+        Object.assign(section.style, {
+          width: '100%', maxWidth: '380px', padding: '18px', borderRadius: '14px',
+          border: '1px solid #b99a64',
+          background: 'linear-gradient(180deg,rgba(31,25,21,.96),rgba(12,12,11,.94))',
+          color: '#f4dfaa', textAlign: 'center', boxShadow: '0 10px 40px rgba(0,0,0,.6)'
+        });
+        const title = document.createElement('h2');
+        title.textContent = '🏚 CIDADE ABANDONADA';
+        Object.assign(title.style, { margin: '0 0 8px', fontSize: '20px', letterSpacing: '.04em' });
+        const desc = document.createElement('p');
+        desc.textContent = 'Uma cidade abandonada, tomada pela floresta. Ruas rachadas, muros em ruína, árvores crescendo dentro das casas. Três salas — e no fundo, no trono, o Macaco Brutamonte espera.';
+        Object.assign(desc.style, { margin: '0 0 10px', fontSize: '13px', lineHeight: '1.5', color: '#e8d9b0' });
+        const meta = document.createElement('p');
+        meta.textContent = 'Nível recomendado: 5  •  3 salas  •  Chefe: Macaco Brutamonte Nv. 8';
+        Object.assign(meta.style, { margin: '0 0 6px', fontSize: '12px', fontWeight: 'bold', color: '#ffd98a' });
+        const warn = document.createElement('p');
+        warn.textContent = 'Se você morrer, volta para a entrada com HP cheio. Cada entrada é uma run nova.';
+        Object.assign(warn.style, { margin: '0 0 14px', fontSize: '11px', color: '#c9b98f' });
+        const row = document.createElement('div');
+        Object.assign(row.style, { display: 'flex', gap: '10px', justifyContent: 'center' });
+        const enter = document.createElement('button');
+        enter.type = 'button';
+        enter.textContent = 'ENTRAR NA CIDADE';
+        Object.assign(enter.style, {
+          minWidth: '150px', minHeight: '42px', padding: '8px 16px', border: '1px solid #b99a64',
+          borderRadius: '22px', background: 'linear-gradient(180deg,#6b4d1f,#33240f)',
+          color: '#ffe9b0', font: 'bold 12px Georgia,serif', letterSpacing: '.06em',
+          cursor: 'pointer', touchAction: 'manipulation'
+        });
+        enter.addEventListener('click', () => { this.closeDungeonPanel(); this.enterDungeon(); });
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.textContent = 'VOLTAR';
+        Object.assign(back.style, {
+          minWidth: '100px', minHeight: '42px', padding: '8px 16px', border: '1px solid #b99a64',
+          borderRadius: '22px', background: 'linear-gradient(180deg,#493727,#17110e)',
+          color: '#f4dfaa', font: 'bold 12px Georgia,serif', letterSpacing: '.06em',
+          cursor: 'pointer', touchAction: 'manipulation'
+        });
+        back.addEventListener('click', () => this.closeDungeonPanel());
+        row.append(enter, back);
+        section.append(title, desc, meta, warn, row);
+        backdrop.appendChild(section);
+        backdrop.addEventListener('click', (event) => { if (event.target === backdrop) this.closeDungeonPanel(); });
+        document.body.appendChild(backdrop);
+        this.dungeonPanelBackdrop = backdrop;
+      }
+
+      openDungeonPanel() {
+        if (this.dungeonPanelBackdrop) this.dungeonPanelBackdrop.style.display = 'flex';
+      }
+
+      closeDungeonPanel() {
+        if (this.dungeonPanelBackdrop) this.dungeonPanelBackdrop.style.display = 'none';
+      }
+
+      enterDungeon() {
+        // Esconde o HUD do mundo aberto (minimapa do mundo nao faz sentido aqui).
+        const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+        hide('conquistador-main-menu');
+        hide('conquistador-minimap');
+        hide('conquistador-player-status-entry');
+        // Troca de cena: o WorldScene pausa (sem update, sem auto-save),
+        // a DungeonScene assume. O save nunca grava a posicao da dungeon.
+        this.scene.launch('DungeonScene', {
+          returnTile: {
+            x: DUNGEON_SCENE_CONFIG.entranceTile.x,
+            y: DUNGEON_SCENE_CONFIG.entranceTile.y
+          }
+        });
+        this.scene.pause();
+        this.scene.setVisible(false);
+      }
+
       createPlayerAnimations() {
         for (let row = 0; row < 8; row += 1) {
           this.anims.create({
@@ -7761,7 +8664,7 @@
 
     // Registry de cenas: o mundo atual é a primeira cena; futuras cenas de
     // menu e interiores podem ser adicionados sem alterar o motor.
-    const GAME_SCENES = [WorldScene];
+    const GAME_SCENES = [WorldScene, DungeonScene];
 
     try {
       const game = new Phaser.Game(createPhaserConfig(GAME_SCENES));
@@ -8024,7 +8927,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V102';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V103';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
