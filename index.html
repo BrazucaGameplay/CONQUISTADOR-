@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V95</title>
+<title>CONQUISTADOR DE WAIFU'S — V96</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V95</div>
+  <div id="version-badge">V96</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5225,7 +5225,7 @@
                 close.type = 'button'; close.textContent = 'FECHAR  ✕';
                 close.addEventListener('click', () => this.setOpen(false));
                 header.append(titleWrap, close);
-                const content = el('div', { flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '12px 10px 20px', display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', alignContent: 'start', gap: '10px 8px', overscrollBehavior: 'contain' });
+                const content = el('div', { flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '12px 10px 20px', display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', alignContent: 'start', alignItems: 'start', gridAutoRows: 'max-content', gap: '10px 8px', overscrollBehavior: 'contain' });
                 panel.append(header, content);
                 backdrop.appendChild(panel);
                 backdrop.addEventListener('click', event => { if (event.target === backdrop) this.setOpen(false); });
@@ -5282,9 +5282,18 @@
                   cell.type = 'button';
                   cell.className = 'cg-card' + (quality === 'rainha' ? ' is-rainha' : '');
                   cell.style.setProperty('--q', qinfo.color);
+                  // V96: altura FIXA da carta. Antes a altura vinha do conteudo e o grid
+                  // amassava a fileira quando a 4a carta estourava o painel.
+                  cell.style.aspectRatio = '2 / 3';
                   cell.setAttribute('aria-label', name + ', nivel ' + level + ', qualidade ' + qinfo.name);
                   const art = doc.createElement('img');
                   art.className = 'cg-art';
+                  // V96: a arte preenche a carta sem cortar (contain inline).
+                  art.style.aspectRatio = 'auto';
+                  art.style.flex = '1 1 auto';
+                  art.style.minHeight = '0';
+                  art.style.width = '100%';
+                  art.style.objectFit = 'contain';
                   art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
@@ -5309,6 +5318,7 @@
                 for (let i = house.length; i < MAX_SLOTS; i += 1) {
                   const emptySlot = doc.createElement('div');
                   emptySlot.className = 'cg-card cg-empty';
+                  emptySlot.style.aspectRatio = '2 / 3';
                   const emptyLabel = doc.createElement('span');
                   emptyLabel.className = 'cg-empty-label';
                   emptyLabel.textContent = 'Espaço vazio';
@@ -7912,7 +7922,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V95';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V96';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
