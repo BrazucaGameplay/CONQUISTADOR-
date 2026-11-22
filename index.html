@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V88</title>
+<title>CONQUISTADOR DE WAIFU'S — V89</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V88</div>
+  <div id="version-badge">V89</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -2999,7 +2999,10 @@
               // JPEG delas; a Slime (PNG transparente) ficava sem nada. A placa cobre o
               // rotulo embutido do JPEG — que ainda diz "Donzela Rato" errado — com o
               // nome certo, "Donzela Rata".
-              const artWrap = this.el('div', { position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '5px' });
+              // V89: moldura branca REAL igual pras 3 waifus. Macaca e Rata PARECIAM ter
+              // moldura porque ela vem desenhada dentro do JPEG delas; a Slime ficava sem.
+              // A sombra interna desenha a mesma linha por cima das 3 artes.
+              const artWrap = this.el('div', { position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '5px', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,.9)' });
               const plate = this.el('div', { position: 'absolute', left: '0', right: '0', bottom: '0', padding: '16px 2px 5px', background: 'linear-gradient(180deg, rgba(8,8,14,0) 0%, rgba(8,8,14,.95) 45%)', color: '#f4e8c8', font: 'bold 12px/1.2 Georgia,serif', textAlign: 'center', textShadow: '0 1px 3px #000' });
               plate.textContent = entry.name;
               artWrap.append(art, plate);
@@ -3881,8 +3884,9 @@
           if (house.length >= 10) { sendToHouse.textContent = 'CASA CHEIA (10)'; return; }
           if (house.some(c => c && c.instanceId === target.instanceId)) { sendToHouse.textContent = 'JÁ ESTÁ NA CASA'; return; }
           const cards = (Array.isArray(data.cards) ? data.cards : []).filter(c => c && c.instanceId !== target.instanceId);
-          const equipped = Array.isArray(data.equipped) ? data.equipped.map(v => String(v) === String(target.instanceId) ? null : v) : data.equipped;
-          const next = { ...data, cards, house: [...house, target], equipped };
+          // V89: mandar pra Casa NAO desequipa. O slot equipado aponta pra carta,
+          // onde quer que ela more (Galeria ou Casa). Antes, vir pra Casa limpava o slot.
+          const next = { ...data, cards, house: [...house, target] };
           if (typeof this.api.progress.updateBatch === 'function') this.api.progress.updateBatch({ waifus: next });
           overlay.remove();
         });
@@ -5157,7 +5161,8 @@
           // ===== SISTEMA DA CASA =====
           // Até 10 cartas moram na Casa. A Casa é a origem das cartas que podem
           // ser equipadas e presenteadas com rosas. Galeria manda para a Casa,
-          // Casa devolve para a Galeria, equipar tira da Casa para o espaço.
+          // Casa devolve para a Galeria, equipar NAO tira a carta da Casa:
+          // equipada e so um slot apontando pra carta, onde quer que ela more (V89).
           this.houseSystem = (() => {
             const api = this.extensionAPI;
             const doc = window.document;
@@ -5185,6 +5190,15 @@
               backdrop: null, content: null, titleEl: null, countEl: null, detailOverlay: null,
               opened: false, equipSlot: null, unsubs: [],
               createUI() {
+                // V89: selo EQUIPADA + slot vazio da Casa (o resto das classes .cg-* vem da Galeria).
+                if (!doc.getElementById('conquistador-house-cards')) {
+                  const style = doc.createElement('style');
+                  style.id = 'conquistador-house-cards';
+                  style.textContent = '.cg-equipped{position:absolute;top:5px;left:5px;padding:2px 6px;border:1px solid #e6b84f;border-radius:10px;background:linear-gradient(180deg,#493727,#17110e);color:#f4dfaa;font:bold 9px Georgia,serif;letter-spacing:.05em}' +
+                    '.cg-empty{border-style:dashed!important;background:rgba(255,255,255,.02)!important;box-shadow:none!important;display:flex!important;align-items:center;justify-content:center;min-height:118px}' +
+                    '.cg-empty-label{color:rgba(221,208,185,.5);font:bold 12px Georgia,serif}';
+                  doc.head.appendChild(style);
+                }
                 const backdrop = el('div', { position: 'fixed', inset: '0', zIndex: '103', display: 'none', alignItems: 'center', justifyContent: 'center', padding: 'max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom))', background: 'rgba(0,0,0,.66)', backdropFilter: 'blur(2px)' });
                 const panel = el('section', { width: 'min(100%, 540px)', height: 'min(88dvh, 760px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: 'none', borderRadius: '22px', background: 'linear-gradient(180deg, rgba(31,25,21,.93), rgba(12,12,11,.88))', color: '#f3ead8', boxShadow: '0 18px 55px rgba(0,0,0,.68)', font: '14px/1.35 Georgia, serif', touchAction: 'pan-y' });
                 const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 18px' });
@@ -5197,7 +5211,7 @@
                 close.type = 'button'; close.textContent = 'FECHAR  ✕';
                 close.addEventListener('click', () => this.setOpen(false));
                 header.append(titleWrap, close);
-                const content = el('div', { flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '18px 14px 24px', display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', alignContent: 'start', gap: '18px 12px', overscrollBehavior: 'contain' });
+                const content = el('div', { flex: '1 1 auto', minHeight: '0', overflowY: 'auto', padding: '12px 10px 20px', display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', alignContent: 'start', gap: '10px 8px', overscrollBehavior: 'contain' });
                 panel.append(header, content);
                 backdrop.appendChild(panel);
                 backdrop.addEventListener('click', event => { if (event.target === backdrop) this.setOpen(false); });
@@ -5240,33 +5254,51 @@
                   this.content.appendChild(go);
                   return;
                 }
+                const equippedIds = new Set((Array.isArray(data.equipped) ? data.equipped : []).map(v => String(v)));
                 for (const card of house) {
                   const speciesId = String(card.waifuId || card.waifuType || card.id || 'slime');
                   const quality = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
                   const qinfo = QUALITY_MAP[quality];
                   const level = cardLevel(card, data);
                   const name = SPECIES[speciesId] || speciesId;
-                  // V84: borda real com a cor da qualidade (antes era border:none + brilho fraco).
-                  const cell = el('button', { position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', padding: '7px', boxSizing: 'border-box', border: '2px solid ' + qinfo.color, borderRadius: '18px', background: 'linear-gradient(145deg,rgba(42,35,47,.98),rgba(10,10,16,.99))', boxShadow: '0 10px 24px rgba(0,0,0,.6), 0 0 18px ' + qinfo.color + '55', color: qinfo.color, cursor: 'pointer', touchAction: 'manipulation', overflow: 'hidden' });
+                  // V89: carta pequena e plana, mesma estrutura base da Galeria (.cg-card).
+                  // A estrutura antiga (nome + estrelas + janela 2/3 + placa, tudo inline)
+                  // e que deixava a Casa com o visual cortado/sobreposto do print.
+                  const cell = doc.createElement('button');
                   cell.type = 'button';
-                  if (quality === 'rainha') Object.assign(cell.style, { background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)', boxShadow: '0 0 26px #ff2e88cc, 0 0 38px #ffd70088, 0 10px 22px rgba(0,0,0,.7)' });
-                  const qualityName = el('div', { flex: '0 0 auto', minHeight: '15px', textAlign: 'center', color: qinfo.color, font: 'bold 11px/1.2 Georgia,serif', textShadow: '0 1px 3px #000' });
-                  qualityName.textContent = quality === 'rainha' ? '👑 RAINHA · ESPECIAL' : qinfo.name;
-                  const stars = el('div', { flex: '0 0 auto', minHeight: '12px', textAlign: 'center', color: qinfo.color, font: 'bold 10px/1 Georgia,serif', letterSpacing: '1px', textShadow: '0 1px 3px #000' });
-                  stars.textContent = '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
-                  const artWindow = el('div', { position: 'relative', flex: '0 0 auto', width: '100%', aspectRatio: '2 / 3', display: 'grid', placeItems: 'center', boxSizing: 'border-box', padding: '3px', borderRadius: '12px', background: 'rgba(4,8,15,.94)', overflow: 'hidden' });
-                  const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', background: '#080c15' });
-                  art.src = ART(speciesId); art.alt = 'Carta de ' + name;
-                  artWindow.appendChild(art);
-                  const titlePlate = el('div', { flex: '0 0 auto', minHeight: '23px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1px 2px', textAlign: 'center', color: qinfo.color, font: 'bold 10px/1.15 Georgia,serif', textShadow: '0 1px 3px #000', overflowWrap: 'anywhere' });
-                  titlePlate.textContent = name + ' · Nv. ' + level;
-                  cell.append(qualityName, stars, artWindow, titlePlate);
+                  cell.className = 'cg-card' + (quality === 'rainha' ? ' is-rainha' : '');
+                  cell.style.setProperty('--q', qinfo.color);
+                  cell.setAttribute('aria-label', name + ', nivel ' + level + ', qualidade ' + qinfo.name);
+                  const art = doc.createElement('img');
+                  art.className = 'cg-art';
+                  art.src = ART(speciesId);
+                  art.alt = 'Carta de ' + name;
+                  const foot = doc.createElement('span');
+                  foot.className = 'cg-foot';
+                  const cardName = doc.createElement('span');
+                  cardName.className = 'cg-name';
+                  cardName.textContent = name;
+                  const meta = doc.createElement('span');
+                  meta.className = 'cg-meta';
+                  meta.textContent = '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1) + ' · Nv. ' + level;
+                  foot.append(cardName, meta);
+                  cell.append(art, foot);
+                  if (equippedIds.has(String(card.instanceId))) {
+                    const eq = doc.createElement('span');
+                    eq.className = 'cg-equipped';
+                    eq.textContent = 'EQUIPADA';
+                    cell.appendChild(eq);
+                  }
                   cell.addEventListener('click', () => { if (this.equipSlot != null) this.equipFromHouse(card); else this.showCardDetail(card); });
                   this.content.appendChild(cell);
                 }
                 for (let i = house.length; i < MAX_SLOTS; i += 1) {
-                  const emptySlot = el('div', { width: '100%', aspectRatio: '2 / 3', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(221,208,185,.35)', borderRadius: '18px', color: 'rgba(221,208,185,.5)', font: 'bold 13px Georgia,serif', textAlign: 'center', padding: '10px', boxSizing: 'border-box' });
-                  emptySlot.textContent = 'Espaço vazio';
+                  const emptySlot = doc.createElement('div');
+                  emptySlot.className = 'cg-card cg-empty';
+                  const emptyLabel = doc.createElement('span');
+                  emptyLabel.className = 'cg-empty-label';
+                  emptyLabel.textContent = 'Espaço vazio';
+                  emptySlot.appendChild(emptyLabel);
                   this.content.appendChild(emptySlot);
                 }
               },
@@ -5290,13 +5322,13 @@
                 const slot = this.equipSlot;
                 if (slot == null || !card) return;
                 const data = getData();
-                const house = getHouse().filter(c => c && c.instanceId !== card.instanceId);
-                const cards = getCards();
-                if (!cards.some(c => c && String(c.instanceId) === String(card.instanceId))) cards.push(card);
+                // V89: equipar NAO move a carta. Ela continua na Casa; so o slot
+                // passa a apontar pra ela. Antes, equipar empurrava a carta de
+                // volta pra Galeria — por isso so ficava equipada quem estava na Galeria.
                 const equipped = Array.isArray(data.equipped) ? data.equipped.map(v => v == null ? null : String(v)) : [null, null, null];
                 for (let i = 0; i < 3; i += 1) if (equipped[i] === String(card.instanceId)) equipped[i] = null;
                 equipped[slot] = String(card.instanceId);
-                const next = { ...data, house, cards, equipped };
+                const next = { ...data, equipped };
                 const result = writeWaifus(next);
                 if (result && typeof result.then === 'function') result.catch(() => {});
                 api.events.emit('house:closed', { equipped: true, slot });
@@ -5646,10 +5678,9 @@
               }
               // Carta que estava na Casa sai da Casa e passa a contar na Galeria,
               // para o espaco equipado continuar achando a carta.
-              const nextHouse = (Array.isArray(latest.house) ? latest.house : []).filter(c => c && String(c.instanceId) !== String(selected.instanceId));
-              const nextCards = (Array.isArray(latest.cards) ? latest.cards.slice() : []);
-              if (!nextCards.some(c => c && String(c.instanceId) === String(selected.instanceId))) nextCards.push(selected);
-              const next = { ...latest, house: nextHouse, cards: nextCards, equipped: equippedNow.map((id, i) => i === slot ? selected.instanceId : id) };
+              // V89: equipar NAO move a carta entre Galeria e Casa. So o slot muda.
+              // Antes, equipar pelo seletor tirava a carta da Casa e jogava na Galeria.
+              const next = { ...latest, equipped: equippedNow.map((id, i) => i === slot ? selected.instanceId : id) };
               const result = writeWaifuData(next);
               if (result && typeof result.then === 'function') await result;
               selectedWaifuCard = null;
@@ -7757,9 +7788,9 @@
   let runtime=null, monsterSystem=null, hud=null, toast=null, buttons=[], nextCastAt=[0,0,0], pendingCast=[false,false,false], autoTimer=null, refreshQueued=false, unsubscribers=[], bootTimer=null;
   const PASSIVE_ID='waifu:slime:intimacy', PASSIVE_MONKEY='waifu:monkey:intimacy', PASSIVE_RAT='waifu:rat:intimacy', LEVEL_ID='player:level-scaling';
   function equippedWaifus(){
-    const data=runtime?.progress?.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], equipped=Array.isArray(data.equipped)?data.equipped.slice(0,3):[];
+    const data=runtime?.progress?.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped.slice(0,3):[];
     while(equipped.length<3)equipped.push(null);
-    return equipped.map(id=>{const card=id?cards.find(c=>c&&c.instanceId===id):null;return card?String(card.waifuId||card.waifuType||card.id||'slime'):null;});
+    return equipped.map(id=>{const card=id?pool.find(c=>c&&c.instanceId===id):null;return card?String(card.waifuId||card.waifuType||card.id||'slime'):null;});
   }
   function updateLevelScaling(level){
     if(!runtime?.status?.snapshot)return false;
@@ -7770,8 +7801,8 @@
   }
   function refreshPassives(){
     if(!runtime?.status||!runtime?.progress)return false;
-    const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], equipped=Array.isArray(data.equipped)?data.equipped:[];
-    const has=id=>equipped.some(eid=>{const c=cards.find(x=>x&&x.instanceId===eid);return !!c&&String(c.waifuId||c.waifuType||c.id||'')===id;});
+    const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped:[];
+    const has=id=>equipped.some(eid=>{const c=pool.find(x=>x&&x.instanceId===eid);return !!c&&String(c.waifuId||c.waifuType||c.id||'')===id;});
     // V80: passivos por waifu equipada — Slime, Macaca (+0,2 vel. ataque, +0,5 penetração), Rata (+0,1 mov., +10 HP).
     if(has('slime')) runtime.status.addModifier('player',{id:PASSIVE_ID,stats:{defense:1,maxHp:10}});
     else runtime.status.removeModifier('player',PASSIVE_ID);
@@ -7871,7 +7902,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V88';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V89';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
