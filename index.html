@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V120 — árvores: base 0.08, manchas -20%, raleio do mapa antigo um pouco mais forte; pedrinhas: removidas todas as estruturas sólidas do mapa-base (inclui o círculo); render: fundo do canvas escuro (vazio não parece chão) + monstro só renderiza no chunk carregado. -->
+<!-- V121 — CAUSA RAIZ dos 3 bugs da V120: (1) vazio verde = laje createGroundBase verde do tamanho do mundo cobria o fundo escuro -> laje agora escura; (2) árvores = corte da V120 foi só -20% e as manchas dominavam + espalhador 198/207 plantava árvore extra -> manchas quase pela metade, base 0.05, raleio do mapa antigo mais forte; (3) pedrinhas = V120 só removeu pedras SÓLIDAS; o espalhador 198/207 plantava pedrinha em 2,2% da área nova + tile 198 limpo do mapa antigo. Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
 <head>
@@ -8,14 +8,14 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V120</title>
+<title>CONQUISTADOR DE WAIFU'S — V121</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17251b; }
     body { min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
-    #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #8ca450; touch-action: none; }
-    #game-root canvas { display: block; background: #8ca450; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+    #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #1d2416; touch-action: none; }
+    #game-root canvas { display: block; background: #1d2416; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
@@ -27,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V120</div>
+  <div id="version-badge">V121</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4174,18 +4174,18 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     const STRUCTURE_PLACEMENTS = [];
     const CAIRN_PLACEMENTS = [];
     const TREE_PATCHES = [
-      // V120 — manchas -20% (0.44->0.35 etc.): menos parede de árvore,
-      // sem limpar o mapa. Posições e formatos iguais.
-      { x: 10, y: 12, rx: 8, ry: 7, density: 0.35 },
-      { x: 76, y: 12, rx: 9, ry: 7, density: 0.34 },
-      { x: 11, y: 77, rx: 8, ry: 8, density: 0.35 },
-      { x: 78, y: 77, rx: 8, ry: 8, density: 0.34 },
-      { x: 15, y: 48, rx: 6, ry: 8, density: 0.24 },
-      { x: 75, y: 48, rx: 6, ry: 8, density: 0.24 },
-      { x: 24, y: 23, rx: 7, ry: 6, density: 0.22 },
-      { x: 66, y: 23, rx: 7, ry: 6, density: 0.22 },
-      { x: 24, y: 68, rx: 8, ry: 7, density: 0.21 },
-      { x: 66, y: 68, rx: 8, ry: 7, density: 0.21 }
+      // V121 — manchas cortadas quase pela metade (0.35->0.16 etc.): o
+      // corte de -20% da V120 não aparecia. Posições e formatos iguais.
+      { x: 10, y: 12, rx: 8, ry: 7, density: 0.16 },
+      { x: 76, y: 12, rx: 9, ry: 7, density: 0.16 },
+      { x: 11, y: 77, rx: 8, ry: 8, density: 0.16 },
+      { x: 78, y: 77, rx: 8, ry: 8, density: 0.16 },
+      { x: 15, y: 48, rx: 6, ry: 8, density: 0.13 },
+      { x: 75, y: 48, rx: 6, ry: 8, density: 0.13 },
+      { x: 24, y: 23, rx: 7, ry: 6, density: 0.12 },
+      { x: 66, y: 23, rx: 7, ry: 6, density: 0.12 },
+      { x: 24, y: 68, rx: 8, ry: 7, density: 0.12 },
+      { x: 66, y: 68, rx: 8, ry: 7, density: 0.12 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
@@ -4245,12 +4245,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     ];
     // V115 — manchas de pinheiros na montanha e na transição.
     const PINE_PATCHES = [
-      // V120 — manchas de pinheiro -20% (mesmo motivo da floresta).
-      { x: 150, y: 20, rx: 15, ry: 12, density: 0.28 },
-      { x: 160, y: 50, rx: 12, ry: 15, density: 0.26 },
-      { x: 140, y: 70, rx: 12, ry: 10, density: 0.24 },
-      { x: 170, y: 25, rx: 10, ry: 10, density: 0.22 },
-      { x: 135, y: 40, rx: 8, ry: 12, density: 0.20 }
+      // V121 — manchas de pinheiro quase pela metade (mesmo motivo).
+      { x: 150, y: 20, rx: 15, ry: 12, density: 0.15 },
+      { x: 160, y: 50, rx: 12, ry: 15, density: 0.14 },
+      { x: 140, y: 70, rx: 12, ry: 10, density: 0.13 },
+      { x: 170, y: 25, rx: 10, ry: 10, density: 0.12 },
+      { x: 135, y: 40, rx: 8, ry: 12, density: 0.11 }
     ];
     // GID do chão de neve (firstgid do tileset 'snow' em createTileLayer)
     // e códigos de estrutura dos assets (acima de qualquer GID do tileset).
@@ -4488,13 +4488,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const ny = (y - patch.y) / patch.ry;
         if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
       }
-            // V119 — a base 0.22 da V118 era remendo para o buraco do streaming:
-      // com o streaming consertado, ela virava parede de árvore. Base 0.10:
-      // V120 — ainda estava denso: base 0.10 -> 0.08. Sem limpar o mapa.
-      // floresta legível, chão visível. Não volta ao zero da V117 (entre
-      // as manchas ficava vazio). As manchas continuam iguais.
+            // V121 — base 0.08 -> 0.05: o corte da V120 (0.10->0.08) não
+      // aparecia. Floresta legível, chão visível, sem voltar ao zero
+      // da V117 (entre as manchas ficava vazio).
       if (!density) {
-        if (region === 'forest') density = 0.08;
+        if (region === 'forest') density = 0.05;
         else if (stableNoise(x, y, 97) < 0.035) density = 0.32;
       }
       if (!density || stableNoise(x, y, 103) > density) return 0;
@@ -4580,10 +4578,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const ny = (y - patch.y) / patch.ry;
         if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
       }
-            // V119 — mesmo motivo da floresta: base 0.20 da V118 era remendo.
-      // V120 — base 0.10 -> 0.08 (mesmo motivo da floresta).
+            // V121 — base 0.08 -> 0.05 (mesmo motivo da floresta).
       // As manchas de pinheiro continuam, com densidade menor abaixo.
-      if (!density && region === 'mountain') density = 0.08;
+      if (!density && region === 'mountain') density = 0.05;
       if (!density || stableNoise(x, y, 203) > density) return 0;
       if (checkSeal) {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -4712,6 +4709,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           // você queria manter sumir, fala qual que eu devolvo só ela.
           if (SOLID_IDS.has(originalStructures[sy][sx])) originalStructures[sy][sx] = 0;
           if (SOLID_IDS.has(originalUpperObjects[sy][sx])) originalUpperObjects[sy][sx] = 0;
+          // V121 — tile 198 = pedrinha (o mesmo do espalhador removido).
+          // Limpa as pedrinhas decorativas do mapa-base também; árvores,
+          // chão e pontes ficam intactos.
+          if (originalStructures[sy][sx] === 198) originalStructures[sy][sx] = 0;
+          if (originalUpperObjects[sy][sx] === 198) originalUpperObjects[sy][sx] = 0;
         }
       }
 
@@ -4731,10 +4733,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
               if (CENTRAL_TREE_IDS.has(originalStructures[ny][nx])) nearbyTrees += 1;
             }
           }
-          if (nearbyTrees < 6) continue;
-          // V120 — raleio do mapa antigo um pouco mais forte (teto 0.34->0.40,
-          // base 0.12->0.15): os aglomerados do mapa antigo também estavam densos.
-          const removalChance = Math.min(0.40, 0.15 + (nearbyTrees - 6) * 0.045);
+          if (nearbyTrees < 5) continue;
+          // V121 — raleio do mapa antigo bem mais forte (teto 0.40->0.55,
+          // base 0.15->0.30, limiar 6->5): o raleio da V120 não aparecia.
+          const removalChance = Math.min(0.55, 0.30 + (nearbyTrees - 5) * 0.05);
           if (stableNoise(x, y, 241) < removalChance) originalStructures[sy][sx] = 0;
         }
       }
@@ -4938,12 +4940,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           const cairnId = getCairnPlacementId(x, y);
           if (cairnId) upperObjects[ly][lx] = cairnId;
 
-          if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
-              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] && !upperObjects[ly][lx] &&
-              getRegionAt(generator, x, y) !== 'ice' &&
-              !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
-            upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
-          }
+          // V121 — REMOVIDO o espalhador de decoração (causa raiz das
+          // pedrinhas espalhadas na área nova: plantava o tile 198 =
+          // pedrinha e o 207 = árvore em 2,2% dos tiles livres). Sem ele,
+          // a área nova só tem árvore/pinheiro/pico onde a regra manda.
 
           // Margens e rio por último, para nenhuma regra pintar sobre eles.
           // A ponte vem depois ainda: pedra sobre a água, livre de estruturas.
@@ -5023,7 +5023,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         worldHeightPixels / 2,
         worldWidthPixels,
         worldHeightPixels,
-        color === undefined ? 0x8ca450 : color
+        color === undefined ? 0x1d2416 : color
       ).setDepth(0);
     }
 
@@ -5300,8 +5300,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     const DISPLAY_CONFIG = Object.freeze({
       width: 360,
       height: 640,
-      // V120 — o fundo do canvas era verde-grama: a área sem render
-      // parecia chão. Agora é escuro: o vazio lê como vazio, não como chão.
+      // V121 — o fundo escuro da V120 era verdade aqui (DISPLAY_CONFIG),
+      // mas a laje createGroundBase verde cobria ele. Laje agora 0x1d2416:
+      // o vazio lê como vazio, não como chão.
       backgroundColor: '#1d2416'
     });
     // Initial technical status values are isolated from the protected movement
@@ -7991,7 +7992,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 
       // ===== SISTEMA DE MUNDO E GERAÇÃO DE TERRENO =====
       buildWorld(sourceLayers) {
-        core.createGroundBase(this, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES, TILE_SIZE, 0x8ca450);
+        core.createGroundBase(this, WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES, TILE_SIZE, 0x1d2416);
         this.worldGenerator = core.prepareWorldGenerator(sourceLayers, WORLD_WIDTH_TILES, MAP_OFFSET, PLAYER_START, WORLD_HEIGHT_TILES);
 
         this.cliffTileIds = new Set(core.CLIFF_TILE_IDS);

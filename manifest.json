@@ -1,9 +1,9 @@
 {
-  "name": "CONQUISTADOR DE WAIFU'S (TESTE)",
-  "short_name": "CONQUISTADOR TESTE",
-  "description": "V120: menos árvores, sem pedrinhas, vazio escuro e monstro só no chunk carregado.",
+  "name": "CONQUISTADOR DE WAIFU'S",
+  "short_name": "CONQUISTADOR",
+  "description": "Conquistador de Waifu's — jogue no navegador ou instale como app.",
   "lang": "pt-BR",
-  "start_url": "./index-V120.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
