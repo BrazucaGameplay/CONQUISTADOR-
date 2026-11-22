@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V114</title>
+<title>CONQUISTADOR DE WAIFU'S — V115</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V114</div>
+  <div id="version-badge">V115</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4127,6 +4127,67 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 17, y: 49, rx: 6, ry: 9 },
       { x: 74, y: 48, rx: 7, ry: 9 }
     ];
+    // V115 — PENHASCOS COMO PLATÔS: cada patch é um ANEL de parede de pedra
+    // (1 a 2 tiles de espessura), não um bloco maciço. O miolo é topo de grama
+    // andável. A "pedra" como preenchimento some do jogo.
+    // VULCÃO: cone em degraus — 3 anéis concêntricos + cratera de terra escura.
+    // Fica no sudeste, longe do mapa original (30-60), do spawn (45,65),
+    // da entrada da dungeon (23,88) e da praia. A estrada que já passa ali
+    // vira a trilha de subida; a escada sul abre a segunda entrada.
+    const VOLCANO = Object.freeze({
+      x: 80, y: 64,
+      // V115: 2 anéis com folga de ~2 tiles entre eles. 3 anéis apertados
+      // faziam as paredes se tocarem e selarem as terraças.
+      rings: Object.freeze([
+        Object.freeze({ rx: 8.5, ry: 7 }),
+        Object.freeze({ rx: 5, ry: 3.8 })
+      ]),
+      crater: Object.freeze({ rx: 1.8, ry: 1.2 })
+    });
+    // V115 — RIO: canal estreito de 2 tiles, sinuoso, correndo de norte a sul
+    // em x ~= 61-66. Não encosta no mapa original (x <= 59), no spawn, na
+    // dungeon, nem no vulcão (x >= 72). As 3 estradas que já cruzam ele
+    // viram pontes, porque estrada tem prioridade sobre o rio.
+    function riverCenterX(y) {
+      return 63 + 1.8 * Math.sin(y * 0.11 + 0.4) + 0.9 * Math.sin(y * 0.29 + 2.1);
+    }
+    function isRiverChannelCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      if (y < 2 || y >= generator.worldHeight - 2) return false;
+      if (isOriginalTile(x, y, generator) || isSpawnClearance(generator, x, y)) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      const cx = Math.floor(riverCenterX(y));
+      return x === cx || x === cx + 1;
+    }
+    function isRiverBankCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      if (y < 2 || y >= generator.worldHeight - 2) return false;
+      if (isOriginalTile(x, y, generator) || isSpawnClearance(generator, x, y)) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      const cx = Math.floor(riverCenterX(y));
+      return x === cx - 1 || x === cx + 2;
+    }
+    function isCraterCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      if (isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
+          isSpawnClearance(generator, x, y)) return false;
+      const nx = (x - VOLCANO.x) / VOLCANO.crater.rx;
+      const ny = (y - VOLCANO.y) / VOLCANO.crater.ry;
+      return nx * nx + ny * ny < 1;
+    }
+    // Anel de penhasco: dentro da elipse externa, fora da elipse interna
+    // (1.6 tile mais estreita). A mesma borda irregular (ragged) nos dois
+    // lados mantém a espessura do anel quase constante.
+    function isRingCell(x, y, cx, cy, rx, ry, salt) {
+      const ragged = (stableNoise(x, y, salt) - 0.5) * 0.28;
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      const dOut = nx * nx + ny * ny;
+      if (dOut >= 1 + ragged) return false;
+      const ix = (x - cx) / Math.max(1, rx - 1.6);
+      const iy = (y - cy) / Math.max(1, ry - 1.6);
+      return ix * ix + iy * iy >= 1 + ragged;
+    }
     const TREE_PATCHES = [
       { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
       { x: 76, y: 12, rx: 9, ry: 7, density: 0.42 },
@@ -4147,7 +4208,16 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 85 }, { x: 49, y: 87 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
-      { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
+      { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 },
+      // V115: ESCADAS — 1 tile de caminho de terra cortando cada anel de
+      // platô/vulcão. Sem elas o topo seria inalcançável. Estrada já é
+      // andável e já tem prioridade sobre penhasco, então a escada abre
+      // o vão no anel sem nenhuma regra nova de colisão.
+      { points: [{ x: 9, y: 2 }, { x: 9, y: 22 }], width: 1 },
+      { points: [{ x: 78, y: 2 }, { x: 78, y: 22 }], width: 1 },
+      { points: [{ x: 8, y: 49 }, { x: 27, y: 49 }], width: 1 },
+      { points: [{ x: 65, y: 48 }, { x: 83, y: 48 }], width: 1 },
+      { points: [{ x: 80, y: 66 }, { x: 80, y: 78 }], width: 1 }
     ];
 
     function isOriginalTile(x, y, generator) {
@@ -4255,17 +4325,40 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           isSpawnClearance(generator, x, y)) return false;
       for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
         const patch = CLIFF_PATCHES[patchIndex];
-        const nx = (x - patch.x) / patch.rx;
-        const ny = (y - patch.y) / patch.ry;
-        const raggedEdge = (stableNoise(x, y, patchIndex + 61) - 0.5) * 0.28;
-        if (nx * nx + ny * ny < 1 + raggedEdge) return true;
+        if (isRingCell(x, y, patch.x, patch.y, patch.rx, patch.ry, patchIndex + 61)) return true;
+      }
+      for (let ringIndex = 0; ringIndex < VOLCANO.rings.length; ringIndex += 1) {
+        const ring = VOLCANO.rings[ringIndex];
+        if (isRingCell(x, y, VOLCANO.x, VOLCANO.y, ring.rx, ring.ry, 200 + ringIndex)) return true;
       }
       return false;
     }
 
     function getGeneratedTreeId(generator, x, y, cliff) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
-          isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
+          isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y) ||
+          isRiverChannelCell(generator, x, y) || isCraterCell(generator, x, y)) return 0;
+      // V115: sem árvore em encosta de vulcão (pedra nua) e sem árvore colada
+      // em penhasco, rio ou cratera. Sem isso, uma parede de árvores se junta
+      // com a parede de pedra e sela bolsões inalcançáveis nas terraças.
+      const vnx = (x - VOLCANO.x) / VOLCANO.rings[0].rx;
+      const vny = (y - VOLCANO.y) / VOLCANO.rings[0].ry;
+      if (vnx * vnx + vny * vny < 1.15) return 0;
+      // V115: topo de platô é campina, sem árvore. Uma parede de árvores
+      // no topo selava cantos inteiros do platô. Na V114 o topo era pedra
+      // maciça e também não tinha árvore — o visual se mantém.
+      for (const patch of CLIFF_PATCHES) {
+        const pnx = (x - patch.x) / patch.rx;
+        const pny = (y - patch.y) / patch.ry;
+        if (pnx * pnx + pny * pny < 1) return 0;
+      }
+      const neighbours = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dy] of neighbours) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (isCliffCell(generator, nx, ny) || isRiverChannelCell(generator, nx, ny) ||
+            isRiverBankCell(generator, nx, ny) || isCraterCell(generator, nx, ny)) return 0;
+      }
       let density = 0;
       for (const patch of TREE_PATCHES) {
         const nx = (x - patch.x) / patch.rx;
@@ -4417,6 +4510,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             continue;
           }
           if (isRoadCell(generator, x, y)) continue; // Roads remain walkable outside hard world boundaries.
+          // V115: o canal do rio e a cratera bloqueiam. A estrada já passou
+          // pelo teste acima, então onde ela cruza o rio ela vira ponte.
+          if (isRiverChannelCell(generator, x, y) || isCraterCell(generator, x, y)) {
+            blocked[localY][localX] = 1;
+            continue;
+          }
 
           if (isOriginalTile(x, y, generator)) {
             const sx = x - generator.mapOffset;
@@ -4529,6 +4628,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
           }
 
+          // V115: rio e cratera. Estrada nunca é pintada por cima: onde a
+          // estrada cruza o rio, o tile de terra dela fica e vira a ponte.
+          // A margem de areia não cobre penhasco: a pedra vence a margem.
+          if (!hasRoad(x, y)) {
+            if (isRiverChannelCell(generator, x, y)) {
+              ground[ly][lx] = 311;
+            } else if (isRiverBankCell(generator, x, y) && !cliffMask[ly + 1][lx + 1]) {
+              ground[ly][lx] = 51;
+            }
+            if (isCraterCell(generator, x, y)) {
+              ground[ly][lx] = 33;
+            }
+          }
+
           const generatedTreeId = getGeneratedTreeId(
             generator, x, y, cliffMask[ly + 1][lx + 1]
           );
@@ -4536,6 +4649,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 
           if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
               !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
+              !isRiverChannelCell(generator, x, y) && !isRiverBankCell(generator, x, y) &&
+              !isCraterCell(generator, x, y) &&
+              (((x - VOLCANO.x) / VOLCANO.rings[0].rx) ** 2 +
+               ((y - VOLCANO.y) / VOLCANO.rings[0].ry) ** 2 >= 1.15) &&
               !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
@@ -4797,7 +4914,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       chunkLoadRadius: 1,
       mapOffset: 30,
       playerStart: Object.freeze({ x: 45, y: 65 }),
-      worldId: 'overworld-90x120-v1'
+      worldId: 'overworld-90x120-v115'
     });
     const PLAYER_CONFIG = Object.freeze({
       frameSize: 32,
@@ -9395,7 +9512,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V114';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V115';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
