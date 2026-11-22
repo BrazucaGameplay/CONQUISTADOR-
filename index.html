@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V94</title>
+<title>CONQUISTADOR DE WAIFU'S — V95</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V94</div>
+  <div id="version-badge">V95</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5198,14 +5198,21 @@
               opened: false, equipSlot: null, unsubs: [],
               createUI() {
                 // V89: selo EQUIPADA + slot vazio da Casa (o resto das classes .cg-* vem da Galeria).
-                if (!doc.getElementById('conquistador-house-cards')) {
-                  const style = doc.createElement('style');
-                  style.id = 'conquistador-house-cards';
-                  style.textContent = '.cg-equipped{position:absolute;top:5px;left:5px;padding:2px 6px;border:1px solid #e6b84f;border-radius:10px;background:linear-gradient(180deg,#493727,#17110e);color:#f4dfaa;font:bold 9px Georgia,serif;letter-spacing:.05em}' +
-                    '.cg-empty{border-style:dashed!important;background:rgba(255,255,255,.02)!important;box-shadow:none!important;display:flex!important;align-items:center;justify-content:center;min-height:118px}' +
-                    '.cg-empty-label{color:rgba(221,208,185,.5);font:bold 12px Georgia,serif}';
-                  doc.head.appendChild(style);
-                }
+                // V95: a Casa carrega a PROPRIA copia das regras da carta (moldura + arte + barra).
+                // Antes ela dependia da tag de CSS da Galeria — se essa tag estivesse velha ou
+                // ausente, a carta da Casa desenhava com a geometria antiga (faixa 4/3 cortada).
+                // A tag e sempre reescrita, nunca reaproveitada.
+                let houseStyle = doc.getElementById('conquistador-house-cards');
+                if (!houseStyle) { houseStyle = doc.createElement('style'); houseStyle.id = 'conquistador-house-cards'; doc.head.appendChild(houseStyle); }
+                houseStyle.textContent = '.cg-equipped{position:absolute;top:5px;left:5px;padding:2px 6px;border:1px solid #e6b84f;border-radius:10px;background:linear-gradient(180deg,#493727,#17110e);color:#f4dfaa;font:bold 9px Georgia,serif;letter-spacing:.05em}' +
+                  '.cg-empty{border-style:dashed!important;background:rgba(255,255,255,.02)!important;box-shadow:none!important;display:flex!important;align-items:center;justify-content:center;min-height:118px}' +
+                  '.cg-empty-label{color:rgba(221,208,185,.5);font:bold 12px Georgia,serif}' +
+                  '.cg-card{position:relative;width:100%;padding:0;border:3px solid var(--q,#a9a9a9);outline:1px solid var(--q,#a9a9a9);outline-offset:-6px;border-radius:0;background:#0b0a10;overflow:hidden;cursor:pointer;touch-action:manipulation;display:flex;flex-direction:column;box-shadow:0 4px 10px rgba(0,0,0,.5)}' +
+                  '.cg-card.is-rainha{background:linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a);box-shadow:0 0 14px #ff2e88aa,0 0 18px #ffd70066,0 4px 10px rgba(0,0,0,.6)}' +
+                  '.cg-art{display:block;width:100%;aspect-ratio:2/3;object-fit:contain;object-position:center;background:#080c15}' +
+                  '.cg-foot{display:flex;flex-direction:column;gap:1px;padding:5px 4px 6px;text-align:center;background:var(--q,#a9a9a9)}' +
+                  '.cg-name{color:#221505;font:bold 10px/1.2 Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+                  '.cg-meta{color:rgba(34,21,5,.78);font:bold 9px/1.2 Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}';
                 const backdrop = el('div', { position: 'fixed', inset: '0', zIndex: '103', display: 'none', alignItems: 'center', justifyContent: 'center', padding: 'max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom))', background: 'rgba(0,0,0,.66)', backdropFilter: 'blur(2px)' });
                 const panel = el('section', { width: 'min(100%, 540px)', height: 'min(88dvh, 760px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: 'none', borderRadius: '22px', background: 'linear-gradient(180deg, rgba(31,25,21,.93), rgba(12,12,11,.88))', color: '#f3ead8', boxShadow: '0 18px 55px rgba(0,0,0,.68)', font: '14px/1.35 Georgia, serif', touchAction: 'pan-y' });
                 const header = el('div', { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 18px' });
@@ -7905,7 +7912,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V94';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V95';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
