@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V112</title>
+<title>CONQUISTADOR DE WAIFU'S — V113</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V112</div>
+  <div id="version-badge">V113</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5198,6 +5198,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.slamPending = null;
         this.nextBossSlamAt = 0;
         this.bossEnraged = false;
+        this.bossGateLocked = false;
+        this.bossGate = null;
         this.toastText = null;
         this.eventBus = null;
         this.statusSystem = null;
@@ -5219,6 +5221,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.slamPending = null;
         this.nextBossSlamAt = 0;
         this.bossEnraged = false;
+        this.bossGateLocked = false;
+        this.bossGate = null;
         this.facingRow = 0;
         this.toastText = null;
         this.eventBus = GAME_RUNTIME.eventBus;
@@ -5448,8 +5452,18 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           sprite.setDisplaySize(display.width, display.height);
           sprite.setOrigin(0.5, 0.86);
           sprite.setDepth(pos.y + 10);
-          sprite.body.setSize(18, 12);
-          sprite.body.setOffset(6, 9);
+          // V113: o boss usa corpo proprio. Antes ele usava o mesmo corpo
+          // dos macaquinhos (18x12, offset 6,9) num sprite de 58x58: o corpo
+          // ficava ~1 tile ACIMA de onde o sprite parecia estar, entao o boss
+          // travava no muro/na linha de arvores do topo da sala 3 e parecia
+          // "nao perseguir na parte de cima". Agora o corpo fica nos pes.
+          if (isBoss) {
+            sprite.body.setSize(26, 16);
+            sprite.body.setOffset(16, 42);
+          } else {
+            sprite.body.setSize(18, 12);
+            sprite.body.setOffset(6, 9);
+          }
           sprite.setCollideWorldBounds(true);
           const label = this.add.text(pos.x, pos.y - display.height - 2, isBoss ? 'BRUTAMONTE' : String(stats.level || ''), {
             fontFamily: 'system-ui, sans-serif', fontSize: isBoss ? '10px' : '8px',
@@ -5798,6 +5812,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           }
         });
         if (monster.isBoss) {
+          // V113: matar o boss castando deixava a marca da skill pra sempre —
+          // o updateBossSlam retorna cedo com o boss morto e ninguem limpava.
+          this.clearBossSlam();
+          this.unlockBossRoom();
           this.recordBossKill();
           this.showToast('🏆 BRUTAMONTE DERROTADO!', 3200);
           return;
@@ -5851,6 +5869,64 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.showToast('🪵 O tronco caiu! A passagem abriu.', 2600);
       }
 
+      clearBossSlam() {
+        if (this.slamTelegraph && this.slamTelegraph.active) this.slamTelegraph.destroy();
+        this.slamTelegraph = null;
+        this.slamPending = null;
+      }
+
+      updateBossRoomLock() {
+        // V113: ao entrar na sala do boss, a porta bate atras do jogador —
+        // nao da mais pra sair no meio da luta. O tronco do portao 2 volta
+        // a bloquear o corredor; ao matar o boss, ele cai de novo.
+        const boss = this.bossRecord;
+        if (!boss || !boss.alive || this.bossGateLocked) return;
+        if (this.roomKeyOfTile(this.playerBodyTile()) !== 'room3') return;
+        const gate = this.layout.gates.find(g => g.roomKey === 'room2');
+        if (!gate) return;
+        this.bossGateLocked = true;
+        const bodies = [];
+        for (const t of gate.tiles) {
+          const rect = this.add.rectangle(
+            (t.x + 0.5) * TILE_SIZE, (t.y + 0.5) * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x6b4423, 0
+          );
+          rect.setDepth(50);
+          this.physics.add.existing(rect, true);
+          bodies.push(rect);
+          this.layout.blocked[t.y][t.x] = 1;
+        }
+        this.physics.add.collider(this.player, bodies);
+        const cx = (gate.tiles.reduce((sum, t) => sum + t.x, 0) / gate.tiles.length + 0.5) * TILE_SIZE;
+        const cy = (gate.tiles.reduce((sum, t) => sum + t.y, 0) / gate.tiles.length + 0.5) * TILE_SIZE;
+        const tree = this.add.image(cx, cy, 'tiles', this.getDungeonTileFrame(261));
+        tree.setOrigin(0.5, 0.5);
+        tree.setScale(2);
+        tree.setAngle(82);
+        tree.setDepth((Math.max(...gate.tiles.map(t => t.y)) + 1) * TILE_SIZE);
+        const label = this.add.text(cx, cy - 22, '🚪 A SALA TRANCOU!', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '8px', fontStyle: 'bold', color: '#ffe9b0',
+          backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 4, y: 2 }, align: 'center'
+        }).setOrigin(0.5, 1).setDepth(200);
+        this.bossGate = { bodies, treeImage: tree, label, tiles: gate.tiles };
+        this.showToast('🚪 A sala trancou! Derrote o Brutamonte para sair.', 3000);
+      }
+
+      unlockBossRoom() {
+        const g = this.bossGate;
+        if (!g) return;
+        this.bossGate = null;
+        this.bossGateLocked = false;
+        for (const body of g.bodies) if (body.active) body.destroy();
+        for (const t of g.tiles) this.layout.blocked[t.y][t.x] = 0;
+        if (g.treeImage && g.treeImage.active) {
+          this.tweens.add({
+            targets: g.treeImage, alpha: 0, duration: 400,
+            onComplete: () => { if (g.treeImage.active) g.treeImage.destroy(); }
+          });
+        }
+        if (g.label && g.label.active) g.label.destroy();
+      }
+
       exitDungeon(defeated) {
         if (this.exiting) return;
         this.exiting = true;
@@ -5873,6 +5949,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.updatePlayerMovement();
         this.updatePlayerAttack(now);
         this.updateMonsters(now);
+        this.updateBossRoomLock();
         this.updateBossSlam(now);
         this.refreshHud();
         const hp = this.statusSystem.getStat('player', 'hp');
@@ -6090,7 +6167,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           this.createDungeonEntrance();
           this.setupCamera();
           this.input.mouse.disableContextMenu();
-          this.input.on('pointerdown', this.onMapTap, this);
+          // V113: arrastar move a CAMERA (olhar para o lado); toque move o
+          // jogador — igual a dungeon (V107). Antes, qualquer arrastar era
+          // um toque e o jogador andava sem voce querer.
+          this.worldPan = { active: false, panning: false, startX: 0, startY: 0, lastX: 0, lastY: 0 };
+          this.input.on('pointerdown', this.onWorldPointerDown, this);
+          this.input.on('pointermove', this.onWorldPointerMove, this);
+          this.input.on('pointerup', this.onWorldPointerUp, this);
           // Additive extension hook: the V12/V13 world core remains unchanged.
           // MonsterSystem owns only its entity, visuals, combat loop and drops.
           this.monsterSystem = new systems.MonsterSystem(this.extensionAPI, {
@@ -8378,6 +8461,68 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.dungeonEntranceText.setInteractive({ useHandCursor: true });
         this.dungeonEntranceText.on('pointerdown', () => this.openDungeonPanel());
         this.createDungeonPanel();
+        this.createDungeonRuin();
+      }
+
+      // ===== V113 — RUINA na entrada da dungeon (23,88), no mundo =====
+      // Salao em ruinas ao redor da entrada: muros quebrados, pilares
+      // caidos, entulho e mata invadindo. A entrada (23,88) fica livre
+      // no meio — o jogador pisa nela e o texto/painel funcionam igual.
+      getWorldTileFrame(tileId) {
+        const frameName = 'world-tile-' + tileId;
+        const tex = this.textures.get('tiles');
+        if (!tex.has(frameName)) {
+          const frameIndex = tileId - 1;
+          tex.add(frameName, 0, (frameIndex % 27) * TILE_SIZE, Math.floor(frameIndex / 27) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+        return frameName;
+      }
+
+      createDungeonRuin() {
+        const EX = DUNGEON_SCENE_CONFIG.entranceTile.x; // 23
+        const EY = DUNGEON_SCENE_CONFIG.entranceTile.y; // 88
+        const bodies = [];
+        const addBlock = (tx, ty, gid, opts = {}) => {
+          const scale = opts.scale || 1;
+          const img = this.add.image(
+            (tx + 0.5) * TILE_SIZE, (ty + 1) * TILE_SIZE, 'tiles', this.getWorldTileFrame(gid)
+          );
+          img.setOrigin(0.5, 1);
+          img.setScale(scale);
+          if (opts.angle) img.setAngle(opts.angle);
+          img.setDepth((ty + 1) * TILE_SIZE);
+          if (opts.solid === false) return;
+          const rect = this.add.rectangle(
+            (tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x6b4423, 0
+          );
+          rect.setDepth(50);
+          this.physics.add.existing(rect, true);
+          bodies.push(rect);
+        };
+        // Muro dos fundos (norte): quebrado, com brechas.
+        for (const [dx, gid] of [[-4, 137], [-3, 163], [-1, 109], [1, 111], [3, 139], [4, 165]]) addBlock(EX + dx, EY - 5, gid);
+        // Muros laterais: quebrados, com brechas.
+        for (const dy of [-4, -2, 0]) {
+          addBlock(EX - 4, EY + dy, 137);
+          addBlock(EX + 4, EY + dy, 137);
+        }
+        // Arco da frente (sul): dois pilares altos.
+        addBlock(EX - 3, EY + 2, 137, { scale: 2 });
+        addBlock(EX + 3, EY + 2, 137, { scale: 2 });
+        // Pilares quebrados no interior (fora do caminho da entrada).
+        addBlock(EX - 2, EY - 2, 137, { scale: 2 });
+        addBlock(EX + 2, EY - 2, 137, { scale: 2 });
+        // Coluna caída na frente, atravessada.
+        addBlock(EX - 4, EY + 2, 137, { scale: 2, angle: 90 });
+        // Entulho nos cantos dos fundos.
+        addBlock(EX - 3, EY - 4, 110);
+        addBlock(EX + 3, EY - 4, 112);
+        // Mata invadindo: arvores crescendo nos cantos da ruina (só visual —
+        // o muro/pilar debaixo ja bloqueia o tile).
+        addBlock(EX - 4, EY - 5, 207, { scale: 3, solid: false });
+        addBlock(EX + 4, EY - 5, 261, { scale: 3, solid: false });
+        addBlock(EX, EY - 5, 706, { scale: 2, solid: false });
+        if (bodies.length) this.physics.add.collider(this.player, bodies);
       }
 
       createDungeonPanel() {
@@ -8565,6 +8710,44 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
 
       // ===== ENTRADA DO JOGADOR E PLANEJAMENTO DE ROTA =====
+      onWorldPointerDown(pointer) {
+        if (!this.player) return;
+        this.worldPan.active = true;
+        this.worldPan.panning = false;
+        this.worldPan.startX = pointer.x;
+        this.worldPan.startY = pointer.y;
+        this.worldPan.lastX = pointer.x;
+        this.worldPan.lastY = pointer.y;
+      }
+
+      onWorldPointerMove(pointer) {
+        if (!this.worldPan.active || !pointer.isDown || !this.player) return;
+        const dx = pointer.x - this.worldPan.lastX;
+        const dy = pointer.y - this.worldPan.lastY;
+        this.worldPan.lastX = pointer.x;
+        this.worldPan.lastY = pointer.y;
+        if (!this.worldPan.panning) {
+          if (Math.hypot(pointer.x - this.worldPan.startX, pointer.y - this.worldPan.startY) < 12) return;
+          this.worldPan.panning = true;
+          this.cameras.main.stopFollow();
+        }
+        const cam = this.cameras.main;
+        const zoom = cam.zoom || 1;
+        cam.scrollX -= dx / zoom;
+        cam.scrollY -= dy / zoom;
+      }
+
+      onWorldPointerUp(pointer) {
+        if (!this.worldPan.active) return;
+        const wasPanning = this.worldPan.panning;
+        this.worldPan.active = false;
+        this.worldPan.panning = false;
+        if (wasPanning || !this.player) return;
+        // Toque (sem arrastar): camera volta a seguir o jogador e ele anda.
+        this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+        this.onMapTap(pointer);
+      }
+
       onMapTap(pointer) {
         if (pointer.rightButtonDown()) return;
         pointer.updateWorldPoint(this.cameras.main);
@@ -9155,7 +9338,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V112';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V113';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
