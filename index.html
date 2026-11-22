@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V105</title>
+<title>CONQUISTADOR DE WAIFU'S — V106</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V105</div>
+  <div id="version-badge">V106</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4897,7 +4897,7 @@
     }
 
 
-    // ===== V103 — DUNGEON: CIDADE ABANDONADA =====
+    // ===== V106 — DUNGEON: RUÍNAS DA MATA =====
     // Cena Phaser SEPARADA. A dungeon NUNCA toca o mundo aberto:
     // mapa, colisao, camera e monstros sao proprios desta cena.
     // O unico contato com o mundo aberto e:
@@ -4906,16 +4906,16 @@
     // O save NUNCA grava a posicao dentro da dungeon: o WorldScene fica
     // pausado (sem update, sem auto-save) enquanto a dungeon esta ativa.
     // Visual: cidade ABANDONADA, nao assombrada — dia claro, pedra rachada,
-    // muros em ruina e a FLORESTA invadindo a cidade (arvores, musgo, hera).
+    // muros em ruina e a FLORESTA invadindo a ruína (arvores, musgo, hera).
     // Regra anti-parede-invisivel: TODA celula bloqueada tem algo visivel
     // em cima (muro, tronco, arvore ou entulho). Nada de bloqueio pelado.
     const DUNGEON_SCENE_CONFIG = Object.freeze({
-      id: 'cidade-abandonada',
-      name: 'Cidade Abandonada',
+      id: 'cidade-abandonada', // chave do save — nao mudar (progresso do chefe).
+      name: 'Ruínas da Mata',
       recommendedLevel: 5,
       width: 36,
       height: 30,
-      entranceTile: Object.freeze({ x: 45, y: 45 }),
+      entranceTile: Object.freeze({ x: 23, y: 88 }), // clareira no meio das arvores (print do jogador).
       arrivalTile: Object.freeze({ x: 8, y: 5 }),
       exitTile: Object.freeze({ x: 8, y: 3 }),
       bossTile: Object.freeze({ x: 18, y: 22 }),
@@ -4931,7 +4931,7 @@
       }),
       rooms: Object.freeze([
         Object.freeze({
-          key: 'room1', name: 'SALA 1 — RUÍNAS',
+          key: 'room1',
           rect: Object.freeze({ x0: 2, y0: 2, x1: 15, y1: 9 }),
           gate: Object.freeze({ tiles: Object.freeze([{ x: 17, y: 5 }, { x: 17, y: 6 }]), angle: 8 }),
           monkeys: Object.freeze([
@@ -4940,7 +4940,7 @@
           ])
         }),
         Object.freeze({
-          key: 'room2', name: 'SALA 2 — SALÃO EM RUÍNA',
+          key: 'room2',
           rect: Object.freeze({ x0: 20, y0: 2, x1: 33, y1: 9 }),
           gate: Object.freeze({ tiles: Object.freeze([{ x: 25, y: 12 }, { x: 26, y: 12 }]), angle: 82 }),
           monkeys: Object.freeze([
@@ -4949,7 +4949,7 @@
           ])
         }),
         Object.freeze({
-          key: 'room3', name: 'SALA 3 — TRONO DO BRUTAMONTE',
+          key: 'room3',
           rect: Object.freeze({ x0: 8, y0: 15, x1: 27, y1: 26 }),
           gate: null,
           monkeys: Object.freeze([])
@@ -5149,7 +5149,7 @@
       constructor() {
         super('DungeonScene');
         this.layout = null;
-        this.returnTile = { x: 45, y: 45 };
+        this.returnTile = { x: 23, y: 88 }; // fallback = entrada atual (clareira).
         this.path = [];
         this.monsters = [];
         this.gates = [];
@@ -5183,7 +5183,7 @@
         this.bossEnraged = false;
         this.facingRow = 0;
         this.toastText = null;
-        this.returnTile = (data && data.returnTile) || { x: 45, y: 45 };
+        this.returnTile = (data && data.returnTile) || { x: 23, y: 88 };
         this.eventBus = GAME_RUNTIME.eventBus;
         this.statusSystem = GAME_RUNTIME.statusSystem;
         this.saveSystem = GAME_RUNTIME.saveSystem;
@@ -5210,7 +5210,7 @@
         const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
         hide('conquistador-main-menu');
         hide('conquistador-minimap');
-        hide('conquistador-player-status-entry');
+        // V106: a silhueta do status FICA visivel na dungeon (abre o status).
       }
 
       restoreOverworldHud() {
@@ -5313,14 +5313,7 @@
       }
 
       buildLabels() {
-        for (const room of DUNGEON_SCENE_CONFIG.rooms) {
-          const cx = ((room.rect.x0 + room.rect.x1) / 2 + 0.5) * TILE_SIZE;
-          const cy = (room.rect.y0 + 0.5) * TILE_SIZE - 10;
-          this.add.text(cx, cy, room.name, {
-            fontFamily: 'Georgia, serif', fontSize: '10px', fontStyle: 'bold', color: '#ffe9b0',
-            backgroundColor: 'rgba(20,14,8,.6)', padding: { x: 6, y: 3 }, align: 'center'
-          }).setOrigin(0.5, 1).setDepth(200);
-        }
+        // V106: sem nome flutuante nas salas (SALA 1/2/3). So SAIDA e TRONCO CAIDO.
         const exit = DUNGEON_SCENE_CONFIG.exitTile;
         const exitText = this.add.text(
           (exit.x + 0.5) * TILE_SIZE, (exit.y + 0.5) * TILE_SIZE - 14, '🚪 SAÍDA', {
@@ -8235,14 +8228,14 @@
       }
 
 
-      // ===== V103 — DUNGEON: entrada na cidade (45,45) =====
+      // ===== V106 — DUNGEON: entrada na clareira da mata (23,88) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
       // aberto muda: a dungeon vive na DungeonScene, cena separada.
       createDungeonEntrance() {
         const tile = DUNGEON_SCENE_CONFIG.entranceTile;
         const x = (tile.x + 0.5) * TILE_SIZE;
         const y = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
-        this.dungeonEntranceText = this.add.text(x, y - 18, '🏚 CIDADE ABANDONADA', {
+        this.dungeonEntranceText = this.add.text(x, y - 18, '🌳 RUÍNAS DA MATA', {
           fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
           backgroundColor: 'rgba(20,14,8,.72)', padding: { x: 6, y: 3 }, align: 'center'
         }).setOrigin(0.5, 1).setDepth(10000);
@@ -8267,10 +8260,10 @@
           color: '#f4dfaa', textAlign: 'center', boxShadow: '0 10px 40px rgba(0,0,0,.6)'
         });
         const title = document.createElement('h2');
-        title.textContent = '🏚 CIDADE ABANDONADA';
+        title.textContent = '🌳 RUÍNAS DA MATA';
         Object.assign(title.style, { margin: '0 0 8px', fontSize: '20px', letterSpacing: '.04em' });
         const desc = document.createElement('p');
-        desc.textContent = 'Uma cidade abandonada, tomada pela floresta. Ruas rachadas, muros em ruína, árvores crescendo dentro das casas. Três salas — e no fundo, no trono, o Macaco Brutamonte espera.';
+        desc.textContent = 'Uma ruína tomada pela mata. Muros caídos, pedras e árvores crescendo por tudo. Três salas — e no fundo, no trono, o Macaco Brutamonte espera.';
         Object.assign(desc.style, { margin: '0 0 10px', fontSize: '13px', lineHeight: '1.5', color: '#e8d9b0' });
         const meta = document.createElement('p');
         meta.textContent = 'Nível recomendado: 5  •  3 salas  •  Chefe: Macaco Brutamonte Nv. 8';
@@ -8282,7 +8275,7 @@
         Object.assign(row.style, { display: 'flex', gap: '10px', justifyContent: 'center' });
         const enter = document.createElement('button');
         enter.type = 'button';
-        enter.textContent = 'ENTRAR NA CIDADE';
+        enter.textContent = 'ENTRAR NAS RUÍNAS';
         Object.assign(enter.style, {
           minWidth: '150px', minHeight: '42px', padding: '8px 16px', border: '1px solid #b99a64',
           borderRadius: '22px', background: 'linear-gradient(180deg,#6b4d1f,#33240f)',
@@ -8321,7 +8314,7 @@
         const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
         hide('conquistador-main-menu');
         hide('conquistador-minimap');
-        hide('conquistador-player-status-entry');
+        // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // Troca de cena: o WorldScene pausa (sem update, sem auto-save),
         // a DungeonScene assume. O save nunca grava a posicao da dungeon.
         this.scene.launch('DungeonScene', {
@@ -8984,7 +8977,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V105';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V106';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
