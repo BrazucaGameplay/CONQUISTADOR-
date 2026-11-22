@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V115</title>
+<title>CONQUISTADOR DE WAIFU'S — V114</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V115</div>
+  <div id="version-badge">V114</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -889,9 +889,6 @@
         for (let y = startY + 1; y < endY - 1; y += 1) {
           for (let x = startX + 1; x < endX - 1; x += 1) {
             if (!this.world.isWalkable(x, y, 'player')) continue;
-            // V115 — monstros só nascem na floresta. Nada nasce na lava, na
-            // montanha, no rio ou na faixa chamuscada.
-            if (this.world.getRegionAt && this.world.getRegionAt(x, y) !== 'forest') continue;
             if (playerTile && Math.max(Math.abs(playerTile.x - x), Math.abs(playerTile.y - y)) < 4) continue;
 
             // Avoid overlapping newly spawned groups and existing monsters,
@@ -4128,42 +4125,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 9, y: 12, rx: 9, ry: 7 },
       { x: 78, y: 12, rx: 10, ry: 8 },
       { x: 17, y: 49, rx: 6, ry: 9 },
-      { x: 74, y: 48, rx: 7, ry: 9 },
-      // V115 — MACIÇOS MONTANHOSOS ao sul do rio. São penhascos de verdade:
-      // elipses grandes de rocha; as estradas escavam a passagem por dentro.
-      { x: 72, y: 168, rx: 20, ry: 15 },
-      { x: 30, y: 150, rx: 17, ry: 13 },
-      { x: 115, y: 185, rx: 20, ry: 13 },
-      { x: 18, y: 120, rx: 12, ry: 10 },
-      { x: 100, y: 130, rx: 14, ry: 11 },
-      { x: 52, y: 205, rx: 20, ry: 8 },
-      // Cones vulcânicos: rocha escura na área de lava.
-      { x: 140, y: 60, rx: 10, ry: 12 },
-      { x: 130, y: 150, rx: 9, ry: 11 }
-    ];
-    // V115 — PAREDÕES: faixas verticais de penhasco com UM vão cada, por onde
-    // a estrada passa. Sem o vão, o paredão selaria o mapa em dois.
-    const CLIFF_WALLS = [
-      { x0: 48, x1: 50, y0: 118, y1: 150, gapY0: 131, gapY1: 135 },
-      { x0: 100, x1: 102, y0: 128, y1: 165, gapY0: 147, gapY1: 151 },
-      { x0: 20, x1: 22, y0: 158, y1: 196, gapY0: 175, gapY1: 179 }
-    ];
-    // V115 — Linha do rio: o antigo "mar" virou rio. O rio corta o mundo em
-    // y ~= 90 e separa a floresta (norte) das montanhas (sul).
-    const RIVER_BASELINE_Y = 90;
-    const BRIDGE_XS = [38, 80];
-    const BRIDGE_HALF_WIDTH = 1;
-    const BRIDGE_HALF_SPAN = 7;
-    // Estruturas fixas: pilares de obsidiana na lava, torres em ruína na
-    // montanha. Todas fora das estradas, para nunca tapar o caminho.
-    const STRUCTURE_PLACEMENTS = [
-      { x: 128, y: 55, id: 904 }, { x: 145, y: 120, id: 905 }, { x: 124, y: 152, id: 904 },
-      { x: 40, y: 140, id: 1004 }, { x: 95, y: 170, id: 1006 }
-    ];
-    // Marcos de pedra (não bloqueiam): platô do pico, vãos dos paredões.
-    const CAIRN_PLACEMENTS = [
-      { x: 70, y: 166, id: 198 }, { x: 74, y: 170, id: 198 }, { x: 70, y: 172, id: 198 },
-      { x: 50, y: 133, id: 198 }, { x: 101, y: 149, id: 198 }, { x: 21, y: 177, id: 198 }
+      { x: 74, y: 48, rx: 7, ry: 9 }
     ];
     const TREE_PATCHES = [
       { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
@@ -4176,30 +4138,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
       { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
-      // V115 — floresta nova a LESTE do mapa antigo, até a faixa de transição.
-      // Nenhum patch ao sul do rio: lá não há floresta.
-      { x: 100, y: 18, rx: 14, ry: 11, density: 0.42 },
-      { x: 106, y: 52, rx: 12, ry: 13, density: 0.40 },
-      { x: 98, y: 80, rx: 12, ry: 9, density: 0.38 },
-      { x: 62, y: 16, rx: 12, ry: 10, density: 0.30 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      // V115 — a trilha sul agora segue até a ponte 1 e atravessa o rio.
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 39, y: 86 }, { x: 38, y: 100 }, { x: 45, y: 112 }], width: 2 },
-      // V115 — acesso à ponte 2 e à montanha leste.
-      { points: [{ x: 80, y: 62 }, { x: 82, y: 78 }, { x: 80, y: 90 }, { x: 80, y: 102 }, { x: 88, y: 115 }, { x: 95, y: 128 }], width: 2 },
-      // V115 — SUBIDA DO PICO: zigue-zague escavado no maciço (72,168).
-      // Cada dobra atravessa o penhasco; o fim é o platô do topo.
-      { points: [{ x: 45, y: 120 }, { x: 49, y: 133 }, { x: 55, y: 140 }, { x: 52, y: 152 }, { x: 70, y: 158 }, { x: 56, y: 166 }, { x: 88, y: 172 }, { x: 72, y: 168 }], width: 2 },
-      // V115 — montanha leste, passando pelo vão do paredão 2.
-      { points: [{ x: 88, y: 115 }, { x: 101, y: 149 }, { x: 90, y: 162 }, { x: 104, y: 172 }, { x: 96, y: 186 }, { x: 110, y: 200 }], width: 2 },
-      // V115 — montanha oeste, passando pelo vão do paredão 3.
-      { points: [{ x: 14, y: 148 }, { x: 20, y: 160 }, { x: 21, y: 177 }, { x: 30, y: 190 }, { x: 44, y: 198 }], width: 2 },
-      // V115 — estrada da lava: corta a área vulcânica de norte a sul.
-      { points: [{ x: 112, y: 20 }, { x: 126, y: 40 }, { x: 138, y: 70 }, { x: 130, y: 100 }, { x: 142, y: 130 }, { x: 136, y: 165 }, { x: 148, y: 198 }], width: 2 },
+      // The southern trail ends on the beach; the ocean is impassable.
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 85 }, { x: 49, y: 87 }], width: 2 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
@@ -4223,72 +4168,50 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         Math.abs(y - generator.playerStart.y) <= 5;
     }
 
-    // V115 — O RIO. O antigo "mar" perdeu a identidade de mar: agora é um
-    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 5 tiles
-    // de largura (centro +-2); as margens são areia. Duas pontes de pedra
-    // (x=38 e x=80) atravessam o rio e ligam floresta e montanhas.
+    // The coast now sits directly after the existing southern land area.
+    // Coordinates are global so the irregular shoreline is continuous across
+    // all three columns and every chunk boundary. The entire lower extension
+    // becomes ocean; only a narrow sand strip remains between land and water.
     function getSouthernCoastlineY(generator, x) {
-      const cx = Math.max(0, Math.min(generator.worldTiles - 1, x));
-      const broadBend = Math.sin(cx * 0.09 + 0.5) * 2;
-      const smallBend = Math.sin(cx * 0.21 + 1.3) * 1.2;
-      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 1.5;
-      return Math.round(RIVER_BASELINE_Y + broadBend + smallBend + roughness);
+      const broadBend = Math.sin(x * 0.105 + 0.65) * 1.75;
+      const smallBend = Math.sin(x * 0.255 + 1.9) * 0.75;
+      const roughness = (stableNoise(x, 0, 997) - 0.5) * 0.9;
+      const baseline = generator.legacyWorldHeight - 2;
+      const coastY = Math.round(baseline + broadBend + smallBend + roughness);
+      return Math.max(generator.legacyWorldHeight - 4,
+        Math.min(generator.legacyWorldHeight - 1, coastY));
     }
 
-    function getFireBoundaryX(generator, y) {
-      const cy = Math.max(0, Math.min(generator.worldHeight - 1, y));
-      const wave = Math.sin(cy * 0.11 + 0.4) * 5 + Math.sin(cy * 0.031 + 2.1) * 3;
-      const roughness = (stableNoise(0, cy, 881) - 0.5) * 4;
-      return 118 + wave + roughness;
-    }
-
-    // Região do tile, sem contar rio/margem/ponte: 'forest' | 'scorched' |
-    // 'fire' | 'mountain'. A faixa chamuscada ('scorched') é a transição
-    // entre a floresta e a lava, para a borda não ser um corte seco.
-    function getRegionAt(generator, x, y) {
-      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return 'forest';
-      const edge = getFireBoundaryX(generator, y);
-      if (x >= edge + 7) return 'fire';
-      if (x >= edge - 9) return 'scorched';
-      if (y > getSouthernCoastlineY(generator, x) + 4) return 'mountain';
-      return 'forest';
-    }
-
-    function isBridgeCell(generator, x, y) {
-      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
-      for (let i = 0; i < BRIDGE_XS.length; i += 1) {
-        if (Math.abs(x - BRIDGE_XS[i]) <= BRIDGE_HALF_WIDTH &&
-            Math.abs(y - getSouthernCoastlineY(generator, x)) <= BRIDGE_HALF_SPAN) return true;
-      }
-      return false;
-    }
-
+    // Four sand rows form the beach. The shoreline is deliberately placed at
+    // the former southern land boundary, not near the bottom of the map.
     function isSouthernBeachCell(generator, x, y) {
-      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
-      if (isBridgeCell(generator, x, y)) return false;
-      const distance = Math.abs(y - getSouthernCoastlineY(generator, x));
-      return distance >= 3 && distance <= 4;
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 6 ||
+          y >= generator.worldHeight) return false;
+      const distance = y - getSouthernCoastlineY(generator, x);
+      return distance >= -2 && distance <= 1;
     }
 
     function isOceanCell(generator, x, y) {
-      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
-      if (isBridgeCell(generator, x, y)) return false;
-      return Math.abs(y - getSouthernCoastlineY(generator, x)) <= 2;
+      if (generator.worldHeight <= generator.legacyWorldHeight ||
+          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 2 ||
+          y >= generator.worldHeight) return false;
+      return y >= getSouthernCoastlineY(generator, x) + 2;
     }
 
     function getBeachTileId(generator, x, y) {
       const distance = y - getSouthernCoastlineY(generator, x);
       // GID 52 is the Puny World grass-to-sand transition, oriented with land north
       // and beach south. The remaining rows use the full-sand GID 51.
-      return distance === -4 ? 52 : 51;
+      return distance === -2 ? 52 : 51;
     }
 
     function getShorelineTileId(generator, x, y) {
-      // As margens do rio: fora do mundo, a água só continua na faixa do rio.
+      // The sea meets the beach at the southern edge of the land. Treat the
+      // world sides as open water so the coastline does not turn up the edges.
       const isWaterAt = (tx, ty) => {
-        if (tx < 0 || tx >= generator.worldTiles || ty < 0 || ty >= generator.worldHeight) {
-          return Math.abs(ty - getSouthernCoastlineY(generator, tx)) <= 2;
-        }
+        if (tx < 0 || tx >= generator.worldTiles || ty >= generator.worldHeight) return true;
+        if (ty < generator.legacyWorldHeight - 2 || ty < 0) return false;
         return isOceanCell(generator, tx, ty);
       };
       const mask =
@@ -4302,46 +4225,34 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     function getOceanTileId(generator, x, y) {
       const shorelineTile = getShorelineTileId(generator, x, y);
       if (shorelineTile) return shorelineTile;
-      const depth = Math.abs(y - getSouthernCoastlineY(generator, x));
+      const depth = y - getSouthernCoastlineY(generator, x);
       const variation = stableNoise(x, y, 751);
-      // GIDs 311/316 are the Puny World shallow/medium water fills.
-      if (depth <= 1) return variation < 0.045 ? 298 : 311;
-      return variation < 0.24 ? 311 : 316;
+      // GIDs 311/316/321 are the Puny World shallow, medium and deep sea fills.
+      if (depth <= 5) return variation < 0.045 ? 298 : 311;
+      if (depth <= 10) return variation < 0.24 ? 311 : 316;
+      if (depth <= 15) return variation < 0.28 ? 316 : 321;
+      return variation < 0.10 ? 316 : 321;
     }
 
-    // Detalhes procedurais ficam fora do rio, das margens e das pontes.
+    // Keep procedural trees/details inland from the new shoreline. The last
+    // southern rows are reserved for the beach and water transition.
     function isWithinGeneratedArea(generator, x, y) {
       if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
-      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y) || isBridgeCell(generator, x, y)) return false;
+      if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
+      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      if (generator.worldHeight > generator.legacyWorldHeight &&
+          y >= getSouthernCoastlineY(generator, x) - 3) return false;
       return true;
     }
 
     // Shared terrain predicates are the single source of truth for both the
     // visible chunk generator and the authoritative collision generator.
-    // V115 — FALHA NO PENHASCO. O ruído deixa buracos de 1 tile dentro da
-    // rocha: um tile andável cercado de penhasco por todos os lados, que
-    // ninguém consegue pisar. Se os 4 vizinhos forem penhasco de verdade,
-    // a falha também é penhasco.
     function isCliffCell(generator, x, y) {
-      if (isCliffCellBase(generator, x, y)) return true;
-      if (isRoadCell(generator, x, y) || isBridgeCell(generator, x, y) ||
-          isOriginalTile(x, y, generator) || isOceanCell(generator, x, y) ||
-          isSouthernBeachCell(generator, x, y) || isSpawnClearance(generator, x, y)) return false;
-      return isCliffCellBase(generator, x + 1, y) && isCliffCellBase(generator, x - 1, y) &&
-        isCliffCellBase(generator, x, y + 1) && isCliffCellBase(generator, x, y - 1);
-    }
-
-    function isCliffCellBase(generator, x, y) {
       if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
       if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
       if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldHeight - 1 ||
           isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
           isSpawnClearance(generator, x, y)) return false;
-      for (let wallIndex = 0; wallIndex < CLIFF_WALLS.length; wallIndex += 1) {
-        const wall = CLIFF_WALLS[wallIndex];
-        if (x >= wall.x0 && x <= wall.x1 && y >= wall.y0 && y <= wall.y1 &&
-            !(y >= wall.gapY0 && y <= wall.gapY1)) return true;
-      }
       for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
         const patch = CLIFF_PATCHES[patchIndex];
         const nx = (x - patch.x) / patch.rx;
@@ -4352,30 +4263,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       return false;
     }
 
-    // V115 — ANTI-SELANTE. Espelha createChunkBlockedData em forma pura
-    // (sem recursão no selo): diz se o tile bloqueia movimento, avaliando
-    // árvores vizinhas SEM o teste de selo (depth 1), para não haver loop.
-    function isSealingBlockedCell(generator, x, y) {
-      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return true;
-      if (isBridgeCell(generator, x, y) || isRoadCell(generator, x, y)) return false;
-      if (isOceanCell(generator, x, y)) return true;
-      if (isOriginalTile(x, y, generator)) {
-        const sx = x - generator.mapOffset;
-        const sy = y - generator.mapOffset;
-        return CLIFF_IDS.has(generator.originalGround[sy][sx]) ||
-          TREE_IDS.has(generator.originalStructures[sy][sx]) ||
-          SOLID_IDS.has(generator.originalStructures[sy][sx]);
-      }
-      if (isCliffCell(generator, x, y) || getStructurePlacementId(x, y)) return true;
-      return getGeneratedTreeId(generator, x, y, isCliffCell(generator, x, y), false) !== 0;
-    }
-
-    function getGeneratedTreeId(generator, x, y, cliff, checkSeal = true) {
+    function getGeneratedTreeId(generator, x, y, cliff) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
           isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
-      // V115 — árvore só nasce na floresta. Sul do rio é montanha, leste é
-      // lava: nenhum dos dois ganha mata.
-      if (getRegionAt(generator, x, y) !== 'forest') return 0;
       let density = 0;
       for (const patch of TREE_PATCHES) {
         const nx = (x - patch.x) / patch.rx;
@@ -4384,58 +4274,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
       if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
       if (!density || stableNoise(x, y, 103) > density) return 0;
-      // V115 — uma árvore NÃO nasce se ela fechar o último acesso a um
-      // GRUPO andável vizinho (anel de árvores selando uma clareira). O grupo
-      // selado ficaria inalcançável para sempre, sem ser estrada nem lugar.
-      // Expansão limitada a 16 tiles: grupo maior que isso é área aberta.
-      if (checkSeal) {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (isSealingBlockedCell(generator, nx, ny)) continue;
-          const cluster = new Set([nx + ',' + ny]);
-          const stack = [[nx, ny]];
-          while (stack.length) {
-            const [cx, cy] = stack.pop();
-            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-              const bx = cx + mx;
-              const by = cy + my;
-              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
-              if (cluster.size >= 16) break;
-              if (isSealingBlockedCell(generator, bx, by)) continue;
-              cluster.add(bx + ',' + by);
-              stack.push([bx, by]);
-            }
-          }
-          let sealed = true;
-          for (const key of cluster) {
-            const [cx, cy] = key.split(',').map(Number);
-            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-              const bx = cx + mx;
-              const by = cy + my;
-              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
-              if (!isSealingBlockedCell(generator, bx, by)) { sealed = false; break; }
-            }
-            if (!sealed) break;
-          }
-          if (sealed) return 0;
-        }
-      }
       return TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)] || 0;
-    }
-
-    function getStructurePlacementId(x, y) {
-      for (let i = 0; i < STRUCTURE_PLACEMENTS.length; i += 1) {
-        if (STRUCTURE_PLACEMENTS[i].x === x && STRUCTURE_PLACEMENTS[i].y === y) return STRUCTURE_PLACEMENTS[i].id;
-      }
-      return 0;
-    }
-
-    function getCairnPlacementId(x, y) {
-      for (let i = 0; i < CAIRN_PLACEMENTS.length; i += 1) {
-        if (CAIRN_PLACEMENTS[i].x === x && CAIRN_PLACEMENTS[i].y === y) return CAIRN_PLACEMENTS[i].id;
-      }
-      return 0;
     }
 
     // Roads are short, fixed world paths. Rasterize them once as a compact set;
@@ -4533,7 +4372,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         }
       }
 
-      const legacyWorldHeight = RIVER_BASELINE_Y;
+      const legacyWorldHeight = worldTiles;
       return {
         worldTiles,
         worldHeight,
@@ -4571,9 +4410,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          // V115 — a ponte é atravessável: ela vence o rio. O rio em si é
-          // barreira absoluta, mesmo que uma estrada o cruze fora da ponte.
-          if (isBridgeCell(generator, x, y)) continue;
+          // Ocean is an absolute boundary: it remains blocked even if a road
+          // definition or another terrain rule overlaps the same coordinates.
           if (isOceanCell(generator, x, y)) {
             blocked[localY][localX] = 1;
             continue;
@@ -4591,8 +4429,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           }
 
           const cliff = isCliffCell(generator, x, y);
-          const placed = getStructurePlacementId(x, y);
-          blocked[localY][localX] = cliff || placed || getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
+          blocked[localY][localX] = cliff || getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
         }
       }
 
@@ -4692,48 +4529,25 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
           }
 
-          // V115 — chão por região. Só pinta onde não há mapa original,
-          // estrada ou penhasco: o solo nunca tapa um caminho nem um paredão.
-          if (!isOriginal(x, y) && !hasRoad(x, y) && !cliffMask[ly + 1][lx + 1]) {
-            const region = getRegionAt(generator, x, y);
-            if (region === 'fire') {
-              ground[ly][lx] = stableNoise(x, y, 751) < 0.55 ? 137 : 138;
-            } else if (region === 'scorched') {
-              ground[ly][lx] = [58, 59, 33][Math.floor(stableNoise(x, y, 753) * 3)];
-            } else if (region === 'mountain') {
-              ground[ly][lx] = stableNoise(x, y, 755) < 0.45 ? 137 :
-                [55, 56, 57, 1][Math.floor(stableNoise(x, y, 757) * 4)];
-            }
-          }
-
           const generatedTreeId = getGeneratedTreeId(
             generator, x, y, cliffMask[ly + 1][lx + 1]
           );
           if (generatedTreeId) structures[ly][lx] = generatedTreeId;
-          const placedStructureId = getStructurePlacementId(x, y);
-          if (placedStructureId) structures[ly][lx] = placedStructureId;
-          const cairnId = getCairnPlacementId(x, y);
-          if (cairnId) upperObjects[ly][lx] = cairnId;
 
           if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
-              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] && !upperObjects[ly][lx] &&
+              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
               !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
-          // Margens e rio por último, para nenhuma regra pintar sobre eles.
-          // A ponte vem depois ainda: pedra sobre a água, livre de estruturas.
+          // Coastal ground is applied last so no road, tree or cliff rule can
+          // accidentally paint over the sand or the sea.
           if (isSouthernBeachCell(generator, x, y)) {
             ground[ly][lx] = getBeachTileId(generator, x, y);
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           } else if (isOceanCell(generator, x, y)) {
             ground[ly][lx] = getOceanTileId(generator, x, y);
-            structures[ly][lx] = 0;
-            upperObjects[ly][lx] = 0;
-          }
-          if (isBridgeCell(generator, x, y)) {
-            ground[ly][lx] = 33;
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           }
@@ -4955,9 +4769,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       isCliffCell,
       isSouthernBeachCell,
       isOceanCell,
-      getRegionAt,
-      isBridgeCell,
-      getSouthernCoastlineY,
       getSouthernCoastlineY,
       getBeachTileId,
       getOceanTileId,
@@ -4980,13 +4791,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     // que um save de outro mapa seja interpretado como posição válida neste mundo.
     const WORLD_CONFIG = Object.freeze({
       tileSize: 16,
-      widthTiles: 156,
-      heightTiles: 208,
+      widthTiles: 90,
+      heightTiles: 120,
       chunkTiles: 30,
       chunkLoadRadius: 1,
       mapOffset: 30,
       playerStart: Object.freeze({ x: 45, y: 65 }),
-      worldId: 'overworld-156x208-v115'
+      worldId: 'overworld-90x120-v1'
     });
     const PLAYER_CONFIG = Object.freeze({
       frameSize: 32,
@@ -6208,10 +6019,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           getPlayerBodyTile: () => {
             const tile = this.getPlayerBodyTile();
             return tile ? { x: tile.x, y: tile.y } : null;
-          },
-          getRegionAt: (tileX, tileY) => {
-            const gen = this.worldGenerator;
-            return gen && core.getRegionAt ? core.getRegionAt(gen, tileX, tileY) : 'forest';
           }
         });
         // Extension systems request persistence through events. They never
@@ -6375,7 +6182,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           this.createPlayerAnimations();
           this.createPlayer();
           this.createDungeonEntrance();
-          this.createVolcanoes();
           this.setupCamera();
           this.input.mouse.disableContextMenu();
           // V113: arrastar move a CAMERA (olhar para o lado); toque move o
@@ -7475,7 +7281,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           menuRoot.append(menuButton, menuPanel);
           document.body.appendChild(menuRoot);
           // V98: MINIMAPA REDONDO no canto superior direito, com o terreno real
-          // (grama, estrada, praia, rio, lava, montanha). Sem monstros, como pedido.
+          // (grama, estrada, praia, oceano). Sem monstros, como pedido.
           // Canvas 2D: ponto amarelo = jogador, retangulo claro = visao da
           // camera. Nao intercepta toque e some junto com o HUD.
           const minimapRoot = document.createElement('div');
@@ -7499,8 +7305,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           minimapRoot.appendChild(minimapCanvas);
           document.body.appendChild(minimapRoot);
           // Terreno desenhado UMA vez num bitmap (1px por tile) e reutilizado:
-          // grama verde, estrada areia escura, praia areia clara, rio azul,
-          // lava escura, chamuscado marrom, montanha cinza.
+          // grama verde, estrada areia escura, praia areia clara, oceano azul.
           let minimapTerrain = null;
           const buildMinimapTerrain = () => {
             try {
@@ -7520,15 +7325,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
                   let r = 127, g = 174, b = 78;
                   if (core.isOceanCell(gen, x, y)) { r = 29; g = 78; b = 143; }
                   else if (core.isSouthernBeachCell(gen, x, y)) { r = 232; g = 200; b = 90; }
-                  else if (core.isBridgeCell && core.isBridgeCell(gen, x, y)) { r = 232; g = 200; b = 90; }
                   else if (gen.roadCells.has(x + ',' + y)) { r = 201; g = 169; b = 78; }
-                  else if (core.getRegionAt) {
-                    const region = core.getRegionAt(gen, x, y);
-                    if (region === 'fire') { r = 43; g = 26; b = 18; }
-                    else if (region === 'scorched') { r = 122; g = 84; b = 50; }
-                    else if (region === 'mountain') { r = 128; g = 128; b = 130; }
-                    else if ((x + y) % 2 === 0) { r = 134; g = 184; b = 86; }
-                  }
                   else if ((x + y) % 2 === 0) { r = 134; g = 184; b = 86; }
                   data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
                 }
@@ -8666,59 +8463,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.savePlayerPositionSafely(true);
       }
 
-
-
-      // ===== V115 — VULCÕES E RIOS DE LAVA (decorativos, sem colisão) =====
-      // 3 cones com brasa pulsante e erupções periódicas de partículas.
-      // Os rios de lava são só desenho sobre o chão: dá para atravessar a
-      // lava andando — ela nunca bloqueia um lugar, como pedido.
-      createVolcanoes() {
-        const volcanoes = [
-          { x: 140, y: 60 }, { x: 130, y: 150 }, { x: 138, y: 195 }
-        ];
-        for (const volcano of volcanoes) {
-          const cx = (volcano.x + 0.5) * TILE_SIZE;
-          const cy = (volcano.y + 0.5) * TILE_SIZE;
-          this.add.triangle(cx, cy + 6, 0, 22, 34, 22, 17, -20, 0x2e2620).setDepth(cy + 30);
-          const crater = this.add.ellipse(cx, cy - 14, 14, 6, 0xff5a00).setDepth(cy + 31);
-          this.tweens.add({ targets: crater, scaleX: 1.25, scaleY: 1.4, alpha: 0.75, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-          this.time.addEvent({
-            delay: 6000 + volcano.x * 37, loop: true,
-            callback: () => this.eruptVolcano(cx, cy - 16, cy)
-          });
-        }
-        const lavaStreams = [
-          [[122, 30], [128, 60], [124, 95], [130, 130]],
-          [[136, 20], [144, 55], [140, 90], [146, 125], [141, 160]],
-          [[126, 140], [134, 168], [130, 198]]
-        ];
-        for (const stream of lavaStreams) {
-          for (let i = 0; i < stream.length - 1; i += 1) {
-            const a = stream[i]; const b = stream[i + 1];
-            const steps = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 2;
-            for (let step = 0; step <= steps; step += 1) {
-              const t = steps ? step / steps : 0;
-              const tx = Math.round(a[0] + (b[0] - a[0]) * t);
-              const ty = Math.round(a[1] + (b[1] - a[1]) * t);
-              const glow = this.add.rectangle((tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE, 13, 13, 0xff4400, 0.5).setDepth(ty * TILE_SIZE + 4);
-              this.tweens.add({ targets: glow, alpha: { from: 0.35, to: 0.7 }, duration: 700 + ((tx + ty) % 5) * 120, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-            }
-          }
-        }
-      }
-
-      eruptVolcano(x, y, depthY) {
-        for (let i = 0; i < 18; i += 1) {
-          const ember = this.add.circle(x + (Math.random() - 0.5) * 14, y, 2 + Math.random() * 2.5, i % 3 === 0 ? 0xffd23e : 0xff5a00).setDepth(depthY + 40);
-          this.tweens.add({
-            targets: ember,
-            x: x + (Math.random() - 0.5) * 90,
-            y: y - 40 - Math.random() * 70,
-            alpha: 0, scale: 0.2, duration: 900 + Math.random() * 600,
-            ease: 'Quad.easeOut', onComplete: () => ember.destroy()
-          });
-        }
-      }
 
       // ===== V106 — DUNGEON: entrada na clareira da mata (23,88) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
