@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V110</title>
+<title>CONQUISTADOR DE WAIFU'S — V111</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V110</div>
+  <div id="version-badge">V111</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5041,12 +5041,19 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         if (kind[y][x] !== 'void') continue;
         if (neighbors4(x, y).some(([nx, ny]) => ['floor', 'gate', 'pillar'].includes(kind[ny][nx]))) kind[y][x] = 'wall';
       }
-      // Arvores e entulho DENTRO das salas (a floresta invadindo a cidade).
+      // V111: arvores e entulho DENTRO das salas so na borda (a floresta
+      // invadindo pelas beiradas). O meio fica limpo: antes, as arvores no
+      // meio formavam bolsos onde o boss e os macacos travavam — e como o
+      // layout e deterministico, o mesmo macaco travava no mesmo lugar
+      // toda vez que o jogador entrava.
       for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) {
         if (kind[y][x] === 'floor' && isRoom(x, y) && !protectedTiles.has(keyOf(x, y))) {
+          const room = rooms.find(r => inRect(x, y, r.rect));
+          const onEdge = room && (x <= room.rect.x0 + 1 || x >= room.rect.x1 - 1 || y <= room.rect.y0 + 1 || y >= room.rect.y1 - 1);
+          if (!onEdge) continue;
           const h = dungeonHash(x, y, 41);
-          if (h < 0.10) kind[y][x] = 'tree';
-          else if (h < 0.15) kind[y][x] = 'rubble';
+          if (h < 0.30) kind[y][x] = 'tree';
+          else if (h < 0.38) kind[y][x] = 'rubble';
         }
       }
       // Mata ao redor: arvores coladas no muro + algumas espalhadas no vazio.
@@ -5501,6 +5508,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           this.bossBarFill.setVisible(true);
           this.bossBarLabel.setVisible(true);
           this.bossBarFill.scaleX = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+        } else {
+          // V111: antes a barra so aparecia, nunca sumia — depois de matar
+          // o boss, nome + barra grande ficavam la em cima pra sempre.
+          this.bossBarBg.setVisible(false);
+          this.bossBarFill.setVisible(false);
+          this.bossBarLabel.setVisible(false);
         }
       }
 
@@ -5665,12 +5678,37 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           const dx = this.player.x - monster.sprite.x;
           const dy = this.player.y - monster.sprite.y;
           const dist = Math.hypot(dx, dy);
-          if (dist > 260) {
+          // V111: o boss persegue na sala inteira (sem o limite de 260px) —
+          // parado longe, ele virava alvo parado de skill.
+          if (dist > 260 && !monster.isBoss) {
             monster.sprite.body.setVelocity(0, 0);
             continue;
           }
           if (dist > 30) {
-            monster.sprite.body.setVelocity((dx / dist) * monster.speed, (dy / dist) * monster.speed);
+            // V111: anti-travamento. A perseguicao e cega e o corpo colide
+            // com as arvores: num bolso, o monstro empurra a parede pra
+            // sempre. Se ele persegue mas nao sai do lugar por 0,8s,
+            // desliza de lado (alternando o lado) ate sair do bolso.
+            if (monster._stuckCheckAt === undefined) {
+              monster._stuckCheckAt = now + 800;
+              monster._stuckX = monster.sprite.x;
+              monster._stuckY = monster.sprite.y;
+              monster._sidestepUntil = 0;
+              monster._sidestepDir = 1;
+            }
+            if (now < monster._sidestepUntil) {
+              const px = -dy / dist, py = dx / dist;
+              monster.sprite.body.setVelocity(px * monster.speed * monster._sidestepDir, py * monster.speed * monster._sidestepDir);
+            } else {
+              if (now >= monster._stuckCheckAt) {
+                const moved = Math.hypot(monster.sprite.x - monster._stuckX, monster.sprite.y - monster._stuckY);
+                if (moved < 8) { monster._sidestepUntil = now + 550; monster._sidestepDir *= -1; }
+                monster._stuckX = monster.sprite.x;
+                monster._stuckY = monster.sprite.y;
+                monster._stuckCheckAt = now + 800;
+              }
+              monster.sprite.body.setVelocity((dx / dist) * monster.speed, (dy / dist) * monster.speed);
+            }
             continue;
           }
           monster.sprite.body.setVelocity(0, 0);
@@ -8948,7 +8986,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   });
   // V80: buffs lidos pelo sistema de combate (alcance da Macaca, imunidade da Rata).
   window.CONQUISTADOR_WAIFU_BUFFS = window.CONQUISTADOR_WAIFU_BUFFS || { monkeyRangedUntil:0, ratImmuneUntil:0 };
-  let runtime=null, monsterSystem=null, hud=null, toast=null, buttons=[], nextCastAt=[0,0,0], pendingCast=[false,false,false], autoTimer=null, refreshQueued=false, unsubscribers=[], bootTimer=null;
+  let runtime=null, monsterSystem=null, hud=null, toast=null, buttons=[], nextCastAt=[0,0,0], pendingCast=[false,false,false], pendingSince=[0,0,0], autoTimer=null, refreshQueued=false, unsubscribers=[], bootTimer=null;
   const PASSIVE_ID='waifu:slime:intimacy', PASSIVE_MONKEY='waifu:monkey:intimacy', PASSIVE_RAT='waifu:rat:intimacy', LEVEL_ID='player:level-scaling';
   function equippedWaifus(){
     const data=runtime?.progress?.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped.slice(0,3):[];
@@ -9025,11 +9063,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       acidImpact(scene,target);done();};
     scene.tweens.add({targets:projectile,x:()=>target.sprite?.active?target.sprite.x:projectile.x,y:()=>target.sprite?.active?target.sprite.y-8:projectile.y,scaleX:1.35,scaleY:.75,angle:180,duration:280,ease:'Cubic.In',onUpdate:()=>{if(shine.active){shine.x=projectile.x;shine.y=projectile.y;}} ,onComplete:finish});
     // A disappearing target cancels the projectile; it must not consume cooldown.
-    const check=setInterval(()=>{if(completed){clearInterval(check);return;}if(!target.alive||!target.sprite?.active){completed=true;clearInterval(check);if(projectile.active)projectile.destroy();if(shine.active)shine.destroy();}},35);
+    const check=setInterval(()=>{if(completed){clearInterval(check);return;}if(!target.alive||!target.sprite?.active){completed=true;clearInterval(check);cancelled?.();if(projectile.active)projectile.destroy();if(shine.active)shine.destroy();}},35);
     return true;
   }
   function cast(slot,manual=false){
-    const waifu=equippedWaifus()[slot], skill=SKILLS[waifu]; if(!skill||!monsterSystem?.active||!runtime?.status||pendingCast[slot])return false;
+    const waifu=equippedWaifus()[slot], skill=SKILLS[waifu];
+    // V111: trava de cast vencida (projetil perdido) destrava sozinha apos 2s.
+    if(pendingCast[slot]&&Date.now()-pendingSince[slot]>2000)pendingCast[slot]=false;
+    if(!skill||!monsterSystem?.active||!runtime?.status||pendingCast[slot])return false;
 
     const now=Date.now();if(now<nextCastAt[slot])return false;
     // V80: habilidades de buff (Macaca / Rata) não precisam de alvo — ativam na hora.
@@ -9045,7 +9086,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     const playerLevel=runtime.levels?.snapshot?.('player')?.level||1;
     const skillDamage=skill.id==='acid_slime'?skill.damage+1.5*playerLevel:skill.damage;
     const target=dungeonScene?dungeonTargetInRange(dungeonScene):targetInRange();if(!target){if(manual)notify('Nenhum adversário ao alcance.');return false;}
-    pendingCast[slot]=true;
+    pendingCast[slot]=true;pendingSince[slot]=Date.now();
     const launched=launchAcid(target,()=>{
       pendingCast[slot]=false;
       if(!target.alive||!target.sprite?.active)return;
@@ -9104,7 +9145,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V110';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V111';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
