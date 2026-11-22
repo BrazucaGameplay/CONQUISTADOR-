@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V98</div>
+  <div id="version-badge">V99</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -623,6 +623,11 @@
         this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 10));
         this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
         this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
+        // V99: estado da dungeon (arena + chefe). Monstros da arena nunca sao salvos.
+        this.dungeonMode = false;
+        this.dungeonArenaChunkId = null;
+        this.dungeonArenaRect = null;
+        this.bossTelegraph = null;
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
@@ -870,11 +875,117 @@
         return count;
       }
 
+      // V99 — DUNGEON: registra a arena e purga qualquer monstro que tenha
+      // nascido la antes do registro (spawn automatico nao entra na arena).
+      setDungeonArena(chunkId, rect) {
+        this.dungeonArenaChunkId = chunkId || null;
+        this.dungeonArenaRect = rect || null;
+        this.purgeArenaChunk();
+      }
+      setDungeonMode(active) {
+        this.dungeonMode = Boolean(active);
+      }
+      // Remove sem drops, sem XP e sem respawn: monstros da arena sao efemeros.
+      purgeArenaChunk() {
+        if (!this.dungeonArenaChunkId) return;
+        for (const record of Array.from(this.monsters.values())) {
+          if (!record) continue;
+          const inArena = record.inDungeon || record.originChunkId === this.dungeonArenaChunkId ||
+            (record.tile && typeof isDungeonArenaCell === 'function' && isDungeonArenaCell(record.tile.x, record.tile.y));
+          if (!inArena) continue;
+          record.alive = false;
+          if (record.animation && record.animation.tween && record.animation.tween.isPlaying()) record.animation.tween.stop();
+          try { this.entities.remove(record.id); } catch (e) {}
+          this.monsters.delete(record.id);
+          if (record.levelLabel && record.levelLabel.active) record.levelLabel.destroy();
+          if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.destroy();
+          if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.destroy();
+          if (record.sprite && record.sprite.active) record.sprite.destroy();
+        }
+        this.chunkRespawns.delete(this.dungeonArenaChunkId);
+        this.clearBossTelegraph();
+      }
+      despawnDungeonMonsters() {
+        this.purgeArenaChunk();
+      }
+      clearBossTelegraph() {
+        if (!this.bossTelegraph) return;
+        try { this.bossTelegraph.clear(); if (this.bossTelegraph.active) this.bossTelegraph.destroy(); } catch (e) {}
+        this.bossTelegraph = null;
+      }
+      drawBossTelegraph(record, now) {
+        if (!this.scene || !this.scene.add || !record || !record.sprite || !record.sprite.active) return;
+        if (!this.bossTelegraph || !this.bossTelegraph.active) {
+          this.bossTelegraph = this.scene.add.graphics();
+          this.bossTelegraph.setDepth((record.sprite.depth || 0) + 30);
+        }
+        const cfg = DUNGEON_CONFIG.boss.slam;
+        const radius = cfg.radiusTiles * this.tileSize;
+        const remaining = Math.max(0, (record.bossWindupUntil || 0) - now);
+        const progress = 1 - remaining / Math.max(1, cfg.windupMs);
+        const g = this.bossTelegraph;
+        g.clear();
+        g.fillStyle(0xff2222, 0.15 + 0.25 * progress);
+        g.fillCircle(record.sprite.x, record.sprite.y, radius);
+        g.lineStyle(2, 0xff4444, 0.9);
+        g.strokeCircle(record.sprite.x, record.sprite.y, radius);
+      }
+      // V99: IA do chefe. Retorna true quando o frame ja foi consumido
+      // (preparando ou resolvendo a Pancada Sismica); false para seguir a IA normal.
+      updateDungeonBoss(record, playerPoint, time, delta) {
+        const cfg = DUNGEON_CONFIG.boss.slam;
+        const now = time;
+        const hp = this.status ? this.status.getStat(record.id, 'hp') : null;
+        const maxHp = this.status ? this.status.getStat(record.id, 'maxHp') : null;
+        if (hp !== null && maxHp && !record.bossEnraged && hp <= maxHp * (cfg.enrageBelowHpPercent / 100)) {
+          record.bossEnraged = true;
+          this.events.emit('dungeon:boss-enraged', { entityId: record.id });
+        }
+        if (record.bossWindupUntil) {
+          this.drawBossTelegraph(record, now);
+          if (now < record.bossWindupUntil) return true;
+          record.bossWindupUntil = 0;
+          this.clearBossTelegraph();
+          record.nextSlamAt = now + (record.bossEnraged ? cfg.enrageCooldownMs : cfg.cooldownMs);
+          const radiusPx = cfg.radiusTiles * this.tileSize;
+          const dist = Math.hypot(playerPoint.x - record.sprite.x, playerPoint.y - record.sprite.y);
+          if (dist <= radiusPx + 8) {
+            const ratBuffs = window.CONQUISTADOR_WAIFU_BUFFS;
+            const ratImmune = ratBuffs && Date.now() < (ratBuffs.ratImmuneUntil || 0);
+            const damage = ratImmune ? 0 : cfg.damage;
+            const result = this.status.applyDamage('player', damage, record.id);
+            if (result) {
+              this.events.emit('monster:attack', {
+                entityId: record.id, targetId: 'player', damage: result.damage,
+                remainingHp: result.hp
+              });
+            }
+            if (this.scene && this.scene.cameras && this.scene.cameras.main) this.scene.cameras.main.shake(180, 0.012);
+          }
+          return true;
+        }
+        const dist = Math.hypot(playerPoint.x - record.sprite.x, playerPoint.y - record.sprite.y);
+        if (dist <= cfg.triggerTiles * this.tileSize && now >= (record.nextSlamAt || 0)) {
+          record.bossWindupUntil = now + cfg.windupMs;
+          this.setMonsterAnimation(record, 'attack', playerPoint.x - record.sprite.x, playerPoint.y - record.sprite.y);
+          this.drawBossTelegraph(record, now);
+          return true;
+        }
+        return false;
+      }
+
       getSpawnCandidates(chunkX, chunkY) {
-        const startX = chunkX * this.chunkGrid.chunkSize;
-        const startY = chunkY * this.chunkGrid.chunkSize;
-        const endX = Math.min(startX + this.chunkGrid.chunkSize, this.chunkGrid.width);
-        const endY = Math.min(startY + this.chunkGrid.chunkSize, this.chunkGrid.height);
+        let startX = chunkX * this.chunkGrid.chunkSize;
+        let startY = chunkY * this.chunkGrid.chunkSize;
+        let endX = Math.min(startX + this.chunkGrid.chunkSize, this.chunkGrid.width);
+        let endY = Math.min(startY + this.chunkGrid.chunkSize, this.chunkGrid.height);
+        // V99: na dungeon, os monstros da arena nascem SOMENTE dentro do retangulo da arena.
+        if (this.dungeonMode && this.dungeonArenaRect && this.getChunkId(chunkX, chunkY) === this.dungeonArenaChunkId) {
+          startX = Math.max(startX, this.dungeonArenaRect.x0);
+          startY = Math.max(startY, this.dungeonArenaRect.y0);
+          endX = Math.min(endX, this.dungeonArenaRect.x1 + 1);
+          endY = Math.min(endY, this.dungeonArenaRect.y1 + 1);
+        }
         const playerTile = this.world.getPlayerBodyTile();
         const candidates = [];
 
@@ -979,17 +1090,20 @@
         }
       }
 
-      spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved) {
+      spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved, overrides = {}) {
         const chunkId = this.getChunkId(chunkX, chunkY);
-        if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
         const definition = this.data.MONSTERS[monsterId];
         if (!definition || !this.monsterTextureKeys[monsterId]) return false;
-        if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
+        // V99: spawns da dungeon (chefe e macacos da arena) ignoram os limites de populacao.
+        if (!overrides.bypassCaps) {
+          if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
+          if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
+        }
 
         // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
         const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y) ? { x: saved.tile.x, y: saved.tile.y } : null;
-        const candidates = this.getSpawnCandidates(chunkX, chunkY);
-        const tile = savedTile || candidates[0];
+        const candidates = overrides.fixedTile ? [] : this.getSpawnCandidates(chunkX, chunkY);
+        const tile = overrides.fixedTile || savedTile || candidates[0];
         if (!tile) return false;
 
         const sequence = this.nextMonsterSequence++;
@@ -999,14 +1113,21 @@
         // Every new spawn, including respawns, rolls only level 1 or 2.
         // Level 2 is less common and gains durability, damage, defense and XP.
         // V76: restauracao usa o nivel salvo, sem re-rolar.
-        const level = saved && (saved.level === 1 || saved.level === 2) ? saved.level : (Math.random() < 0.30 ? 2 : 1);
+        const level = overrides.level || (saved && (saved.level === 1 || saved.level === 2) ? saved.level : (Math.random() < 0.30 ? 2 : 1));
         const levelMultiplier = level === 2 ? {
           hp: 1.5, attack: 1.25, defense: 1, xp: 1.5
         } : { hp: 1, attack: 1, defense: 0, xp: 1 };
-        const maxHp = Math.max(1, Math.round(definition.hp * levelMultiplier.hp));
-        const attack = Math.max(0, Math.round((definition.attack ?? definition.damage ?? 0) * levelMultiplier.attack));
-        const defense = Math.max(0, (definition.defense || 0) + levelMultiplier.defense);
-        const xpReward = Math.max(0, Math.round(definition.xp * levelMultiplier.xp));
+        let maxHp = Math.max(1, Math.round(definition.hp * levelMultiplier.hp));
+        let attack = Math.max(0, Math.round((definition.attack ?? definition.damage ?? 0) * levelMultiplier.attack));
+        let defense = Math.max(0, (definition.defense || 0) + levelMultiplier.defense);
+        let xpReward = Math.max(0, Math.round(definition.xp * levelMultiplier.xp));
+        // V99: o chefe usa os numeros do DUNGEON_CONFIG, nao a escala de nivel.
+        if (overrides.stats) {
+          if (Number.isFinite(overrides.stats.maxHp)) maxHp = overrides.stats.maxHp;
+          if (Number.isFinite(overrides.stats.attack)) attack = overrides.stats.attack;
+          if (Number.isFinite(overrides.stats.defense)) defense = overrides.stats.defense;
+          if (Number.isFinite(overrides.stats.xpReward)) xpReward = overrides.stats.xpReward;
+        }
 
         this.entities.create({
           id,
@@ -1027,17 +1148,19 @@
           attack,
           defense,
           penetration: definition.penetration || 0,
-          attackSpeed: definition.attackSpeed || 1,
-          moveSpeed: definition.moveSpeed ?? definition.speed ?? 0,
+          attackSpeed: (overrides.stats && Number.isFinite(overrides.stats.attackSpeed)) ? overrides.stats.attackSpeed : (definition.attackSpeed || 1),
+          moveSpeed: (overrides.stats && Number.isFinite(overrides.stats.moveSpeed)) ? overrides.stats.moveSpeed : (definition.moveSpeed ?? definition.speed ?? 0),
           hpRegenOutOfCombat: definition.hpRegenOutOfCombat || 0,
           energyRegen: definition.energyRegen || 0
         });
 
+        const displayWidth = overrides.displayWidth || definition.displayWidth || 30;
+        const displayHeight = overrides.displayHeight || definition.displayHeight || 24;
         const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
-        sprite.setDisplaySize(definition.displayWidth || 30, definition.displayHeight || 24);
+        sprite.setDisplaySize(displayWidth, displayHeight);
         sprite.setOrigin(0.5, 0.86);
         sprite.setDepth(y + 10);
-        const levelLabel = this.scene.add.text(x, y - (definition.displayHeight || 24) * 0.86 - 4, String(level), {
+        const levelLabel = this.scene.add.text(x, y - displayHeight * 0.86 - 4, overrides.isBoss ? (overrides.bossName || 'BRUTAMONTE') : String(level), {
           fontFamily: 'system-ui, sans-serif',
           fontSize: '8px',
           fontStyle: 'normal',
@@ -1049,7 +1172,7 @@
         levelLabel.setOrigin(0.5, 1);
         levelLabel.setDepth(sprite.depth + 20);
         // V77: barra de HP embaixo do monstro, proporcional ao tamanho do sprite.
-        const hpBarWidth = Math.max(30, (definition.displayWidth || 30) + 6);
+        const hpBarWidth = Math.max(30, displayWidth + 6);
         const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
         hpBarBg.setDepth(sprite.depth + 21);
         hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
@@ -1059,6 +1182,12 @@
         const record = {
           id,
           monsterId,
+          isBoss: Boolean(overrides.isBoss),
+          inDungeon: Boolean(overrides.inDungeon),
+          displayHeight,
+          bossWindupUntil: 0,
+          nextSlamAt: 0,
+          bossEnraged: false,
           level,
           xpReward,
           definition,
@@ -1097,7 +1226,7 @@
           originChunkX: chunkX,
           originChunkY: chunkY
         });
-        return true;
+        return id;
       }
 
       // V76: monstros passam a fazer parte do save.
@@ -1105,6 +1234,8 @@
         const list = [];
         for (const record of this.monsters.values()) {
           if (!record || !record.alive) continue;
+          // V99: monstros da arena sao efemeros — nunca entram no save.
+          if (record.inDungeon) continue;
           const hp = this.status ? this.status.getStat(record.id, 'hp') : null;
           list.push({
             monsterId: record.monsterId, level: record.level,
@@ -1164,6 +1295,8 @@
             const population = this.getChunkPopulationState(chunkId);
             if (population.initialSpawnAttempted) continue;
             population.initialSpawnAttempted = true;
+            // V99: a arena so popula quando o jogador entra na dungeon.
+            if (this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId) continue;
             for (const monsterId of this.monsterTypes) {
               for (let count = 0; count < this.maxPerMonsterType; count += 1) {
                 if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
@@ -1180,6 +1313,8 @@
       updateInitialChunkFill() {
         for (const [chunkId, population] of this.chunkPopulation.entries()) {
           if (!population.initialFillPending || this.now < population.initialRetryAt) continue;
+          // V99: a arena so popula quando o jogador entra na dungeon.
+          if (this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId) continue;
           const [chunkX, chunkY] = chunkId.split(':').map(Number);
           const queue = this.chunkRespawns.get(chunkId);
           let needsRetry = false;
@@ -1243,6 +1378,11 @@
             continue;
           }
           if (this.now < queue.nextAt) continue;
+          // V99: a arena nao respawna sozinha fora da dungeon; dentro, respawna como macaco da dungeon.
+          if (this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId && !this.dungeonMode) {
+            this.chunkRespawns.delete(chunkId);
+            continue;
+          }
 
           if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) {
             // The chunk is temporarily full: preserve the death reservation
@@ -1259,7 +1399,8 @@
             continue;
           }
 
-          const spawned = this.spawnOneMonsterForChunk(queue.chunkX, queue.chunkY, monsterId);
+          const isArenaChunk = this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId;
+          const spawned = this.spawnOneMonsterForChunk(queue.chunkX, queue.chunkY, monsterId, null, isArenaChunk ? { bypassCaps: true, inDungeon: true } : {});
           if (!spawned) {
             // Retain the species reservation and retry later if no safe tile exists.
             queue.nextAt = this.now + this.spawnRetryDelayMs;
@@ -1518,7 +1659,8 @@
           this.pendingPlayerAttack = null;
         }
         const tile = { x: record.tile.x, y: record.tile.y };
-        this.scheduleChunkRespawn(record);
+        // V99: o chefe nao respawna — nasce de novo so na proxima entrada.
+        if (!record.isBoss) this.scheduleChunkRespawn(record);
         // LevelSystem is the only entity:die subscriber that awards XP.
         this.events.emit('entity:die', {
           entityId: record.id,
@@ -1650,7 +1792,7 @@
         const label = record && record.levelLabel;
         const sprite = record && record.sprite;
         if (!label || !label.active || !sprite || !sprite.active) return;
-        const height = record.definition.displayHeight || 24;
+        const height = record.displayHeight || record.definition.displayHeight || 24;
         label.setPosition(sprite.x, sprite.y - height * 0.86 - 4);
         label.setDepth(sprite.depth + 20);
         this.updateMonsterHpBar(record);
@@ -1677,6 +1819,8 @@
 
       updateMonster(record, playerPoint, time, delta) {
         if (!record.alive || !record.sprite || !record.sprite.active) return;
+        // V99: chefe da dungeon tem IA propria (Pancada Sismica).
+        if (record.isBoss && this.updateDungeonBoss(record, playerPoint, time, delta)) return;
         const dxToPlayer = playerPoint.x - record.sprite.x;
         const dyToPlayer = playerPoint.y - record.sprite.y;
         const distance = Math.hypot(dxToPlayer, dyToPlayer);
@@ -1785,6 +1929,7 @@
       destroy() {
         if (!this.active) return;
         this.active = false;
+        this.clearBossTelegraph();
         if (this.monsterSaveTimer) { clearTimeout(this.monsterSaveTimer); this.monsterSaveTimer = null; }
         for (const unsubscribe of this.unsubscribers || []) unsubscribe();
         this.unsubscribers = [];
@@ -4366,6 +4511,47 @@
     // Build only the navigation/collision layer. This deliberately avoids
     // allocating terrain, structure and upper-object render arrays for every
     // chunk during world startup.
+    // V99 — DUNGEON: CIDADE ABANDONADA.
+    // Arena isolada no canto sudeste do mundo; a entrada fica na cidade (mapa original).
+    // O retangulo da arena sobrepoe qualquer terreno (inclusive oceano) nas regras de
+    // colisao e de visual: a borda vira paredao de pedra, o interior vira chao de terra.
+    const DUNGEON_CONFIG = Object.freeze({
+      id: 'cidade-abandonada',
+      name: 'Cidade Abandonada',
+      recommendedLevel: 5,
+      town: Object.freeze({ x0: 30, y0: 30, x1: 59, y1: 59 }),
+      townCenter: Object.freeze({ x: 45, y: 45 }),
+      arena: Object.freeze({ x0: 66, y0: 92, x1: 88, y1: 114 }),
+      arenaArrival: Object.freeze({ x: 77, y: 110 }),
+      arenaExit: Object.freeze({ x: 77, y: 112 }),
+      bossTile: Object.freeze({ x: 77, y: 94 }),
+      monkeyCount: 8,
+      boss: Object.freeze({
+        monsterId: 'monkey',
+        name: 'Macaco Brutamonte',
+        level: 8,
+        hp: 600,
+        damage: 18,
+        defense: 2,
+        attackSpeed: 0.6,
+        speed: 42,
+        xp: 120,
+        displayWidth: 54,
+        displayHeight: 58,
+        slam: Object.freeze({
+          radiusTiles: 2.2,
+          triggerTiles: 3.5,
+          windupMs: 900,
+          cooldownMs: 4200,
+          damage: 26,
+          enrageBelowHpPercent: 50,
+          enrageCooldownMs: 2600
+        })
+      })
+    });
+    const isDungeonArenaCell = (x, y) => x >= DUNGEON_CONFIG.arena.x0 && x <= DUNGEON_CONFIG.arena.x1 && y >= DUNGEON_CONFIG.arena.y0 && y <= DUNGEON_CONFIG.arena.y1;
+    const isDungeonArenaBorderCell = (x, y) => isDungeonArenaCell(x, y) && (x === DUNGEON_CONFIG.arena.x0 || x === DUNGEON_CONFIG.arena.x1 || y === DUNGEON_CONFIG.arena.y0 || y === DUNGEON_CONFIG.arena.y1);
+
     function createChunkBlockedData(generator, chunkX, chunkY, chunkSize) {
       if (!generator || !Number.isInteger(chunkX) || !Number.isInteger(chunkY)) {
         throw new Error('Coordenadas inválidas para gerar a colisão do chunk.');
@@ -4385,6 +4571,11 @@
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
+          // V99: a arena da dungeon sobrepoe qualquer terreno (inclusive oceano).
+          if (isDungeonArenaCell(x, y)) {
+            blocked[localY][localX] = isDungeonArenaBorderCell(x, y) ? 1 : 0;
+            continue;
+          }
           // Ocean is an absolute boundary: it remains blocked even if a road
           // definition or another terrain rule overlaps the same coordinates.
           if (isOceanCell(generator, x, y)) {
@@ -4474,6 +4665,17 @@
         const y = originY + ly;
         for (let lx = 0; lx < width; lx += 1) {
           const x = originX + lx;
+          // V99: visual da arena — borda de pedra, interior de terra. Ignora as demais regras.
+          if (isDungeonArenaCell(x, y)) {
+            if (isDungeonArenaBorderCell(x, y)) {
+              ground[ly][lx] = CLIFF_TILE_BY_MASK[15] ?? CLIFF_TILE_BY_MASK[0];
+            } else {
+              ground[ly][lx] = DIRT_PATH_BY_MASK[15] ?? DIRT_PATH_BY_MASK[0];
+            }
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
+            continue;
+          }
           const noise = stableNoise(x, y, 4);
           const pickGrass = (gx, gy, salt = 17) => GRASS_TILES[Math.floor(stableNoise(gx, gy, salt) * GRASS_TILES.length)];
           ground[ly][lx] = noise < 0.62 ? 1 : pickGrass(x, y, 8);
@@ -5081,6 +5283,252 @@
           this.assetLoadFailed = true;
           showError(`Falha ao carregar ${key || 'recurso'}. Verifique a conexão com os recursos do jogo.`);
         });
+      }
+
+      // ===== V99 — DUNGEON: CIDADE ABANDONADA =====
+      initDungeon() {
+        this.dungeon = {
+          active: false, entranceTile: null, bossId: null, bossDead: false,
+          entranceText: null, exitText: null, portalText: null,
+          panel: null, panelBackdrop: null, exitButton: null, exiting: false
+        };
+        this.dungeon.entranceTile = this.computeDungeonEntranceTile();
+        if (this.monsterSystem) {
+          const arenaChunkId = `${Math.floor(DUNGEON_CONFIG.arena.x0 / CHUNK_TILES)}:${Math.floor(DUNGEON_CONFIG.arena.y0 / CHUNK_TILES)}`;
+          this.monsterSystem.setDungeonArena(arenaChunkId, { x0: DUNGEON_CONFIG.arena.x0, y0: DUNGEON_CONFIG.arena.y0, x1: DUNGEON_CONFIG.arena.x1, y1: DUNGEON_CONFIG.arena.y1 });
+        }
+        this.createDungeonPanel();
+        this.createDungeonExitButton();
+        this.createDungeonEntranceText();
+        this._dungeonUnsubs = [
+          this.eventBus.on('monster:died', event => this.onDungeonMonsterDied(event)),
+          this.eventBus.on('status:changed', event => this.onDungeonPlayerStatusChanged(event)),
+          this.eventBus.on('dungeon:boss-enraged', () => { if (this.dungeon && this.dungeon.active) this.showDungeonToast('O Brutamonte ficou FURIOSO!'); })
+        ];
+        this.events.once('shutdown', () => this.destroyDungeon());
+      }
+      computeDungeonEntranceTile() {
+        const cfg = DUNGEON_CONFIG;
+        let best = null;
+        let bestDist = Infinity;
+        for (let y = cfg.town.y0; y <= cfg.town.y1; y += 1) {
+          for (let x = cfg.town.x0; x <= cfg.town.x1; x += 1) {
+            if (!this.blocked || !this.blocked[y] || this.blocked[y][x] !== 0) continue;
+            const d = Math.abs(x - cfg.townCenter.x) + Math.abs(y - cfg.townCenter.y);
+            if (d < bestDist) { bestDist = d; best = { x, y }; }
+          }
+        }
+        return best || { x: cfg.townCenter.x, y: cfg.townCenter.y };
+      }
+      createDungeonPanel() {
+        const d = this.dungeon;
+        const backdrop = document.createElement('div');
+        Object.assign(backdrop.style, { position: 'fixed', inset: '0', zIndex: '140', display: 'none', alignItems: 'center', justifyContent: 'center', padding: '14px', background: 'rgba(0,0,0,.66)', backdropFilter: 'blur(2px)' });
+        const panel = document.createElement('section');
+        Object.assign(panel.style, { width: 'min(100%, 420px)', padding: '18px', border: '2px solid #b99a64', borderRadius: '16px', background: 'linear-gradient(180deg,#2b2318,#171310)', color: '#f0e4ce', font: '14px Georgia,serif', boxShadow: '0 18px 55px rgba(0,0,0,.7)', textAlign: 'center' });
+        const title = document.createElement('div');
+        title.textContent = '🏚  CIDADE ABANDONADA';
+        Object.assign(title.style, { color: '#f2dfb8', font: 'bold 20px Georgia,serif', marginBottom: '8px' });
+        const desc = document.createElement('div');
+        desc.textContent = 'Uma cidade tomada por macacos. No centro dela, o Brutamonte guarda o portal de saída.';
+        Object.assign(desc.style, { color: '#d7c49e', font: '14px/1.5 Georgia,serif', marginBottom: '10px' });
+        const meta = document.createElement('div');
+        meta.textContent = 'Nível recomendado: ' + DUNGEON_CONFIG.recommendedLevel + '  ·  Chefe: Macaco Brutamonte (Nv. ' + DUNGEON_CONFIG.boss.level + ')  ·  Recompensa: XP e drops';
+        Object.assign(meta.style, { color: '#e7c987', font: 'bold 12px Georgia,serif', marginBottom: '16px' });
+        const enterBtn = document.createElement('button');
+        enterBtn.type = 'button'; enterBtn.textContent = '⚔  ENTRAR NA DUNGEON';
+        Object.assign(enterBtn.style, { width: '100%', minHeight: '46px', border: '1px solid #e6b84f', borderRadius: '999px', background: 'linear-gradient(180deg,#493727,#17110e)', color: '#f4dfaa', font: 'bold 14px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation', marginBottom: '8px' });
+        enterBtn.addEventListener('click', () => this.enterDungeon());
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button'; cancelBtn.textContent = 'VOLTAR';
+        Object.assign(cancelBtn.style, { width: '100%', minHeight: '42px', border: '1px solid #a88c5f', borderRadius: '999px', background: '#211b17', color: '#f7eddb', font: 'bold 12px Georgia,serif', cursor: 'pointer', touchAction: 'manipulation' });
+        cancelBtn.addEventListener('click', () => this.closeDungeonPanel());
+        panel.append(title, desc, meta, enterBtn, cancelBtn);
+        backdrop.appendChild(panel);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop) this.closeDungeonPanel(); });
+        document.body.appendChild(backdrop);
+        d.panelBackdrop = backdrop;
+        d.panel = panel;
+      }
+      openDungeonPanel() {
+        if (this.dungeon && this.dungeon.panelBackdrop) this.dungeon.panelBackdrop.style.display = 'flex';
+      }
+      closeDungeonPanel() {
+        if (this.dungeon && this.dungeon.panelBackdrop) this.dungeon.panelBackdrop.style.display = 'none';
+      }
+      createDungeonExitButton() {
+        const d = this.dungeon;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = '🚪  SAIR DA DUNGEON';
+        btn.setAttribute('aria-label', 'Sair da dungeon');
+        Object.assign(btn.style, { position: 'fixed', top: 'max(6px, env(safe-area-inset-top))', right: 'max(6px, env(safe-area-inset-right))', zIndex: '110', display: 'none', minHeight: '34px', padding: '7px 14px', border: '1px solid rgba(255,215,130,.95)', borderRadius: '999px', background: 'linear-gradient(180deg, rgba(64,48,26,.97), rgba(18,15,13,.97))', color: '#ffe9b0', font: '700 11px/1 Georgia, serif', letterSpacing: '.12em', cursor: 'pointer', touchAction: 'manipulation' });
+        btn.addEventListener('click', () => this.exitDungeon());
+        document.body.appendChild(btn);
+        d.exitButton = btn;
+      }
+      createDungeonEntranceText() {
+        const d = this.dungeon;
+        if (!d || !d.entranceTile) return;
+        const x = (d.entranceTile.x + 0.5) * TILE_SIZE;
+        const y = (d.entranceTile.y + 0.5) * TILE_SIZE - 26;
+        const text = this.add.text(x, y, '🏚 CIDADE ABANDONADA', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+          stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+        });
+        text.setOrigin(0.5, 1);
+        text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+        text.setInteractive({ useHandCursor: true });
+        text.on('pointerdown', () => this.openDungeonPanel());
+        d.entranceText = text;
+      }
+      createDungeonExitText() {
+        const d = this.dungeon;
+        if (!d) return;
+        if (d.exitText && d.exitText.active) d.exitText.destroy();
+        const tile = DUNGEON_CONFIG.arenaExit;
+        const text = this.add.text((tile.x + 0.5) * TILE_SIZE, (tile.y + 0.5) * TILE_SIZE - 26, '🚪 SAÍDA', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+          stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+        });
+        text.setOrigin(0.5, 1);
+        text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+        text.setInteractive({ useHandCursor: true });
+        text.on('pointerdown', () => this.exitDungeon());
+        d.exitText = text;
+      }
+      createDungeonPortal(tile) {
+        const d = this.dungeon;
+        if (!d || !tile) return;
+        if (d.portalText && d.portalText.active) d.portalText.destroy();
+        const text = this.add.text((tile.x + 0.5) * TILE_SIZE, (tile.y + 0.5) * TILE_SIZE - 26, '🌀 PORTAL DE SAÍDA', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#b8f3ff',
+          stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+        });
+        text.setOrigin(0.5, 1);
+        text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+        text.setInteractive({ useHandCursor: true });
+        text.on('pointerdown', () => this.exitDungeon());
+        d.portalText = text;
+      }
+      teleportPlayerTo(tile) {
+        if (!this.player || !tile) return;
+        const x = (tile.x + 0.5) * TILE_SIZE;
+        const y = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+        this.player.setPosition(x, y);
+        if (this.player.body) this.player.body.setVelocity(0, 0);
+        this.syncPlayerEntityTile();
+        if (this.cameras && this.cameras.main) this.cameras.main.centerOn(x, y);
+      }
+      enterDungeon() {
+        const d = this.dungeon;
+        if (!d || d.active || !this.player) return;
+        this.closeDungeonPanel();
+        d.active = true;
+        d.bossDead = false;
+        d.bossId = null;
+        if (this.monsterSystem) this.monsterSystem.setDungeonMode(true);
+        this.clearPlayerPath();
+        this.teleportPlayerTo(DUNGEON_CONFIG.arenaArrival);
+        if (this.minimapUI && this.minimapUI.root) this.minimapUI.root.style.display = 'none';
+        if (d.exitButton) d.exitButton.style.display = 'block';
+        this.createDungeonExitText();
+        this.spawnDungeonBossAndMonkeys();
+        this.showDungeonToast('Você entrou na Cidade Abandonada!');
+        this.savePlayerPositionSafely(true);
+      }
+      exitDungeon(opts = {}) {
+        const d = this.dungeon;
+        if (!d || !d.active || d.exiting) return;
+        d.exiting = true;
+        const defeated = Boolean(opts.defeated);
+        d.active = false;
+        d.bossId = null;
+        d.bossDead = false;
+        if (this.monsterSystem) {
+          this.monsterSystem.despawnDungeonMonsters();
+          this.monsterSystem.setDungeonMode(false);
+        }
+        for (const key of ['exitText', 'portalText']) {
+          const t = d[key];
+          if (t && t.active) t.destroy();
+          d[key] = null;
+        }
+        if (d.exitButton) d.exitButton.style.display = 'none';
+        if (this.minimapUI && this.minimapUI.root) this.minimapUI.root.style.display = 'block';
+        this.clearPlayerPath();
+        this.teleportPlayerTo(d.entranceTile || DUNGEON_CONFIG.townCenter);
+        if (defeated) {
+          if (this.statusSystem) this.statusSystem.heal(this.playerEntityId || 'player', 999999);
+          this.showDungeonToast('Você foi derrotado! Voltou para a entrada.');
+        } else {
+          this.showDungeonToast('Você saiu da Cidade Abandonada.');
+        }
+        d.exiting = false;
+        this.savePlayerPositionSafely(true);
+      }
+      spawnDungeonBossAndMonkeys() {
+        const ms = this.monsterSystem;
+        const d = this.dungeon;
+        if (!ms || !d) return;
+        const cfg = DUNGEON_CONFIG;
+        const arenaChunkX = Math.floor(cfg.arena.x0 / CHUNK_TILES);
+        const arenaChunkY = Math.floor(cfg.arena.y0 / CHUNK_TILES);
+        const bossId = ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, cfg.boss.monsterId, null, {
+          fixedTile: { x: cfg.bossTile.x, y: cfg.bossTile.y },
+          level: cfg.boss.level,
+          stats: { maxHp: cfg.boss.hp, attack: cfg.boss.damage, defense: cfg.boss.defense, attackSpeed: cfg.boss.attackSpeed, moveSpeed: cfg.boss.speed, xpReward: cfg.boss.xp },
+          displayWidth: cfg.boss.displayWidth,
+          displayHeight: cfg.boss.displayHeight,
+          isBoss: true,
+          bossName: 'BRUTAMONTE',
+          bypassCaps: true,
+          inDungeon: true
+        });
+        if (typeof bossId === 'string') d.bossId = bossId;
+        for (let i = 0; i < cfg.monkeyCount; i += 1) {
+          ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, 'monkey', null, { bypassCaps: true, inDungeon: true });
+        }
+      }
+      onDungeonMonsterDied(event) {
+        const d = this.dungeon;
+        if (!d || !d.active || !event || event.entityId !== d.bossId) return;
+        d.bossDead = true;
+        d.bossId = null;
+        this.createDungeonPortal(event.tile);
+        this.showDungeonToast('O Brutamonte caiu! O portal de saída apareceu.');
+      }
+      onDungeonPlayerStatusChanged(event) {
+        const d = this.dungeon;
+        if (!d || !d.active || d.exiting || !event || event.entityId !== 'player') return;
+        const hp = this.statusSystem ? this.statusSystem.getStat(this.playerEntityId || 'player', 'hp') : null;
+        if (hp !== null && hp <= 0) this.exitDungeon({ defeated: true });
+      }
+      showDungeonToast(message) {
+        if (!this.player || !this.player.active || !message) return;
+        try {
+          const text = this.add.text(this.player.x, this.player.y - 34, String(message), {
+            fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+            stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+          });
+          text.setOrigin(0.5, 1);
+          text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+          this.tweens.add({ targets: text, alpha: 0, y: text.y - 14, duration: 2400, ease: 'Quad.Out', onComplete: () => { if (text.active) text.destroy(); } });
+        } catch (e) { /* toast nunca pode quebrar o jogo */ }
+      }
+      destroyDungeon() {
+        const d = this.dungeon;
+        if (!d) return;
+        for (const unsub of this._dungeonUnsubs || []) { try { unsub(); } catch (e) {} }
+        this._dungeonUnsubs = [];
+        if (d.panelBackdrop) d.panelBackdrop.remove();
+        if (d.exitButton) d.exitButton.remove();
+        for (const key of ['entranceText', 'exitText', 'portalText']) {
+          const t = d[key];
+          if (t && t.active) { try { t.destroy(); } catch (e) {} }
+          d[key] = null;
+        }
+        this.dungeon = null;
       }
 
       create() {
@@ -6314,7 +6762,7 @@
           const syncHudVisibility = () => {
             const hidden = modalIsOpen();
             menuRoot.style.display = hidden ? 'none' : 'flex';
-            minimapRoot.style.display = hidden ? 'none' : 'block';
+            minimapRoot.style.display = (hidden || (this.dungeon && this.dungeon.active)) ? 'none' : 'block';
             statusRoot.style.display = hidden ? 'none' : 'flex';
             menuPanel.style.display = 'none';
             menuButton.setAttribute('aria-expanded', 'false');
@@ -6371,6 +6819,8 @@
           if (this.bestiarySystem.openButton) this.bestiarySystem.openButton.style.display = 'none';
           if (this.waifuGallerySystem.openButton) this.waifuGallerySystem.openButton.style.display = 'none';
           this.mainMenuRoot = menuRoot;
+          // V99: dungeon (entrada na cidade, arena isolada, chefe).
+          this.initDungeon();
 
           this.events.once('shutdown', () => {
             if (this.monsterSystem) this.monsterSystem.destroy();
@@ -6862,7 +7312,10 @@
           if (Math.max(Math.abs(tile.x - startX), Math.abs(tile.y - startY)) > maxRadius) continue;
           const spriteX = (tile.x + 0.5) * TILE_SIZE;
           const spriteY = (tile.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
-          if (this.isPlayerBodyPositionWalkable(spriteX, spriteY)) {
+          // V99: spawn nunca cai dentro da arena (a nao ser que a dungeon esteja ativa).
+          const inArena = typeof isDungeonArenaCell === 'function' && isDungeonArenaCell(tile.x, tile.y);
+          const arenaAllowed = !inArena || Boolean(this.dungeon && this.dungeon.active);
+          if (arenaAllowed && this.isPlayerBodyPositionWalkable(spriteX, spriteY)) {
             // Search is pure: the caller decides whether this result is a normal
             // spawn, a local save recovery, or a temporary fallback.
             return { x: spriteX, y: spriteY };
@@ -7097,14 +7550,21 @@
       writePlayerPosition(force = false) {
         if (!this.player || !this.blocked || !this.saveSystem) return false;
         if (this.invalidSavePreserved) return false;
-        const x = this.player.x;
-        const y = this.player.y;
+        let x = this.player.x;
+        let y = this.player.y;
         if (!this.isPlayerBodyPositionWalkable(x, y)) {
           if (this.spawnCollisionDegraded) this.showSaveStatus('SAVE BLOQUEADO: posição sem área segura');
           return false;
         }
-        const tile = this.getPlayerBodyTile();
+        let tile = this.getPlayerBodyTile();
         if (!tile) return false;
+        // V99: dentro da dungeon, o save registra a entrada (fora), nunca a arena.
+        if (this.dungeon && this.dungeon.active && this.dungeon.entranceTile) {
+          const et = this.dungeon.entranceTile;
+          x = (et.x + 0.5) * TILE_SIZE;
+          y = (et.y + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+          tile = { x: et.x, y: et.y };
+        }
         this.syncPlayerEntityTile();
         const tileKey = `${tile.x},${tile.y}`;
         const lastFrameSave = this._lastSuccessfulSaveRecord;
@@ -8023,7 +8483,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V98';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V99';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
