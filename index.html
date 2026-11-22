@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V113</title>
+<title>CONQUISTADOR DE WAIFU'S — V114</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V113</div>
+  <div id="version-badge">V114</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4948,7 +4948,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         hp: 420, attack: 13, defense: 2, xp: 120,
         displayWidth: 58, displayHeight: 58, speed: 42, attackSpeed: 0.6,
         slam: Object.freeze({
-          radiusTiles: 2.2, triggerTiles: 3.5, windupMs: 900,
+          radiusTiles: 2.86, // V114: +30% (era 2.2)
+          triggerTiles: 3.5, windupMs: 900,
           cooldownMs: 5000, damage: 18,
           enrageBelowHpPercent: 40, enrageCooldownMs: 3200
         })
@@ -5482,7 +5483,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             monsterId: 'monkey', name: isBoss ? DUNGEON_SCENE_CONFIG.boss.name : 'Macaco',
             hp: stats.hp, maxHp: stats.hp, attack: stats.attack, defense: stats.defense,
             xpReward: stats.xp, speed: stats.speed || 50, attackSpeed: stats.attackSpeed || 1,
-            sprite, label, hpBarBg, hpBarFill, hpBarWidth, alive: true, nextAttackAt: 0
+            sprite, label, hpBarBg, hpBarFill, hpBarWidth, alive: true, nextAttackAt: 0, hasAggro: false
           };
           this.monsters.push(record);
           if (isBoss) this.bossRecord = record;
@@ -5685,6 +5686,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const playerDef = this.statusSystem.getStat('player', 'defense') ?? 0;
         for (const monster of this.monsters) {
           if (!monster.alive) continue;
+          // V114: agro do boss NAO solta mais. Pegou o agro (jogador na
+          // sala 3) = persegue ate morrer. Antes, o tile do corpo do
+          // jogador piscava pro corredor na beira da boca e o boss parava.
+          if (monster.isBoss && playerRoom === 'room3') monster.hasAggro = true;
           monster.sprite.setDepth(monster.sprite.y + 10);
           monster.label.setDepth(monster.sprite.y + 30);
           monster.hpBarBg.setDepth(monster.sprite.y + 31);
@@ -5695,7 +5700,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           monster.hpBarFill.scaleX = Math.max(0, Math.min(1, monster.hp / monster.maxHp));
           // Cada sala e um territorio: monstro so age dentro da propria sala.
           // Assim ninguem atravessa parede nem ataca atraves do tronco.
-          if (monster.roomKey !== playerRoom) {
+          if (monster.roomKey !== playerRoom && !(monster.isBoss && monster.hasAggro)) {
             monster.sprite.body.setVelocity(0, 0);
             continue;
           }
@@ -5757,9 +5762,19 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           boss.sprite.setTint(0xff7777);
           this.showToast('🔴 BRUTAMONTE FICOU FURIOSO!', 2400);
         }
-        if (this.roomKeyOfTile(this.playerBodyTile()) !== 'room3') return;
+        // V114: com o agro travado, o boss casta mesmo que o tile do corpo
+        // do jogador pisque pro corredor na beira da boca (o alcance do
+        // cast ja limita: so dispara a 3.5 tiles).
+        if (this.roomKeyOfTile(this.playerBodyTile()) !== 'room3' && !boss.hasAggro) return;
         const slam = DUNGEON_SCENE_CONFIG.boss.slam;
         if (this.slamPending) {
+          // V114: o circulo SEGUE o boss durante o cast. Antes ele ficava
+          // parado onde o cast comecou e o boss saia de dentro dele — o
+          // dano ja era na posicao atual do boss, mas o visual mentia.
+          if (this.slamTelegraph && this.slamTelegraph.active) {
+            this.slamTelegraph.x = boss.sprite.x;
+            this.slamTelegraph.y = boss.sprite.y;
+          }
           if (now < this.slamPending.at) return;
           const dist = Math.hypot(this.player.x - boss.sprite.x, this.player.y - boss.sprite.y);
           if (this.slamTelegraph && this.slamTelegraph.active) this.slamTelegraph.destroy();
@@ -5885,6 +5900,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const gate = this.layout.gates.find(g => g.roomKey === 'room2');
         if (!gate) return;
         this.bossGateLocked = true;
+        // V114: ao trancar a sala, o boss pega o agro pra valer.
+        if (this.bossRecord) this.bossRecord.hasAggro = true;
         const bodies = [];
         for (const t of gate.tiles) {
           const rect = this.add.rectangle(
@@ -8478,20 +8495,32 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         return frameName;
       }
 
+      // ===== V114 — FORTALEZA na entrada da dungeon (23,88), no mundo =====
+      // A ruina humilde da V113 virou uma FORTALEZA, como a referencia:
+      // torreao central com ameias, duas torres laterais MAIS ALTAS,
+      // portao escuro de frente pra entrada e mata invadindo por cima.
+      // A entrada (23,88) fica FORA, na frente do portao — o jogador
+      // encosta no portao e toca o texto. Nenhum tile da fortaleza
+      // cobre a entrada nem o caminho do sul ate ela.
       createDungeonRuin() {
         const EX = DUNGEON_SCENE_CONFIG.entranceTile.x; // 23
         const EY = DUNGEON_SCENE_CONFIG.entranceTile.y; // 88
         const bodies = [];
-        const addBlock = (tx, ty, gid, opts = {}) => {
-          const scale = opts.scale || 1;
+        const solidDone = new Set();
+        const addImage = (tx, ty, gid, opts = {}) => {
           const img = this.add.image(
             (tx + 0.5) * TILE_SIZE, (ty + 1) * TILE_SIZE, 'tiles', this.getWorldTileFrame(gid)
           );
           img.setOrigin(0.5, 1);
-          img.setScale(scale);
+          img.setScale(opts.scale || 1);
           if (opts.angle) img.setAngle(opts.angle);
           img.setDepth((ty + 1) * TILE_SIZE);
-          if (opts.solid === false) return;
+          return img;
+        };
+        const addSolid = (tx, ty) => {
+          const key = tx + ',' + ty;
+          if (solidDone.has(key)) return;
+          solidDone.add(key);
           const rect = this.add.rectangle(
             (tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x6b4423, 0
           );
@@ -8499,29 +8528,57 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           this.physics.add.existing(rect, true);
           bodies.push(rect);
         };
-        // Muro dos fundos (norte): quebrado, com brechas.
-        for (const [dx, gid] of [[-4, 137], [-3, 163], [-1, 109], [1, 111], [3, 139], [4, 165]]) addBlock(EX + dx, EY - 5, gid);
-        // Muros laterais: quebrados, com brechas.
-        for (const dy of [-4, -2, 0]) {
-          addBlock(EX - 4, EY + dy, 137);
-          addBlock(EX + 4, EY + dy, 137);
+        // --- Torreao central: 7 de largura, 6 de altura visual ---
+        // Cada linha (escala 2 = 64px) cobre 2 tiles. A linha de baixo
+        // deixa o vao do portao (3 tiles) aberto.
+        for (let row = 0; row < 3; row++) {
+          const ty = (EY - 1) - row * 2;
+          const gid = row === 2 ? 167 : (row === 0 ? 163 : 137);
+          for (let tx = EX - 3; tx <= EX + 3; tx++) {
+            if (row === 0 && tx >= EX - 1 && tx <= EX + 1) continue; // vao do portao
+            addImage(tx, ty, gid, { scale: 2 });
+          }
         }
-        // Arco da frente (sul): dois pilares altos.
-        addBlock(EX - 3, EY + 2, 137, { scale: 2 });
-        addBlock(EX + 3, EY + 2, 137, { scale: 2 });
-        // Pilares quebrados no interior (fora do caminho da entrada).
-        addBlock(EX - 2, EY - 2, 137, { scale: 2 });
-        addBlock(EX + 2, EY - 2, 137, { scale: 2 });
-        // Coluna caída na frente, atravessada.
-        addBlock(EX - 4, EY + 2, 137, { scale: 2, angle: 90 });
-        // Entulho nos cantos dos fundos.
-        addBlock(EX - 3, EY - 4, 110);
-        addBlock(EX + 3, EY - 4, 112);
-        // Mata invadindo: arvores crescendo nos cantos da ruina (só visual —
-        // o muro/pilar debaixo ja bloqueia o tile).
-        addBlock(EX - 4, EY - 5, 207, { scale: 3, solid: false });
-        addBlock(EX + 4, EY - 5, 261, { scale: 3, solid: false });
-        addBlock(EX, EY - 5, 706, { scale: 2, solid: false });
+        // --- Torres laterais: mais altas que o torreao (8 de altura) ---
+        for (const side of [-1, 1]) {
+          const tx0 = side < 0 ? EX - 5 : EX + 4;
+          for (let row = 0; row < 4; row++) {
+            const ty = (EY - 1) - row * 2;
+            const gid = row === 3 ? 167 : (row === 0 ? 163 : 137);
+            for (let tx = tx0; tx <= tx0 + 1; tx++) addImage(tx, ty, gid, { scale: 2 });
+          }
+        }
+        // --- Portao escuro no vao (3x2 tiles), de frente pra entrada ---
+        const door = this.add.rectangle(
+          (EX - 1) * TILE_SIZE, (EY - 2) * TILE_SIZE, 3 * TILE_SIZE, 2 * TILE_SIZE, 0x14100a, 1
+        );
+        door.setOrigin(0, 0);
+        door.setDepth(100);
+        // --- Janelas acesas (o brilho da referencia) ---
+        for (const [wx, wy] of [[EX - 2, EY - 3], [EX + 2, EY - 3], [EX - 5, EY - 3], [EX + 5, EY - 3]]) {
+          const win = this.add.rectangle(
+            (wx + 0.5) * TILE_SIZE, (wy + 0.5) * TILE_SIZE - 6, 12, 16, 0xff9a2a, 1
+          );
+          win.setDepth((wy + 1) * TILE_SIZE + 5);
+        }
+        // --- Mata invadindo: arvores grandes em cima da fortaleza ---
+        addImage(EX - 5, EY - 7, 207, { scale: 4 });
+        addImage(EX + 5, EY - 7, 261, { scale: 4 });
+        addImage(EX, EY - 5, 706, { scale: 3 });
+        // --- Entulho na frente, ladeando a entrada ---
+        addImage(EX - 3, EY, 110, { scale: 1 });
+        addImage(EX + 3, EY, 112, { scale: 1 });
+        // --- Coluna caída na frente da torre esquerda ---
+        addImage(EX - 4, EY + 1, 137, { scale: 2, angle: 90 });
+        // --- Colisao: torreao + torres + entulho + coluna ---
+        for (let ty = EY - 6; ty <= EY - 1; ty++) for (let tx = EX - 3; tx <= EX + 3; tx++) addSolid(tx, ty);
+        for (let ty = EY - 8; ty <= EY - 1; ty++) {
+          for (let tx = EX - 5; tx <= EX - 4; tx++) addSolid(tx, ty);
+          for (let tx = EX + 4; tx <= EX + 5; tx++) addSolid(tx, ty);
+        }
+        addSolid(EX - 3, EY);
+        addSolid(EX + 3, EY);
+        addSolid(EX - 4, EY + 1);
         if (bodies.length) this.physics.add.collider(this.player, bodies);
       }
 
@@ -9338,7 +9395,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V113';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V114';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
