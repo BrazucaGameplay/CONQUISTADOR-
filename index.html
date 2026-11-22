@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V98</title>
+<title>CONQUISTADOR DE WAIFU'S — V99</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -4549,6 +4549,11 @@
         })
       })
     });
+    // V99 FIX: o const acima vive dentro desta IIFE e nao era visivel nos
+    // outros blocos (systems/principal), que usam DUNGEON_CONFIG solto.
+    // Sem esta linha, montar o mundo quebra com "DUNGEON_CONFIG is not defined".
+    root.DUNGEON_CONFIG = DUNGEON_CONFIG;
+
     const isDungeonArenaCell = (x, y) => x >= DUNGEON_CONFIG.arena.x0 && x <= DUNGEON_CONFIG.arena.x1 && y >= DUNGEON_CONFIG.arena.y0 && y <= DUNGEON_CONFIG.arena.y1;
     const isDungeonArenaBorderCell = (x, y) => isDungeonArenaCell(x, y) && (x === DUNGEON_CONFIG.arena.x0 || x === DUNGEON_CONFIG.arena.x1 || y === DUNGEON_CONFIG.arena.y0 || y === DUNGEON_CONFIG.arena.y1);
 
