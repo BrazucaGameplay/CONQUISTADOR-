@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V96</title>
+<title>CONQUISTADOR DE WAIFU'S — V97</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V96</div>
+  <div id="version-badge">V97</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5459,14 +5459,15 @@
             position: 'fixed', left: '50%', bottom: 'max(8px, env(safe-area-inset-bottom))',
             transform: 'translateX(-50%)', zIndex: '90',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            gap: '2px', width: '86px', pointerEvents: 'none'
+            gap: '0', width: '86px', pointerEvents: 'none'
           });
           const statusEntry = statusDoc.createElement('button');
           statusEntry.type = 'button';
           statusEntry.setAttribute('aria-label', 'Abrir status do jogador');
           // V75: sem circulo, sem borda, sem fundo — so a silhueta do personagem.
+          // V97: silhueta desce um pouco, quase encostando na barra de HP.
           Object.assign(statusEntry.style, {
-            width: '96px', height: '96px', padding: '0',
+            width: '96px', height: '96px', padding: '0', marginBottom: '-5px',
             border: '0', borderRadius: '0',
             background: 'transparent',
             boxShadow: 'none',
@@ -5497,13 +5498,13 @@
           const mpTrack = statusDoc.createElement('div');
           const mpFill = statusDoc.createElement('div');
           Object.assign(mpTrack.style, {
-            width: '104px', height: '6px', border: '1px solid #182638',
-            borderRadius: '5px', background: '#101d31', overflow: 'hidden',
+            width: '104px', height: '6px', border: '1px solid #3d2f0e',
+            borderRadius: '5px', background: '#241c07', overflow: 'hidden',
             boxShadow: '0 1px 4px #000', pointerEvents: 'none'
           });
           Object.assign(mpFill.style, {
             width: '100%', height: '100%',
-            background: 'linear-gradient(180deg,#78c9ff,#174fbb)',
+            background: 'linear-gradient(180deg,#ffe066,#e8a800)',
             transition: 'width .2s'
           });
           mpTrack.appendChild(mpFill);
@@ -6095,15 +6096,15 @@
           // por sua própria janela, estado e atualização de dados.
           const menuRoot = document.createElement('div');
           menuRoot.id = 'conquistador-main-menu';
-          // V78: menu colado no canto superior direito, mais acima.
+          // V97: menu colado no canto superior ESQUERDO — o direito e do minimapa.
           Object.assign(menuRoot.style, {
             position: 'fixed',
             top: 'max(6px, env(safe-area-inset-top))',
-            right: 'max(6px, env(safe-area-inset-right))',
+            left: 'max(6px, env(safe-area-inset-left))',
             zIndex: '110',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'flex-end',
+            alignItems: 'flex-start',
             gap: '6px',
             fontFamily: 'Georgia, "Times New Roman", serif'
           });
@@ -6189,6 +6190,77 @@
           });
           menuRoot.append(menuButton, menuPanel);
           document.body.appendChild(menuRoot);
+          // V97: MINIMAPA no canto superior direito (lugar antigo do menu).
+          // Canvas 2D: ponto amarelo = jogador, pontos vermelhos = monstros,
+          // retangulo claro = visao atual da camera. Nao intercepta toque e
+          // some junto com o HUD quando um painel abre.
+          const minimapRoot = document.createElement('div');
+          minimapRoot.id = 'conquistador-minimap';
+          Object.assign(minimapRoot.style, {
+            position: 'fixed',
+            top: 'max(6px, env(safe-area-inset-top))',
+            right: 'max(6px, env(safe-area-inset-right))',
+            zIndex: '110',
+            width: '104px', height: '104px',
+            border: '1px solid rgba(255,215,130,.85)',
+            borderRadius: '10px',
+            background: 'rgba(8,12,8,.82)',
+            boxShadow: '0 2px 10px rgba(0,0,0,.6)',
+            overflow: 'hidden',
+            pointerEvents: 'none'
+          });
+          const minimapCanvas = document.createElement('canvas');
+          minimapCanvas.width = 208; minimapCanvas.height = 208;
+          Object.assign(minimapCanvas.style, { display: 'block', width: '104px', height: '104px' });
+          minimapRoot.appendChild(minimapCanvas);
+          document.body.appendChild(minimapRoot);
+          const drawMinimap = () => {
+            try {
+              const ctx = minimapCanvas.getContext('2d');
+              if (!ctx) return;
+              const W = 208, H = 208;
+              ctx.clearRect(0, 0, W, H);
+              ctx.fillStyle = 'rgba(8,12,8,.82)';
+              ctx.fillRect(0, 0, W, H);
+              const worldW = (typeof WORLD_WIDTH_PIXELS === 'number' && WORLD_WIDTH_PIXELS > 0) ? WORLD_WIDTH_PIXELS : 1;
+              const worldH = (typeof WORLD_HEIGHT_PIXELS === 'number' && WORLD_HEIGHT_PIXELS > 0) ? WORLD_HEIGHT_PIXELS : 1;
+              const scale = Math.min(W / worldW, H / worldH);
+              const offX = (W - worldW * scale) / 2;
+              const offY = (H - worldH * scale) / 2;
+              const toMap = (x, y) => [offX + x * scale, offY + y * scale];
+              const cam = this.cameras && this.cameras.main;
+              if (cam && cam.worldView) {
+                const view = cam.worldView;
+                const topLeft = toMap(view.x, view.y);
+                const bottomRight = toMap(view.x + view.width, view.y + view.height);
+                ctx.strokeStyle = 'rgba(255,255,255,.35)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(topLeft[0], topLeft[1], bottomRight[0] - topLeft[0], bottomRight[1] - topLeft[1]);
+              }
+              if (this.monsters) {
+                ctx.fillStyle = '#ff4444';
+                for (const record of this.monsters.values()) {
+                  if (!record || !record.alive || !record.sprite || !record.sprite.active) continue;
+                  const pos = toMap(record.sprite.x, record.sprite.y);
+                  ctx.fillRect(pos[0] - 2, pos[1] - 2, 4, 4);
+                }
+              }
+              if (this.player && this.player.active) {
+                const pos = toMap(this.player.x, this.player.y);
+                ctx.fillStyle = '#ffe066';
+                ctx.beginPath();
+                ctx.arc(pos[0], pos[1], 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#201a08';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              }
+            } catch (error) { /* O minimapa nunca pode quebrar o jogo. */ }
+          };
+          drawMinimap();
+          const minimapTimer = window.setInterval(drawMinimap, 200);
+          this.minimapUI = { root: minimapRoot, destroy: () => { window.clearInterval(minimapTimer); minimapRoot.remove(); } };
+
 
           const modalBackdrops = [
             this.inventorySystem.backdrop,
@@ -6214,6 +6286,7 @@
           const syncHudVisibility = () => {
             const hidden = modalIsOpen();
             menuRoot.style.display = hidden ? 'none' : 'flex';
+            minimapRoot.style.display = hidden ? 'none' : 'block';
             statusRoot.style.display = hidden ? 'none' : 'flex';
             menuPanel.style.display = 'none';
             menuButton.setAttribute('aria-expanded', 'false');
@@ -7922,7 +7995,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V96';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V97';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
