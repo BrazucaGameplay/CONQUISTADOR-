@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V100</title>
+<title>CONQUISTADOR DE WAIFU'S — V101</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V100</div>
+  <div id="version-badge">V101</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5343,11 +5343,11 @@
         });
       }
 
-      // ===== V100 — DUNGEON: CIDADE ABANDONADA (3 salas) =====
+      // ===== V101 — DUNGEON: CIDADE ABANDONADA (3 salas) =====
       initDungeon() {
         this.dungeon = {
           active: false, entranceTile: null, bossId: null, bossDead: false,
-          entranceText: null, exitText: null, portalText: null,
+          entranceText: null, cityEntranceText: null, exitText: null, portalText: null,
           panel: null, panelBackdrop: null, exitButton: null, exiting: false,
           rooms: [], trunkObjects: [], roomLabels: []
         };
@@ -5365,6 +5365,7 @@
         this.createDungeonPanel();
         this.createDungeonExitButton();
         this.createDungeonEntranceText();
+        this.createDungeonCityEntranceText();
         this._dungeonUnsubs = [
           this.eventBus.on('monster:died', event => this.onDungeonMonsterDied(event)),
           this.eventBus.on('status:changed', event => this.onDungeonPlayerStatusChanged(event)),
@@ -5447,6 +5448,23 @@
         text.on('pointerdown', () => this.openDungeonPanel());
         d.entranceText = text;
       }
+      // V101: a cidade tambem tem entrada andando ate ela — o jogador chega na
+      // muralha norte, toca no aviso e abre o mesmo painel da cidade.
+      createDungeonCityEntranceText() {
+        const d = this.dungeon;
+        if (!d) return;
+        if (d.cityEntranceText && d.cityEntranceText.active) d.cityEntranceText.destroy();
+        const tile = { x: 74, y: 90 };
+        const text = this.add.text((tile.x + 0.5) * TILE_SIZE, (tile.y + 0.5) * TILE_SIZE - 26, '🏚 CIDADE ABANDONADA — ENTRAR', {
+          fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+          stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+        });
+        text.setOrigin(0.5, 1);
+        text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+        text.setInteractive({ useHandCursor: true });
+        text.on('pointerdown', () => this.openDungeonPanel());
+        d.cityEntranceText = text;
+      }
       createDungeonExitText() {
         const d = this.dungeon;
         if (!d) return;
@@ -5502,7 +5520,7 @@
         this.createDungeonExitText();
         this.createDungeonTrunks();
         this.createDungeonRoomLabels();
-        this.rebuildDungeonNavigation();
+        this.refreshDungeonCollision();
         this.spawnDungeonRooms();
         this.showDungeonToast('Você entrou na Cidade Abandonada!');
         this.savePlayerPositionSafely(true);
@@ -5528,7 +5546,7 @@
         this.destroyDungeonTrunks();
         this.destroyDungeonRoomLabels();
         for (const room of d.rooms || []) { room.gateOpen = false; room.cleared = false; room.alive = []; }
-        this.rebuildDungeonNavigation();
+        this.refreshDungeonCollision();
         if (d.exitButton) d.exitButton.style.display = 'none';
         if (this.minimapUI && this.minimapUI.root) this.minimapUI.root.style.display = 'block';
         this.clearPlayerPath();
@@ -5617,7 +5635,7 @@
           const x0 = Math.min(...xs);
           const log = this.add.graphics();
           log.fillStyle(0x6b4423, 1);
-          log.fillRoundedRect(x0 * TILE_SIZE, y * TILE_SIZE + 4, room.gateTiles.length * TILE_SIZE, 8, 4);
+          log.fillRect(x0 * TILE_SIZE, y * TILE_SIZE + 4, room.gateTiles.length * TILE_SIZE, 8);
           log.fillStyle(0x4a2d15, 1);
           log.fillRect(x0 * TILE_SIZE + 2, y * TILE_SIZE + 7, room.gateTiles.length * TILE_SIZE - 4, 2);
           log.setDepth((y + 1) * TILE_SIZE);
@@ -5661,12 +5679,46 @@
         for (const t of d.roomLabels || []) { try { if (t && t.active) t.destroy(); } catch (e) {} }
         d.roomLabels = [];
       }
+      // V101: a colisao de verdade do jogador e um collider de tilemap do Phaser,
+      // construido a partir de this.blocked quando o chunk carrega. Reconstruir so
+      // o A* nao bastava: o tronco sumia, o caminho parecia aberto, mas o corpo
+      // continuava batendo no portao. Aqui os 3 andam juntos: this.blocked com o
+      // estado atual dos portoes, o collider do chunk da dungeon e a navegacao.
+      refreshDungeonCollision() {
+        const d = this.dungeon;
+        if (!d) return;
+        const rows = this.blocked.map(row => Array.from(row));
+        for (const room of d.rooms || []) {
+          for (const t of room.gateTiles || []) {
+            if (rows[t.y] && Number.isInteger(rows[t.y][t.x])) rows[t.y][t.x] = room.gateOpen ? 0 : 1;
+          }
+        }
+        this.blocked = Object.freeze(rows.map(row => Object.freeze(row)));
+        const chunkId = `${Math.floor(DUNGEON_CONFIG.arena.x0 / CHUNK_TILES)}:${Math.floor(DUNGEON_CONFIG.arena.y0 / CHUNK_TILES)}`;
+        const chunk = this.chunks ? this.chunks.get(chunkId) : null;
+        if (chunk && chunk.state === 'loaded') {
+          if (chunk.collider) { try { this.physics.world.removeCollider(chunk.collider); } catch (e) {} chunk.collider = null; }
+          if (chunk.collisionMap) { try { chunk.collisionMap.destroy(); } catch (e) {} chunk.collisionMap = null; chunk.collisionLayer = null; }
+          const localBlocked = core.extractChunkBlocked(this.blocked, chunk.tileX, chunk.tileY, chunk.width, chunk.height);
+          const collisionData = core.toCollisionLayer(localBlocked);
+          const collisionMap = this.make.tilemap({ data: collisionData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
+          const collisionTileset = collisionMap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+          const collisionLayer = collisionMap.createLayer(0, collisionTileset, chunk.worldX, chunk.worldY);
+          collisionLayer.setAlpha(0);
+          collisionLayer.setDepth(10000);
+          collisionMap.setCollision(1, true, true, collisionLayer, true);
+          chunk.collisionMap = collisionMap;
+          chunk.collisionLayer = collisionLayer;
+          this.attachChunkCollider(chunk);
+        }
+        this.rebuildDungeonNavigation();
+      }
       openDungeonGate(room) {
         const d = this.dungeon;
         if (!d || !room || room.gateOpen) return;
         room.gateOpen = true;
         this.destroyDungeonTrunks(room.key);
-        this.rebuildDungeonNavigation();
+        this.refreshDungeonCollision();
         this.showDungeonToast('O tronco caiu! A passagem abriu.');
       }
       onDungeonMonsterDied(event) {
@@ -5714,6 +5766,7 @@
         if (!d) return;
         for (const unsub of this._dungeonUnsubs || []) { try { unsub(); } catch (e) {} }
         this._dungeonUnsubs = [];
+        if (this.dungeon && this.dungeon.cityEntranceText && this.dungeon.cityEntranceText.active) this.dungeon.cityEntranceText.destroy();
         this.destroyDungeonTrunks();
         this.destroyDungeonRoomLabels();
         if (d.panelBackdrop) d.panelBackdrop.remove();
@@ -8681,7 +8734,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V100';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V101';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
