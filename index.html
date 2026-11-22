@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<!-- V116 — V115 + chão da montanha, chão do gelo e ruína nova aplicados. Cache próprio (conquistador-v116-teste). -->
+<!-- V117 — corrige o firstgid dos tilesets de chão (neve e montanha): toPhaserTileLayer converte GID para índice 0-based (gid-1), então o firstgid tem que ser GID-1. Sem isso os tiles ficavam transparentes e o fundo verde aparecia. Ao subir, renomear para index.html. -->
 
 <html lang="pt-BR">
 <head>
-  <link rel="manifest" href="manifest-V116.json">
+  <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V116</title>
+<title>CONQUISTADOR DE WAIFU'S — V117</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V116</div>
+  <div id="version-badge">V117</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -8235,15 +8235,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const phaserData = core.toPhaserTileLayer(data);
         const map = this.make.tilemap({ data: phaserData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
         const tileset = map.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
-        // V115 — o chão de neve é um segundo tileset (a textura aprovada),
-        // com firstgid = SNOW_GROUND_GID, bem acima de qualquer GID do Puny.
+        // V117 — CORREÇÃO DO FIRSTGID. toPhaserTileLayer converte todo GID
+        // para índice 0-based (gid - 1) antes de montar o tilemap. O tileset
+        // principal funciona porque o tile 1 vira índice 0 (firstgid 0).
+        // Os tilesets de chão estavam registrados com o GID cru (10001/10002),
+        // então o tile de neve (índice 10000) não casava com nenhum tileset e
+        // renderizava transparente — o fundo verde aparecia no lugar do chão.
+        // O firstgid aqui tem que ser o ÍNDICE (GID - 1), não o GID.
         const tilesets = [tileset];
         if (this.textures.exists('snow-tile')) {
-          const snowTileset = map.addTilesetImage('snow', 'snow-tile', TILE_SIZE, TILE_SIZE, 0, 0, SNOW_GROUND_GID);
+          const snowTileset = map.addTilesetImage('snow', 'snow-tile', TILE_SIZE, TILE_SIZE, 0, 0, SNOW_GROUND_GID - 1);
           if (snowTileset) tilesets.push(snowTileset);
         }
         if (this.textures.exists('mountain-tile')) {
-          const mountainTileset = map.addTilesetImage('mountain-ground', 'mountain-tile', TILE_SIZE, TILE_SIZE, 0, 0, MOUNTAIN_GROUND_GID);
+          const mountainTileset = map.addTilesetImage('mountain-ground', 'mountain-tile', TILE_SIZE, TILE_SIZE, 0, 0, MOUNTAIN_GROUND_GID - 1);
           if (mountainTileset) tilesets.push(mountainTileset);
         }
         const layer = map.createLayer(0, tilesets.length > 1 ? tilesets : tileset, worldX, worldY);
@@ -9926,6 +9931,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
 })();
 </script>
-<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw-V116.js").catch(function () {}); }); }</script>
+<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
 </body>
 </html>
