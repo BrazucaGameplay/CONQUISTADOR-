@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V111</title>
+<title>CONQUISTADOR DE WAIFU'S — V112</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V111</div>
+  <div id="version-badge">V112</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -2981,6 +2981,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         });
         for (const entry of entries) {
           const isWaifu = ['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name);
+          const isBossArt = entry.id === 'brutamonte';
           const card = this.el('button', {
             minWidth: '0', minHeight: isWaifu ? '0' : '148px',
             padding: isWaifu ? '0' : '7px 5px 9px',
@@ -2997,8 +2998,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           card.type = 'button';
           if (entry.image) {
             const art = this.el('img', {
-              display: 'block', width: '100%', height: isWaifu ? 'auto' : '96px',
-              aspectRatio: isWaifu ? '0.68' : '1 / 1', objectFit: isWaifu ? 'contain' : 'cover',
+              display: 'block', width: '100%', height: (isWaifu || isBossArt) ? 'auto' : '96px',
+              // V112: o retrato do boss usa a mesma proporção das cartas das
+              // waifus (2/3 + contain). Antes era 1/1 + cover: o retrato
+              // vertical era espremido num quadrado e cortava em cima/embaixo.
+              aspectRatio: (isWaifu || isBossArt) ? '0.68' : '1 / 1', objectFit: (isWaifu || isBossArt) ? 'contain' : 'cover',
               objectPosition: 'center',
               borderRadius: isWaifu ? '0' : '5px',
               filter: entry.known ? 'none' : 'grayscale(1) brightness(.48)'
@@ -5028,6 +5032,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         }
       }
       for (const p of DUNGEON_SCENE_CONFIG.pillars) protect(p.x, p.y);
+      // V112: boca dos corredores livre de arvore/entulho. Um entulho nasceu
+      // em (26,15), bem na boca pra sala 3, e a passagem ficou com 1 tile —
+      // parecia bloqueada mesmo com o portao aberto.
+      for (const c of DUNGEON_SCENE_CONFIG.corridors) {
+        for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+          protect(x, y - 1); protect(x, y + 1); protect(x - 1, y); protect(x + 1, y);
+        }
+      }
       // Classificacao: chao, pilar, portao, parede, arvore, entulho, vazio.
       const kind = Array.from({ length: H }, () => Array(W).fill('void'));
       for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) {
@@ -5176,7 +5188,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       constructor() {
         super('DungeonScene');
         this.layout = null;
-        this.returnTile = { x: 23, y: 88 }; // fallback = entrada atual (clareira).
         this.path = [];
         this.monsters = [];
         this.gates = [];
@@ -5210,7 +5221,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.bossEnraged = false;
         this.facingRow = 0;
         this.toastText = null;
-        this.returnTile = (data && data.returnTile) || { x: 23, y: 88 };
         this.eventBus = GAME_RUNTIME.eventBus;
         this.statusSystem = GAME_RUNTIME.statusSystem;
         this.saveSystem = GAME_RUNTIME.saveSystem;
@@ -5685,28 +5695,28 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             continue;
           }
           if (dist > 30) {
-            // V111: anti-travamento. A perseguicao e cega e o corpo colide
-            // com as arvores: num bolso, o monstro empurra a parede pra
-            // sempre. Se ele persegue mas nao sai do lugar por 0,8s,
-            // desliza de lado (alternando o lado) ate sair do bolso.
-            if (monster._stuckCheckAt === undefined) {
-              monster._stuckCheckAt = now + 800;
-              monster._stuckX = monster.sprite.x;
-              monster._stuckY = monster.sprite.y;
-              monster._sidestepUntil = 0;
-              monster._sidestepDir = 1;
+            // V112: perseguicao por CAMINHO (BFS no grid), nao cega. Antes o
+            // monstro empurrava a linha de arvores pra sempre: deslizava de
+            // lado mas nao saia de la. E um macaco travado e inalcançavel
+            // deixava o portao da sala 2 fechado pra sempre — o jogo conta
+            // macacos VIVOS, nao macacos visiveis. O caminho contorna as
+            // arvores pelas brechas: o monstro sempre chega no jogador.
+            const mTile = { x: Math.floor(monster.sprite.x / TILE_SIZE), y: Math.floor(monster.sprite.y / TILE_SIZE) };
+            const pTile = this.playerBodyTile();
+            if (!monster._path || !monster._path.length || now >= (monster._repathAt || 0)) {
+              const found = (typeof dungeonFindPath === 'function') ? dungeonFindPath(this.layout.blocked, mTile, pTile) : [];
+              monster._path = found || [];
+              monster._repathAt = now + 600;
             }
-            if (now < monster._sidestepUntil) {
-              const px = -dy / dist, py = dx / dist;
-              monster.sprite.body.setVelocity(px * monster.speed * monster._sidestepDir, py * monster.speed * monster._sidestepDir);
+            if (monster._path.length) {
+              const wp = monster._path[0];
+              const wx = (wp.x + 0.5) * TILE_SIZE, wy = (wp.y + 0.5) * TILE_SIZE - 3;
+              const wdx = wx - monster.sprite.x, wdy = wy - monster.sprite.y;
+              const wdist = Math.hypot(wdx, wdy);
+              if (wdist < 6) { monster._path.shift(); monster.sprite.body.setVelocity(0, 0); }
+              else monster.sprite.body.setVelocity((wdx / wdist) * monster.speed, (wdy / wdist) * monster.speed);
             } else {
-              if (now >= monster._stuckCheckAt) {
-                const moved = Math.hypot(monster.sprite.x - monster._stuckX, monster.sprite.y - monster._stuckY);
-                if (moved < 8) { monster._sidestepUntil = now + 550; monster._sidestepDir *= -1; }
-                monster._stuckX = monster.sprite.x;
-                monster._stuckY = monster.sprite.y;
-                monster._stuckCheckAt = now + 800;
-              }
+              // Sem caminho (nao acontece numa sala conectada): perseguição direta.
               monster.sprite.body.setVelocity((dx / dist) * monster.speed, (dy / dist) * monster.speed);
             }
             continue;
@@ -8371,6 +8381,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
 
       createDungeonPanel() {
+        // V112: remove o backdrop antigo (restart do WorldScene criava um
+        // novo sem remover este — divs escondidos acumulando no DOM).
+        const oldBackdrop = document.getElementById('conquistador-dungeon-panel');
+        if (oldBackdrop) oldBackdrop.remove();
         const backdrop = document.createElement('div');
         backdrop.id = 'conquistador-dungeon-panel';
         Object.assign(backdrop.style, {
@@ -8443,12 +8457,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // Troca de cena: o WorldScene pausa (sem update, sem auto-save),
         // a DungeonScene assume. O save nunca grava a posicao da dungeon.
-        this.scene.launch('DungeonScene', {
-          returnTile: {
-            x: DUNGEON_SCENE_CONFIG.entranceTile.x,
-            y: DUNGEON_SCENE_CONFIG.entranceTile.y
-          }
-        });
+        // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
+        this.scene.launch('DungeonScene');
         this.scene.pause();
         this.scene.setVisible(false);
       }
@@ -9145,7 +9155,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V111';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V112';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
