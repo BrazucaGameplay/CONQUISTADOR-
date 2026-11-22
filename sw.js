@@ -1,5 +1,5 @@
 // CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
-const CACHE = 'conquistador-v93';
+const CACHE = 'conquistador-v94';
 const FILES = [
   './',
   './index.html',

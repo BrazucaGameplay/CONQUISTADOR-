@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V90</title>
+<title>CONQUISTADOR DE WAIFU'S — V91</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V90</div>
+  <div id="version-badge">V91</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -2759,7 +2759,7 @@
         if (!this.document.getElementById('conquistador-gallery-cards')) {
           const style = this.document.createElement('style');
           style.id = 'conquistador-gallery-cards';
-          style.textContent = '.cg-card{position:relative;width:100%;padding:0;border:2px solid var(--q,#a9a9a9);border-radius:14px;background:#0b0a10;overflow:hidden;cursor:pointer;touch-action:manipulation;display:flex;flex-direction:column;box-shadow:0 4px 10px rgba(0,0,0,.5)}' +
+          style.textContent = '.cg-card{position:relative;width:100%;padding:0;border:none;border-radius:0;background:#0b0a10;overflow:hidden;cursor:pointer;touch-action:manipulation;display:flex;flex-direction:column;box-shadow:0 4px 10px rgba(0,0,0,.5)}' +
             '.cg-card.is-rainha{background:linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a);box-shadow:0 0 14px #ff2e88aa,0 0 18px #ffd70066,0 4px 10px rgba(0,0,0,.6)}' +
             '.cg-art{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;object-position:center top;background:#080c15}' +
             '.cg-count{position:absolute;top:5px;right:5px;min-width:20px;padding:2px 5px;border:1px solid var(--q,#a9a9a9);border-radius:10px;background:rgba(8,8,14,.92);color:var(--q,#a9a9a9);font:bold 10px Georgia,serif;text-align:center}' +
@@ -2974,22 +2974,24 @@
           const isWaifu = ['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name);
           const card = this.el('button', {
             minWidth: '0', minHeight: isWaifu ? '0' : '148px',
-            padding: isWaifu ? '3px' : '7px 5px 9px',
+            padding: isWaifu ? '0' : '7px 5px 9px',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'flex-start', textAlign: 'center',
-            border: isWaifu ? '2px solid rgba(240,220,170,.9)' : 'none',
-            borderRadius: '18px',
-            background: 'linear-gradient(180deg, rgba(71,58,43,.48), rgba(20,18,16,.72))',
-            boxShadow: 'inset 0 0 16px rgba(0,0,0,.28)', overflow: 'hidden',
+            // V91: waifu sem borda adicionada — a arte ja tem a moldura dela.
+            // Sem padding/fundo/raio: a celula E a arte original (+ placa do nome).
+            border: 'none',
+            borderRadius: isWaifu ? '0' : '18px',
+            background: isWaifu ? 'transparent' : 'linear-gradient(180deg, rgba(71,58,43,.48), rgba(20,18,16,.72))',
+            boxShadow: isWaifu ? 'none' : 'inset 0 0 16px rgba(0,0,0,.28)', overflow: 'hidden',
             cursor: entry.detail ? 'pointer' : 'default', touchAction: 'manipulation'
           });
           card.type = 'button';
           if (entry.image) {
             const art = this.el('img', {
               display: 'block', width: '100%', height: isWaifu ? 'auto' : '96px',
-              aspectRatio: isWaifu ? '0.68' : '1 / 1', objectFit: 'cover',
-              objectPosition: isWaifu ? 'center 18%' : 'center',
-              borderRadius: '5px',
+              aspectRatio: isWaifu ? '0.68' : '1 / 1', objectFit: isWaifu ? 'contain' : 'cover',
+              objectPosition: 'center',
+              borderRadius: isWaifu ? '0' : '5px',
               filter: entry.known ? 'none' : 'grayscale(1) brightness(.48)'
             });
             art.src = entry.image; art.alt = entry.name || 'Registro desconhecido';
@@ -2999,7 +3001,7 @@
               // JPEG delas; a Slime (PNG transparente) ficava sem nada. A placa cobre o
               // rotulo embutido do JPEG — que ainda diz "Donzela Rato" errado — com o
               // nome certo, "Donzela Rata".
-              const artWrap = this.el('div', { position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '5px' });
+              const artWrap = this.el('div', { position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '0' });
               const plate = this.el('div', { position: 'absolute', left: '0', right: '0', bottom: '0', padding: '16px 2px 5px', background: 'linear-gradient(180deg, rgba(8,8,14,0) 0%, rgba(8,8,14,.95) 45%)', color: '#f4e8c8', font: 'bold 12px/1.2 Georgia,serif', textAlign: 'center', textShadow: '0 1px 3px #000' });
               plate.textContent = entry.name;
               artWrap.append(art, plate);
@@ -3072,18 +3074,20 @@
           padding: '18px 16px 24px', overflowY: 'auto',
           background: 'radial-gradient(ellipse at 50% 30%,rgba(91,55,117,.28),transparent 65%)'
         });
+        // V91: sem moldura em arco, sem borda, sem recorte. A arte aparece inteira,
+        // como no arquivo original (a moldura e a barra de nome ja vem nela).
         const artFrame = this.el('div', {
           position: 'relative', width: 'min(74vw, 330px)',
           height: 'min(59dvh, 500px)', flex: '0 1 auto',
-          background: 'linear-gradient(145deg,#281c32,#0d0a12)',
-          border: 'none', borderRadius: '42% 42% 22px 22px / 16% 16% 22px 22px',
-          boxShadow: '0 18px 40px rgba(0,0,0,.6), 0 0 28px rgba(168,85,247,.35)',
+          background: 'transparent',
+          border: 'none', borderRadius: '0',
+          boxShadow: 'none',
           overflow: 'hidden'
         });
         const art = this.el('img', {
-          position: 'absolute', inset: '4px', width: 'calc(100% - 8px)',
-          height: 'calc(100% - 8px)', objectFit: 'cover',
-          objectPosition: 'center 20%', borderRadius: 'inherit'
+          position: 'absolute', inset: '0', width: '100%',
+          height: '100%', objectFit: 'contain',
+          objectPosition: 'center', borderRadius: '0'
         });
         art.src = entry.image || root.CONQUISTADOR_WAIFU_ART || '';
         art.alt = entry.name || 'Waifu';
@@ -3096,7 +3100,10 @@
           textShadow: '0 2px 4px #000'
         });
         titlePlate.textContent = entry.name || 'Waifu';
-        artFrame.append(art, titlePlate);
+        // V91: waifu ja tem a barra de nome desenhada na arte — a placa duplicaria.
+        // Monstro nao tem nome na arte: mantem a placa.
+        if (['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name)) artFrame.appendChild(art);
+        else artFrame.append(art, titlePlate);
 
         const profileMeta = this.el('div', {
           width: 'min(100%, 420px)', marginTop: '14px',
@@ -3816,21 +3823,21 @@
           position: 'relative', width: 'min(70vw, 310px)',
           height: 'min(61dvh, 470px)', aspectRatio: '2 / 3',
           flex: '0 1 auto', minHeight: '0',
-          padding: '9px', boxSizing: 'border-box',
+          padding: '0', boxSizing: 'border-box',
           border: 'none',
-          borderRadius: '20px',
-          background: 'linear-gradient(145deg,#302638,#0b0a10)',
-          boxShadow: `0 0 0 3px #24172b, 0 0 18px ${quality.color}66, 0 14px 36px rgba(0,0,0,.8)`,
+          borderRadius: '0',
+          background: 'transparent',
+          boxShadow: 'none',
           display: 'flex', flexDirection: 'column', gap: '7px',
-          padding: '10px',
-          boxShadow: `0 0 0 3px #24172b, 0 0 24px ${quality.color}88, 0 14px 36px rgba(0,0,0,.8)`,
+          padding: '0',
+          boxShadow: 'none',
           overflow: 'hidden'
         });
         const art = this.el('img', {
           position: 'relative', flex: '1 1 auto', minHeight: '0',
           width: '100%', height: '100%',
           display: 'block', objectFit: 'contain', objectPosition: 'center',
-          borderRadius: '5px', background: '#080c15',
+          borderRadius: '0', background: 'transparent',
           border: 'none'
         });
         art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : fullResolutionArt;
@@ -3853,8 +3860,8 @@
         // V75 RAINHA ESPECIAL na carta grande
         if (quality.id === 'rainha') {
           Object.assign(cardFrame.style, {
-            background: 'linear-gradient(160deg,#5a0a37,#1a0512 55%,#4a0a3a)',
-            boxShadow: '0 0 30px #ff2e88dd, 0 0 48px #ffd70099, 0 16px 40px rgba(0,0,0,.85)'
+            background: 'transparent',
+            boxShadow: 'none'
           });
           topPlate.textContent = '👑 RAINHA · ESPECIAL 👑 · ' + '★'.repeat(5);
         }
@@ -5354,7 +5361,7 @@
                 title.textContent = name + ' · Nv. ' + level;
                 const sub = el('div', { textAlign: 'center', color: qinfo.color, font: 'bold 12px Georgia,serif', marginTop: '2px' });
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
-                const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '14px', overflow: 'hidden', background: '#080c15' });
+                const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
                 art.src = ART(speciesId); art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
@@ -5936,7 +5943,7 @@
               art.alt = 'Carta completa da Donzela ' + (pickerSpecies === 'monkey' ? 'Macaca' : pickerSpecies === 'rat' ? 'Rata' : 'Slime');
               Object.assign(art.style, {
                 display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
-                background: '#100d17', borderRadius: '5px'
+                background: '#100d17', borderRadius: '0'
               });
               const label = statusDoc.createElement('span');
               label.textContent = `${quality.name} ${'★'.repeat(quality.stars)}` + (groupOf(card).length > 1 ? `  ×${groupOf(card).length}` : '');
@@ -7899,7 +7906,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V90';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V91';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
