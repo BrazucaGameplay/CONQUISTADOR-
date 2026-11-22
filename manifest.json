@@ -1,9 +1,9 @@
 {
-  "name": "CONQUISTADOR DE WAIFU'S",
-  "short_name": "CONQUISTADOR",
-  "description": "Conquiste waifus, derrote monstros e construa sua casa.",
+  "name": "CONQUISTADOR DE WAIFU'S (TESTE)",
+  "short_name": "CONQUISTADOR TESTE",
+  "description": "Versão de teste da expansão: montanha verde a leste, gelo ao sul, sem vulcão.",
   "lang": "pt-BR",
-  "start_url": "./index.html",
+  "start_url": "./index-V115.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

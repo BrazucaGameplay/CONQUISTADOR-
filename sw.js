@@ -1,9 +1,10 @@
-// CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
-const CACHE = 'conquistador-v114';
+// CONQUISTADOR DE WAIFU'S - service worker do ARQUIVO DE TESTE (V115)
+// Mesma lógica do sw.js, mas com cache próprio e servindo index-V115.html.
+// O teste nunca toca no cache do jogo real.
+const CACHE = 'conquistador-v115-teste';
 const FILES = [
-  './',
-  './index.html',
-  './manifest.json',
+  './index-V115.html',
+  './manifest-V115.json',
   './icon-192.png',
   './icon-512.png'
 ];
@@ -37,7 +38,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(cache => cache.put(event.request, copy));
         }
         return response;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(() => caches.match('./index-V115.html'));
     })
   );
 });

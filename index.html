@@ -2,12 +2,12 @@
 
 <html lang="pt-BR">
 <head>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest-V115.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V114</title>
+<title>CONQUISTADOR DE WAIFU'S — V115</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V114</div>
+  <div id="version-badge">V115</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -889,6 +889,9 @@
         for (let y = startY + 1; y < endY - 1; y += 1) {
           for (let x = startX + 1; x < endX - 1; x += 1) {
             if (!this.world.isWalkable(x, y, 'player')) continue;
+            // V115 — monstros só nascem na floresta. Nada nasce na montanha,
+            // no gelo, na transição, no rio ou nas margens.
+            if (this.world.getRegionAt && this.world.getRegionAt(x, y) !== 'forest') continue;
             if (playerTile && Math.max(Math.abs(playerTile.x - x), Math.abs(playerTile.y - y)) < 4) continue;
 
             // Avoid overlapping newly spawned groups and existing monsters,
@@ -4125,8 +4128,24 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 9, y: 12, rx: 9, ry: 7 },
       { x: 78, y: 12, rx: 10, ry: 8 },
       { x: 17, y: 49, rx: 6, ry: 9 },
-      { x: 74, y: 48, rx: 7, ry: 9 }
+      { x: 74, y: 48, rx: 7, ry: 9 },
+      // V115 — afloramentos rochosos PEQUENOS na montanha (leste). Não são
+      // cordilheiras nem paredões: só pedras soltas sobre o chão verde.
+      { x: 150, y: 18, rx: 4, ry: 3 },
+      { x: 165, y: 70, rx: 5, ry: 3 },
+      { x: 155, y: 55, rx: 3, ry: 4 }
     ];
+    // V115 — SEM PAREDÕES. Não há nenhuma muralha de penhasco entre a
+    // floresta e a montanha: a transição é um gradiente parcial de bioma.
+    // V115 — Linha do rio: o antigo "mar" virou rio. O rio corta o mundo em
+    // y ~= 90 e separa o norte (floresta + montanha) do sul (gelo).
+    const RIVER_BASELINE_Y = 90;
+    const BRIDGE_XS = [38, 80];
+    const BRIDGE_HALF_WIDTH = 1;
+    // Sem estruturas fixas herdadas: a V114 não tinha nenhuma, e os pilares
+    // de obsidiana / torres da V115 rejeitada não voltam.
+    const STRUCTURE_PLACEMENTS = [];
+    const CAIRN_PLACEMENTS = [];
     const TREE_PATCHES = [
       { x: 10, y: 12, rx: 8, ry: 7, density: 0.44 },
       { x: 76, y: 12, rx: 9, ry: 7, density: 0.42 },
@@ -4137,18 +4156,78 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       { x: 24, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 66, y: 23, rx: 7, ry: 6, density: 0.27 },
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.26 },
-      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 },
+      { x: 66, y: 68, rx: 8, ry: 7, density: 0.26 }
     ];
     const ROAD_POLYLINES = [
       { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
       { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
       { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      // The southern trail ends on the beach; the ocean is impassable.
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 51, y: 85 }, { x: 49, y: 87 }], width: 2 },
+      // V115 — trilha sul até a ponte 1, atravessa o rio e entra no gelo.
+      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 39, y: 86 }, { x: 38, y: 100 }, { x: 45, y: 112 }], width: 2 },
+      // V115 — acesso à ponte 2 e ao gelo a leste dela.
+      { points: [{ x: 80, y: 62 }, { x: 82, y: 78 }, { x: 80, y: 90 }, { x: 80, y: 102 }, { x: 88, y: 115 }, { x: 95, y: 128 }], width: 2 },
+      // V115 — estrada da montanha: sai da floresta e termina na base do
+      // pico escalável (o pico fica 2 tiles ao norte do fim da estrada).
+      { points: [{ x: 91, y: 45 }, { x: 115, y: 40 }, { x: 130, y: 45 }, { x: 145, y: 38 }, { x: 148, y: 42 }], width: 2 },
+      // V115 — trilha da montanha: serpenteia entre os picos, sem atravessar
+      // a base de nenhum deles.
+      { points: [{ x: 130, y: 45 }, { x: 145, y: 55 }, { x: 155, y: 65 }, { x: 160, y: 62 }, { x: 175, y: 50 }, { x: 172, y: 40 }, { x: 165, y: 25 }, { x: 155, y: 35 }, { x: 145, y: 20 }, { x: 135, y: 30 }], width: 1 },
+      // V115 — trilha do gelo: liga as duas pontes pelo sul do rio e segue
+      // para o leste do gelo.
+      { points: [{ x: 45, y: 112 }, { x: 60, y: 120 }, { x: 80, y: 125 }, { x: 95, y: 128 }, { x: 110, y: 130 }, { x: 130, y: 135 }, { x: 150, y: 130 }], width: 2 },
+      // V115 — trilha funda do gelo: desce até o sul do mundo.
+      { points: [{ x: 60, y: 120 }, { x: 55, y: 140 }, { x: 70, y: 160 }, { x: 90, y: 170 }, { x: 120, y: 165 }, { x: 150, y: 170 }], width: 1 },
       { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
       { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
       { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
     ];
+    // V115 — PICOS SOLTOS da montanha (leste). Cada pico é um asset de
+    // montanha de verdade, ancorado num tile; a base (3x2) bloqueia.
+    // O pico escalável é o primeiro: a estrada da montanha termina na base.
+    const MOUNTAIN_PEAKS = [
+      { x: 150, y: 38 },
+      { x: 162, y: 14 },
+      { x: 142, y: 68 },
+      { x: 168, y: 58 },
+      { x: 158, y: 80 },
+      { x: 172, y: 30 }
+    ];
+    // V115 — PICOS DE GELO soltos no gelo (sul). Mesmo modelo dos picos
+    // da montanha, com o asset de pico de gelo.
+    const ICE_PEAKS = [
+      { x: 40, y: 130 },
+      { x: 90, y: 150 },
+      { x: 140, y: 135 },
+      { x: 70, y: 170 },
+      { x: 125, y: 155 },
+      { x: 25, y: 160 },
+      { x: 160, y: 160 }
+    ];
+    // V115 — ÁRVORES CONGELADAS solitárias no gelo: uma por lugar, longe
+    // umas das outras e das estradas, maiores que os pinheiros.
+    const FROZEN_TREES = [
+      { x: 50, y: 110 }, { x: 110, y: 120 }, { x: 150, y: 115 },
+      { x: 30, y: 140 }, { x: 80, y: 140 }, { x: 130, y: 150 },
+      { x: 60, y: 155 }, { x: 100, y: 170 }, { x: 150, y: 175 }, { x: 20, y: 175 }
+    ];
+    // V115 — manchas de pinheiros na montanha e na transição.
+    const PINE_PATCHES = [
+      { x: 150, y: 20, rx: 15, ry: 12, density: 0.35 },
+      { x: 160, y: 50, rx: 12, ry: 15, density: 0.32 },
+      { x: 140, y: 70, rx: 12, ry: 10, density: 0.30 },
+      { x: 170, y: 25, rx: 10, ry: 10, density: 0.28 },
+      { x: 135, y: 40, rx: 8, ry: 12, density: 0.25 }
+    ];
+    // GID do chão de neve (firstgid do tileset 'snow' em createTileLayer)
+    // e códigos de estrutura dos assets (acima de qualquer GID do tileset).
+    const SNOW_GROUND_GID = 10001;
+    const CUSTOM_ASSET_CODES = Object.freeze({
+      mountain: 91001,
+      icePeak: 91002,
+      pine: 91003,
+      frozenTree: 91004
+    });
+
 
     function isOriginalTile(x, y, generator) {
       return x >= generator.mapOffset && x < generator.mapOffset + generator.sourceWidth &&
@@ -4168,50 +4247,107 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         Math.abs(y - generator.playerStart.y) <= 5;
     }
 
-    // The coast now sits directly after the existing southern land area.
-    // Coordinates are global so the irregular shoreline is continuous across
-    // all three columns and every chunk boundary. The entire lower extension
-    // becomes ocean; only a narrow sand strip remains between land and water.
+    // V115 — O RIO. O antigo "mar" perdeu a identidade de mar: agora é um
+    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 5 tiles
+    // de largura (centro +-2); as margens são areia. Duas pontes de pedra
+    // (x=38 e x=80) atravessam o rio e ligam floresta e montanhas.
     function getSouthernCoastlineY(generator, x) {
-      const broadBend = Math.sin(x * 0.105 + 0.65) * 1.75;
-      const smallBend = Math.sin(x * 0.255 + 1.9) * 0.75;
-      const roughness = (stableNoise(x, 0, 997) - 0.5) * 0.9;
-      const baseline = generator.legacyWorldHeight - 2;
-      const coastY = Math.round(baseline + broadBend + smallBend + roughness);
-      return Math.max(generator.legacyWorldHeight - 4,
-        Math.min(generator.legacyWorldHeight - 1, coastY));
+      const cx = Math.max(0, Math.min(generator.worldTiles - 1, x));
+      const broadBend = Math.sin(cx * 0.09 + 0.5) * 2;
+      const smallBend = Math.sin(cx * 0.21 + 1.3) * 1.2;
+      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 1.5;
+      return Math.round(RIVER_BASELINE_Y + broadBend + smallBend + roughness);
     }
 
-    // Four sand rows form the beach. The shoreline is deliberately placed at
-    // the former southern land boundary, not near the bottom of the map.
+    // V115 — Meia-largura do rio na coluna x: 1 ou 2 (rio de 3 ou 5
+    // tiles). As duas margens ondulam juntas (linha central + largura),
+    // nunca em bloco: cada lado do rio tem o seu desenho.
+    function getRiverHalfWidth(x) {
+      return stableNoise(x, 0, 1234) < 0.6 ? 1 : 2;
+    }
+
+    // V115 — Borda leste da floresta: a partir daqui começa a transição.
+    // Fica sempre a leste do mapa original (x < 120), para o mapa V114
+    // inteiro continuar sendo floresta (com os monstros e árvores dele).
+    function getForestEdgeX(y) {
+      return 124 + Math.round(Math.sin(y * 0.07) * 3 + (stableNoise(0, y, 555) - 0.5) * 2);
+    }
+
+    // Região do tile, sem contar rio/margem/ponte:
+    // 'forest' | 'transition' | 'mountain' | 'ice'.
+    // O rio separa norte de sul; a borda da floresta separa oeste de
+    // leste. O sudeste é gelo (está ao sul do rio), não montanha.
+    function getRegionAt(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return 'forest';
+      const center = getSouthernCoastlineY(generator, x);
+      const half = getRiverHalfWidth(x);
+      if (y > center + half + 2) return 'ice';
+      const edge = getForestEdgeX(y);
+      if (x >= edge + 12) return 'mountain';
+      if (x >= edge) return 'transition';
+      return 'forest';
+    }
+
+    // V115 — Ponte: cobre o rio na coluna da ponte, com o vão calculado
+    // a partir da largura LOCAL do rio (o rio varia de 3 a 5 tiles).
+    // A ponte pousa 1 tile em terra de cada lado (praia ao norte, banco
+    // de gelo ao sul), para nunca terminar dentro da água.
+    function isBridgeCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
+      for (let i = 0; i < BRIDGE_XS.length; i += 1) {
+        if (Math.abs(x - BRIDGE_XS[i]) > BRIDGE_HALF_WIDTH) continue;
+        let north = Infinity;
+        let south = -Infinity;
+        for (let bx = BRIDGE_XS[i] - BRIDGE_HALF_WIDTH; bx <= BRIDGE_XS[i] + BRIDGE_HALF_WIDTH; bx += 1) {
+          const c = getSouthernCoastlineY(generator, bx);
+          const h = getRiverHalfWidth(bx);
+          north = Math.min(north, c - h);
+          south = Math.max(south, c + h);
+        }
+        if (y >= north - 1 && y <= south + 1) return true;
+      }
+      return false;
+    }
+
+    // V115 — Praia de areia: 2 tiles ao NORTE do rio. Ao sul não há
+    // praia: há o banco de gelo (isSouthernIceBankCell).
     function isSouthernBeachCell(generator, x, y) {
-      if (generator.worldHeight <= generator.legacyWorldHeight ||
-          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 6 ||
-          y >= generator.worldHeight) return false;
-      const distance = y - getSouthernCoastlineY(generator, x);
-      return distance >= -2 && distance <= 1;
+      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
+      if (isBridgeCell(generator, x, y)) return false;
+      const d = getSouthernCoastlineY(generator, x) - y;
+      const half = getRiverHalfWidth(x);
+      return d >= half + 1 && d <= half + 2;
+    }
+
+    // V115 — Banco de gelo: 2 tiles ao SUL do rio, espelho da praia.
+    // É terra (andável), pintado de neve, sem árvores nem estruturas.
+    function isSouthernIceBankCell(generator, x, y) {
+      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
+      if (isBridgeCell(generator, x, y)) return false;
+      const d = y - getSouthernCoastlineY(generator, x);
+      const half = getRiverHalfWidth(x);
+      return d >= half + 1 && d <= half + 2;
     }
 
     function isOceanCell(generator, x, y) {
-      if (generator.worldHeight <= generator.legacyWorldHeight ||
-          x < 0 || x >= generator.worldTiles || y < generator.legacyWorldHeight - 2 ||
-          y >= generator.worldHeight) return false;
-      return y >= getSouthernCoastlineY(generator, x) + 2;
+      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
+      if (isBridgeCell(generator, x, y)) return false;
+      return Math.abs(y - getSouthernCoastlineY(generator, x)) <= getRiverHalfWidth(x);
     }
 
     function getBeachTileId(generator, x, y) {
       const distance = y - getSouthernCoastlineY(generator, x);
       // GID 52 is the Puny World grass-to-sand transition, oriented with land north
       // and beach south. The remaining rows use the full-sand GID 51.
-      return distance === -2 ? 52 : 51;
+      return distance === -4 ? 52 : 51;
     }
 
     function getShorelineTileId(generator, x, y) {
-      // The sea meets the beach at the southern edge of the land. Treat the
-      // world sides as open water so the coastline does not turn up the edges.
+      // As margens do rio: fora do mundo, a água só continua na faixa do rio.
       const isWaterAt = (tx, ty) => {
-        if (tx < 0 || tx >= generator.worldTiles || ty >= generator.worldHeight) return true;
-        if (ty < generator.legacyWorldHeight - 2 || ty < 0) return false;
+        if (tx < 0 || tx >= generator.worldTiles || ty < 0 || ty >= generator.worldHeight) {
+          return Math.abs(ty - getSouthernCoastlineY(generator, tx)) <= 2;
+        }
         return isOceanCell(generator, tx, ty);
       };
       const mask =
@@ -4225,34 +4361,43 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     function getOceanTileId(generator, x, y) {
       const shorelineTile = getShorelineTileId(generator, x, y);
       if (shorelineTile) return shorelineTile;
-      const depth = y - getSouthernCoastlineY(generator, x);
+      const depth = Math.abs(y - getSouthernCoastlineY(generator, x));
       const variation = stableNoise(x, y, 751);
-      // GIDs 311/316/321 are the Puny World shallow, medium and deep sea fills.
-      if (depth <= 5) return variation < 0.045 ? 298 : 311;
-      if (depth <= 10) return variation < 0.24 ? 311 : 316;
-      if (depth <= 15) return variation < 0.28 ? 316 : 321;
-      return variation < 0.10 ? 316 : 321;
+      // GIDs 311/316 are the Puny World shallow/medium water fills.
+      if (depth <= 1) return variation < 0.045 ? 298 : 311;
+      return variation < 0.24 ? 311 : 316;
     }
 
-    // Keep procedural trees/details inland from the new shoreline. The last
-    // southern rows are reserved for the beach and water transition.
+    // Detalhes procedurais ficam fora do rio, das margens e das pontes.
     function isWithinGeneratedArea(generator, x, y) {
       if (x < 2 || x >= generator.worldTiles - 2 || y < 2 || y >= generator.worldHeight - 2) return false;
-      if (y < generator.legacyWorldHeight && y >= generator.legacyWorldHeight - 2) return false;
-      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
-      if (generator.worldHeight > generator.legacyWorldHeight &&
-          y >= getSouthernCoastlineY(generator, x) - 3) return false;
+      if (isSouthernBeachCell(generator, x, y) || isSouthernIceBankCell(generator, x, y) ||
+          isOceanCell(generator, x, y) || isBridgeCell(generator, x, y)) return false;
       return true;
     }
 
     // Shared terrain predicates are the single source of truth for both the
     // visible chunk generator and the authoritative collision generator.
+    // V115 — FALHA NO PENHASCO. O ruído deixa buracos de 1 tile dentro da
+    // rocha: um tile andável cercado de penhasco por todos os lados, que
+    // ninguém consegue pisar. Se os 4 vizinhos forem penhasco de verdade,
+    // a falha também é penhasco.
     function isCliffCell(generator, x, y) {
+      if (isCliffCellBase(generator, x, y)) return true;
+      if (isRoadCell(generator, x, y) || isBridgeCell(generator, x, y) ||
+          isOriginalTile(x, y, generator) || isOceanCell(generator, x, y) ||
+          isSouthernBeachCell(generator, x, y) || isSpawnClearance(generator, x, y)) return false;
+      return isCliffCellBase(generator, x + 1, y) && isCliffCellBase(generator, x - 1, y) &&
+        isCliffCellBase(generator, x, y + 1) && isCliffCellBase(generator, x, y - 1);
+    }
+
+    function isCliffCellBase(generator, x, y) {
       if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
-      if (isSouthernBeachCell(generator, x, y) || isOceanCell(generator, x, y)) return false;
+      if (isSouthernBeachCell(generator, x, y) || isSouthernIceBankCell(generator, x, y) ||
+          isOceanCell(generator, x, y)) return false;
       if (x < 1 || y < 1 || x >= generator.worldTiles - 1 || y >= generator.worldHeight - 1 ||
           isOriginalTile(x, y, generator) || isRoadCell(generator, x, y) ||
-          isSpawnClearance(generator, x, y)) return false;
+          isSpawnClearance(generator, x, y) || isPeakFootprint(x, y)) return false;
       for (let patchIndex = 0; patchIndex < CLIFF_PATCHES.length; patchIndex += 1) {
         const patch = CLIFF_PATCHES[patchIndex];
         const nx = (x - patch.x) / patch.rx;
@@ -4263,9 +4408,38 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       return false;
     }
 
-    function getGeneratedTreeId(generator, x, y, cliff) {
+    // V115 — ANTI-SELANTE. Espelha createChunkBlockedData em forma pura
+    // (sem recursão no selo): diz se o tile bloqueia movimento, avaliando
+    // árvores vizinhas SEM o teste de selo (depth 1), para não haver loop.
+    function isSealingBlockedCell(generator, x, y) {
+      if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return true;
+      if (isBridgeCell(generator, x, y) || isRoadCell(generator, x, y)) return false;
+      if (isOceanCell(generator, x, y)) return true;
+      if (isPeakFootprint(x, y) || getPeakAt(x, y)) return true;
+      if (isOriginalTile(x, y, generator)) {
+        // V115 — o antigo mar (sul do rio) virou gelo aberto: o mapa
+        // original ali não bloqueia mais (o chão vira neve, sem estruturas).
+        if (getRegionAt(generator, x, y) === 'ice') return false;
+        const sx = x - generator.mapOffset;
+        const sy = y - generator.mapOffset;
+        return CLIFF_IDS.has(generator.originalGround[sy][sx]) ||
+          TREE_IDS.has(generator.originalStructures[sy][sx]) ||
+          SOLID_IDS.has(generator.originalStructures[sy][sx]);
+      }
+      if (isCliffCell(generator, x, y) || getStructurePlacementId(x, y)) return true;
+      if (getPineId(generator, x, y, isCliffCell(generator, x, y), false) !== 0) return true;
+      return getGeneratedTreeId(generator, x, y, isCliffCell(generator, x, y), false) !== 0;
+    }
+
+    function getGeneratedTreeId(generator, x, y, cliff, checkSeal = true) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
           isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
+      // V115 — árvore de folha só nasce na floresta. Na montanha nascem
+      // pinheiros; no gelo, árvores congeladas solitárias. Na transição,
+      // só um raleio (as manchas de folha ficam a oeste).
+      const region = getRegionAt(generator, x, y);
+      if (region !== 'forest' && region !== 'transition') return 0;
+      if (getPeakAt(x, y) || isPeakFootprint(x, y)) return 0;
       let density = 0;
       for (const patch of TREE_PATCHES) {
         const nx = (x - patch.x) / patch.rx;
@@ -4274,7 +4448,137 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
       if (!density && stableNoise(x, y, 97) < 0.035) density = 0.32;
       if (!density || stableNoise(x, y, 103) > density) return 0;
+      // V115 — uma árvore NÃO nasce se ela fechar o último acesso a um
+      // GRUPO andável vizinho (anel de árvores selando uma clareira). O grupo
+      // selado ficaria inalcançável para sempre, sem ser estrada nem lugar.
+      // Expansão limitada a 16 tiles: grupo maior que isso é área aberta.
+      if (checkSeal) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (isSealingBlockedCell(generator, nx, ny)) continue;
+          const cluster = new Set([nx + ',' + ny]);
+          const stack = [[nx, ny]];
+          while (stack.length) {
+            const [cx, cy] = stack.pop();
+            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const bx = cx + mx;
+              const by = cy + my;
+              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
+              if (cluster.size >= 16) break;
+              if (isSealingBlockedCell(generator, bx, by)) continue;
+              cluster.add(bx + ',' + by);
+              stack.push([bx, by]);
+            }
+          }
+          let sealed = true;
+          for (const key of cluster) {
+            const [cx, cy] = key.split(',').map(Number);
+            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const bx = cx + mx;
+              const by = cy + my;
+              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
+              if (!isSealingBlockedCell(generator, bx, by)) { sealed = false; break; }
+            }
+            if (!sealed) break;
+          }
+          if (sealed) return 0;
+        }
+      }
       return TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)] || 0;
+    }
+
+    // V115 — asset fixo no tile: pico de montanha, pico de gelo ou árvore
+    // congelada. Devolve o código do asset (91001-91004) ou 0.
+    function getPeakAt(x, y) {
+      for (const peak of MOUNTAIN_PEAKS) {
+        if (peak.x === x && peak.y === y) return CUSTOM_ASSET_CODES.mountain;
+      }
+      for (const peak of ICE_PEAKS) {
+        if (peak.x === x && peak.y === y) return CUSTOM_ASSET_CODES.icePeak;
+      }
+      for (const tree of FROZEN_TREES) {
+        if (tree.x === x && tree.y === y) return CUSTOM_ASSET_CODES.frozenTree;
+      }
+      return 0;
+    }
+
+    // V115 — base (3x2) de um pico: o sprite do pico cobre esses tiles e
+    // eles bloqueiam movimento (menos onde há estrada, que sempre vence).
+    function isPeakFootprint(x, y) {
+      for (const peak of MOUNTAIN_PEAKS) {
+        if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
+      }
+      for (const peak of ICE_PEAKS) {
+        if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
+      }
+      return false;
+    }
+
+    // V115 — pinheiro: nasce na montanha e na transição, nas manchas de
+    // pinheiro. Mesma regra anti-selante das árvores de folha: um pinheiro
+    // NÃO nasce se fechar o último acesso a um grupo andável vizinho.
+    function getPineId(generator, x, y, cliff, checkSeal = true) {
+      if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
+          isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
+      const region = getRegionAt(generator, x, y);
+      if (region !== 'mountain' && region !== 'transition') return 0;
+      if (getPeakAt(x, y) || isPeakFootprint(x, y)) return 0;
+      let density = 0;
+      for (const patch of PINE_PATCHES) {
+        const nx = (x - patch.x) / patch.rx;
+        const ny = (y - patch.y) / patch.ry;
+        if (nx * nx + ny * ny <= 1) density = Math.max(density, patch.density);
+      }
+      if (!density || stableNoise(x, y, 203) > density) return 0;
+      if (checkSeal) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (isSealingBlockedCell(generator, nx, ny)) continue;
+          const cluster = new Set([nx + ',' + ny]);
+          const stack = [[nx, ny]];
+          while (stack.length) {
+            const [cx, cy] = stack.pop();
+            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const bx = cx + mx;
+              const by = cy + my;
+              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
+              if (cluster.size >= 16) break;
+              if (isSealingBlockedCell(generator, bx, by)) continue;
+              cluster.add(bx + ',' + by);
+              stack.push([bx, by]);
+            }
+          }
+          let sealed = true;
+          for (const key of cluster) {
+            const [cx, cy] = key.split(',').map(Number);
+            for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const bx = cx + mx;
+              const by = cy + my;
+              if ((bx === x && by === y) || cluster.has(bx + ',' + by)) continue;
+              if (!isSealingBlockedCell(generator, bx, by)) { sealed = false; break; }
+            }
+            if (!sealed) break;
+          }
+          if (sealed) return 0;
+        }
+      }
+      return CUSTOM_ASSET_CODES.pine;
+    }
+
+    function getStructurePlacementId(x, y) {
+      for (let i = 0; i < STRUCTURE_PLACEMENTS.length; i += 1) {
+        if (STRUCTURE_PLACEMENTS[i].x === x && STRUCTURE_PLACEMENTS[i].y === y) return STRUCTURE_PLACEMENTS[i].id;
+      }
+      return 0;
+    }
+
+    function getCairnPlacementId(x, y) {
+      for (let i = 0; i < CAIRN_PLACEMENTS.length; i += 1) {
+        if (CAIRN_PLACEMENTS[i].x === x && CAIRN_PLACEMENTS[i].y === y) return CAIRN_PLACEMENTS[i].id;
+      }
+      return 0;
     }
 
     // Roads are short, fixed world paths. Rasterize them once as a compact set;
@@ -4372,7 +4676,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         }
       }
 
-      const legacyWorldHeight = worldTiles;
+      const legacyWorldHeight = RIVER_BASELINE_Y;
       return {
         worldTiles,
         worldHeight,
@@ -4410,8 +4714,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          // Ocean is an absolute boundary: it remains blocked even if a road
-          // definition or another terrain rule overlaps the same coordinates.
+          // V115 — a ponte é atravessável: ela vence o rio. O rio em si é
+          // barreira absoluta, mesmo que uma estrada o cruze fora da ponte.
+          if (isBridgeCell(generator, x, y)) continue;
           if (isOceanCell(generator, x, y)) {
             blocked[localY][localX] = 1;
             continue;
@@ -4419,6 +4724,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           if (isRoadCell(generator, x, y)) continue; // Roads remain walkable outside hard world boundaries.
 
           if (isOriginalTile(x, y, generator)) {
+            // V115 — o antigo mar (sul do rio) virou gelo aberto: andável.
+            if (getRegionAt(generator, x, y) === 'ice') {
+              blocked[localY][localX] = 0;
+              continue;
+            }
             const sx = x - generator.mapOffset;
             const sy = y - generator.mapOffset;
             const groundId = generator.originalGround[sy][sx];
@@ -4429,7 +4739,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           }
 
           const cliff = isCliffCell(generator, x, y);
-          blocked[localY][localX] = cliff || getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
+          const placed = getStructurePlacementId(x, y);
+          const peak = getPeakAt(x, y);
+          const pine = getPineId(generator, x, y, cliff);
+          blocked[localY][localX] = cliff || placed || peak || pine || isPeakFootprint(x, y) ||
+            getGeneratedTreeId(generator, x, y, cliff) ? 1 : 0;
         }
       }
 
@@ -4529,25 +4843,57 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             ground[ly][lx] = CLIFF_TILE_BY_MASK[mask] || 137;
           }
 
+          // V115 — chão por região. Só pinta onde não há estrada ou
+          // penhasco: o solo nunca tapa um caminho nem um paredão.
+          // Montanha = grama verde (o padrão já é grama). Gelo = neve.
+          if (!hasRoad(x, y) && !cliffMask[ly + 1][lx + 1]) {
+            if (getRegionAt(generator, x, y) === 'ice') {
+              ground[ly][lx] = SNOW_GROUND_GID;
+              // O antigo mar vira gelo: sem estruturas do mapa original.
+              if (isOriginal(x, y)) {
+                structures[ly][lx] = 0;
+                upperObjects[ly][lx] = 0;
+              }
+            }
+          }
+
           const generatedTreeId = getGeneratedTreeId(
             generator, x, y, cliffMask[ly + 1][lx + 1]
           );
           if (generatedTreeId) structures[ly][lx] = generatedTreeId;
+          const placedStructureId = getStructurePlacementId(x, y);
+          if (placedStructureId) structures[ly][lx] = placedStructureId;
+          const pineId = getPineId(generator, x, y, cliffMask[ly + 1][lx + 1]);
+          if (pineId && !structures[ly][lx]) structures[ly][lx] = pineId;
+          const peakId = getPeakAt(x, y);
+          if (peakId) structures[ly][lx] = peakId;
+          const cairnId = getCairnPlacementId(x, y);
+          if (cairnId) upperObjects[ly][lx] = cairnId;
 
           if (isWithinGeneratedArea(generator, x, y) && !isOriginal(x, y) && !hasRoad(x, y) &&
-              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] &&
+              !cliffMask[ly + 1][lx + 1] && !structures[ly][lx] && !upperObjects[ly][lx] &&
+              getRegionAt(generator, x, y) !== 'ice' &&
               !isSpawnClearance(generator, x, y) && stableNoise(x, y, 127) < 0.022) {
             upperObjects[ly][lx] = stableNoise(x, y, 131) < 0.5 ? 198 : 207;
           }
 
-          // Coastal ground is applied last so no road, tree or cliff rule can
-          // accidentally paint over the sand or the sea.
+          // Margens e rio por último, para nenhuma regra pintar sobre eles.
+          // A ponte vem depois ainda: pedra sobre a água, livre de estruturas.
           if (isSouthernBeachCell(generator, x, y)) {
             ground[ly][lx] = getBeachTileId(generator, x, y);
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
+          } else if (isSouthernIceBankCell(generator, x, y)) {
+            ground[ly][lx] = SNOW_GROUND_GID;
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
           } else if (isOceanCell(generator, x, y)) {
             ground[ly][lx] = getOceanTileId(generator, x, y);
+            structures[ly][lx] = 0;
+            upperObjects[ly][lx] = 0;
+          }
+          if (isBridgeCell(generator, x, y)) {
+            ground[ly][lx] = 33;
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           }
@@ -4768,7 +5114,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       createChunkData,
       isCliffCell,
       isSouthernBeachCell,
+      isSouthernIceBankCell,
       isOceanCell,
+      getRegionAt,
+      isBridgeCell,
+      SNOW_GROUND_GID,
+      CUSTOM_ASSET_CODES,
+      getSouthernCoastlineY,
       getSouthernCoastlineY,
       getBeachTileId,
       getOceanTileId,
@@ -4791,13 +5143,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     // que um save de outro mapa seja interpretado como posição válida neste mundo.
     const WORLD_CONFIG = Object.freeze({
       tileSize: 16,
-      widthTiles: 90,
-      heightTiles: 120,
+      widthTiles: 180,
+      heightTiles: 180,
       chunkTiles: 30,
       chunkLoadRadius: 1,
       mapOffset: 30,
       playerStart: Object.freeze({ x: 45, y: 65 }),
-      worldId: 'overworld-90x120-v1'
+      worldId: 'overworld-180x180-v115'
     });
     const PLAYER_CONFIG = Object.freeze({
       frameSize: 32,
@@ -4824,6 +5176,37 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       tilesetFallbackUrl: 'https://raw.githubusercontent.com/TheBogdichHD/procedural-generation-godot/0904cdc1824e558f4f43a80144dc8a82061ff9aa/generation_2d/assets/sprites/punyworld-overworld-tileset.png',
       playerFallbackUrl: 'https://raw.githubusercontent.com/ASH-CHA/Capstonr_Project_2D_RPG/d682c4c8cc051fd0d7c50c3049d5db8469f5354e/assets/npcs/Warrior-Red.png',
       sampleMapFallbackUrl: 'https://cdn.jsdelivr.net/gh/series-ai/jam-ready-assets@196b654e3baacbd29d2b1c7903692000ce52113b/shade-puny-world/2D/top-down-rpg/Tiled/samplemap2.tmj'
+    });
+
+    // V115 — ASSETS REAIS da expansão (embutidos, sem rede): montanha, pinheiro,
+    // pico de gelo, árvore congelada e a textura de neve do chão de gelo.
+    // Os PNGs já vêm no tamanho do jogo (montanha/pico 96px, pinheiro 48x64,
+    // árvore congelada 64x80, neve 16x16) e são desenhados em escala 1.
+    const CUSTOM_ASSETS = Object.freeze({
+      mountain: 'data:image/png;base64,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',
+      pine: 'data:image/png;base64,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',
+      icePeak: 'data:image/png;base64,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',
+      frozenTree: 'data:image/png;base64,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',
+      snow: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACmElEQVR42kXT227bRhSF4X9OJIeSaFmyXcAtnDZACrR9/ydogb5D4hRBEreOJFu0eBpySO5eyEWvv4uFvRa2+v1+JwrhzWZJYg1fy5YuTvz6XUGcZj7sKwT4abMksZrPZUs/Tvxyc3ZbZI5NnrD2Cc0wklnFNCvKduC5G1hmjm2eUHh3dqOQWXFsB8puQO1OQTJn2DU9h7ojMwalFPu6R0T47XbNKrE8Nj1PVYe3BkHx1PSIgNqfOnkJka9lizaaInM4IE8d1iicUlTDyMNLh9aKiyzBIiwyh1YKO0wzdRj48TLHGsNTO+BTyyZPAGhCPPvaY4zh2A7kqWXjE2YBvasCqyxhu/ScuoGmjywSSxUiZTvwWAcufMp2mXHqBtp+ZJE6TiFybHtsnGbWeUrdR57DyN3lgpcQ+VK2zNNMkTkufEIVRsp+5G6TU3YDX44NIoL686+9OKNJrUZrzbEbqLrI1SLFKAjjjLOazBqUPq9Thch2keI02GkWEgO3RY7WCgBvDT9frziFyKfnBq3gtvBnF8G7s7+EiPq4r2STJwiKQ93RhEg/CSJQDyNvr1Zs84RJ4FB3tH1kmGGahDaO6CK1TLNwf6h4OAUSZ1llDlFQZI7cGaZ55uNTxT91IE0cy8QiGlaZQz2WrezqQDuMWGtQKLxRXBceoxT9OPGtDoRhxFl7PtForguPVqCbYcQoeHdd8EPhQYSVT7Dq3EeII+7Vv19lr+5wWoGA3dU9d5cLrNG831d4a8is4eHUMU4zXZx4s/nfc2dJX59unGfsf0n7OoDW5N7x/lBRhxFEWHuHCHyrAspo8tTy4VBRdRGnFeqP+53MAjdFhreGz8eGNs68u1oiIvx96phFuFl5cmf4dGzox7Mj8C/Fx27ZiDWO0wAAAABJRU5ErkJggg=='
+    });
+    // Códigos de estrutura dos assets (acima de qualquer GID do tileset).
+    // O core devolve esses códigos em createChunkData; o loadChunk desenha o
+    // asset em vez de um tile do tileset.
+    const CUSTOM_ASSET_CODES = Object.freeze({
+      mountain: 91001,
+      icePeak: 91002,
+      pine: 91003,
+      frozenTree: 91004
+    });
+    // GID do chão de neve: firstgid do tileset 'snow' em createTileLayer.
+    const SNOW_GROUND_GID = 10001;
+    // Como desenhar cada asset: textura + quantas linhas a base ocupa.
+    // O sprite é ancorado no centro da base (origin 0.5,1), em escala 1.
+    const CUSTOM_ASSET_RENDER = Object.freeze({
+      [CUSTOM_ASSET_CODES.mountain]: { texture: 'asset-mountain', rows: 2 },
+      [CUSTOM_ASSET_CODES.icePeak]: { texture: 'asset-icepeak', rows: 2 },
+      [CUSTOM_ASSET_CODES.pine]: { texture: 'asset-pine', rows: 1 },
+      [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1 }
     });
     
     const DISPLAY_CONFIG = Object.freeze({
@@ -6019,6 +6402,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           getPlayerBodyTile: () => {
             const tile = this.getPlayerBodyTile();
             return tile ? { x: tile.x, y: tile.y } : null;
+          },
+          getRegionAt: (tileX, tileY) => {
+            const gen = this.worldGenerator;
+            return gen && core.getRegionAt ? core.getRegionAt(gen, tileX, tileY) : 'forest';
           }
         });
         // Extension systems request persistence through events. They never
@@ -6149,6 +6536,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           else this.load.json(key, url);
         };
         queueAsset('tiles'); queueAsset('hero'); queueAsset('sampleMap');
+        // V115 — assets da expansão (data URIs embutidas, não dependem de rede).
+        this.load.image('asset-mountain', CUSTOM_ASSETS.mountain);
+        this.load.image('asset-pine', CUSTOM_ASSETS.pine);
+        this.load.image('asset-icepeak', CUSTOM_ASSETS.icePeak);
+        this.load.image('asset-frozentree', CUSTOM_ASSETS.frozenTree);
+        this.load.image('snow-tile', CUSTOM_ASSETS.snow);
         this.load.on('loaderror', (file) => {
           const key = file && file.key;
           if (key && attempts[key] && this.assetAttempt[key] < attempts[key].length - 1) {
@@ -7281,7 +7674,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           menuRoot.append(menuButton, menuPanel);
           document.body.appendChild(menuRoot);
           // V98: MINIMAPA REDONDO no canto superior direito, com o terreno real
-          // (grama, estrada, praia, oceano). Sem monstros, como pedido.
+          // (grama, estrada, praia, rio, lava, montanha). Sem monstros, como pedido.
           // Canvas 2D: ponto amarelo = jogador, retangulo claro = visao da
           // camera. Nao intercepta toque e some junto com o HUD.
           const minimapRoot = document.createElement('div');
@@ -7305,7 +7698,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
           minimapRoot.appendChild(minimapCanvas);
           document.body.appendChild(minimapRoot);
           // Terreno desenhado UMA vez num bitmap (1px por tile) e reutilizado:
-          // grama verde, estrada areia escura, praia areia clara, oceano azul.
+          // grama verde, estrada areia escura, praia areia clara, rio azul,
+          // gelo azul-claro, montanha verde-escuro, transição verde-médio.
           let minimapTerrain = null;
           const buildMinimapTerrain = () => {
             try {
@@ -7324,8 +7718,17 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
                   const idx = (y * tilesX + x) * 4;
                   let r = 127, g = 174, b = 78;
                   if (core.isOceanCell(gen, x, y)) { r = 29; g = 78; b = 143; }
+                  else if (core.isSouthernIceBankCell && core.isSouthernIceBankCell(gen, x, y)) { r = 205; g = 228; b = 240; }
                   else if (core.isSouthernBeachCell(gen, x, y)) { r = 232; g = 200; b = 90; }
+                  else if (core.isBridgeCell && core.isBridgeCell(gen, x, y)) { r = 232; g = 200; b = 90; }
                   else if (gen.roadCells.has(x + ',' + y)) { r = 201; g = 169; b = 78; }
+                  else if (core.getRegionAt) {
+                    const region = core.getRegionAt(gen, x, y);
+                    if (region === 'ice') { r = 205; g = 228; b = 240; }
+                    else if (region === 'mountain') { r = 96; g = 148; b = 74; }
+                    else if (region === 'transition') { r = 112; g = 162; b = 80; }
+                    else if ((x + y) % 2 === 0) { r = 134; g = 184; b = 86; }
+                  }
                   else if ((x + y) % 2 === 0) { r = 134; g = 184; b = 86; }
                   data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
                 }
@@ -7674,6 +8077,21 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
             if (!tileId) continue;
             const worldTileX = chunk.tileX + localX;
             const worldTileY = chunk.tileY + localY;
+            // V115 — asset real (montanha, pico de gelo, pinheiro, árvore
+            // congelada): desenha a textura do asset, ancorada no centro
+            // da base, em vez de um tile do tileset.
+            const customAsset = CUSTOM_ASSET_RENDER[tileId];
+            if (customAsset) {
+              const assetImage = this.add.image(
+                worldTileX * TILE_SIZE + 8,
+                (worldTileY + customAsset.rows) * TILE_SIZE,
+                customAsset.texture
+              );
+              assetImage.setOrigin(0.5, 1);
+              assetImage.setDepth((worldTileY + customAsset.rows) * TILE_SIZE + (customAsset.rows === 1 ? 1 : 0));
+              visualObjects.push(assetImage);
+              continue;
+            }
             const image = this.add.image(
               worldTileX * TILE_SIZE + 8,
               worldTileY * TILE_SIZE + 8,
@@ -7806,7 +8224,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         const phaserData = core.toPhaserTileLayer(data);
         const map = this.make.tilemap({ data: phaserData, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
         const tileset = map.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
-        const layer = map.createLayer(0, tileset, worldX, worldY);
+        // V115 — o chão de neve é um segundo tileset (a textura aprovada),
+        // com firstgid = SNOW_GROUND_GID, bem acima de qualquer GID do Puny.
+        const tilesets = [tileset];
+        if (this.textures.exists('snow-tile')) {
+          const snowTileset = map.addTilesetImage('snow', 'snow-tile', TILE_SIZE, TILE_SIZE, 0, 0, SNOW_GROUND_GID);
+          if (snowTileset) tilesets.push(snowTileset);
+        }
+        const layer = map.createLayer(0, tilesets.length > 1 ? tilesets : tileset, worldX, worldY);
         layer.setDepth(depth);
         return { map, layer };
       }
@@ -8464,6 +8889,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
 
 
+
+      // ===== V115 — VULCÕES E RIOS DE LAVA (decorativos, sem colisão) =====
+      // 3 cones com brasa pulsante e erupções periódicas de partículas.
+      // Os rios de lava são só desenho sobre o chão: dá para atravessar a
+      // lava andando — ela nunca bloqueia um lugar, como pedido.
       // ===== V106 — DUNGEON: entrada na clareira da mata (23,88) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
       // aberto muda: a dungeon vive na DungeonScene, cena separada.
@@ -9539,6 +9969,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
 })();
 </script>
-<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
+<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw-V115.js").catch(function () {}); }); }</script>
 </body>
 </html>
