@@ -7,7 +7,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V99</title>
+<title>CONQUISTADOR DE WAIFU'S — V100</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -26,7 +26,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V99</div>
+  <div id="version-badge">V100</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -1378,8 +1378,8 @@
             continue;
           }
           if (this.now < queue.nextAt) continue;
-          // V99: a arena nao respawna sozinha fora da dungeon; dentro, respawna como macaco da dungeon.
-          if (this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId && !this.dungeonMode) {
+          // V100: a dungeon nunca respawna — dentro ou fora, a fila da dungeon e descartada.
+          if (this.dungeonArenaChunkId && chunkId === this.dungeonArenaChunkId) {
             this.chunkRespawns.delete(chunkId);
             continue;
           }
@@ -1659,8 +1659,8 @@
           this.pendingPlayerAttack = null;
         }
         const tile = { x: record.tile.x, y: record.tile.y };
-        // V99: o chefe nao respawna — nasce de novo so na proxima entrada.
-        if (!record.isBoss) this.scheduleChunkRespawn(record);
+        // V100: chefe e macacos da dungeon nunca respawnam — nascem de novo so na proxima entrada.
+        if (!record.isBoss && !record.inDungeon) this.scheduleChunkRespawn(record);
         // LevelSystem is the only entity:die subscriber that awards XP.
         this.events.emit('entity:die', {
           entityId: record.id,
@@ -4515,17 +4515,50 @@
     // Arena isolada no canto sudeste do mundo; a entrada fica na cidade (mapa original).
     // O retangulo da arena sobrepoe qualquer terreno (inclusive oceano) nas regras de
     // colisao e de visual: a borda vira paredao de pedra, o interior vira chao de terra.
+    // V100 — DUNGEON: CIDADE ABANDONADA remodelada. 3 salas em linha (norte -> sul)
+    // dentro de um complexo murado. Salas 1 e 2 tem um portao de tronco caido que
+    // so abre quando todos os macacos da sala morrem. Sala 3: so o chefe.
     const DUNGEON_CONFIG = Object.freeze({
       id: 'cidade-abandonada',
       name: 'Cidade Abandonada',
       recommendedLevel: 5,
       town: Object.freeze({ x0: 30, y0: 30, x1: 59, y1: 59 }),
       townCenter: Object.freeze({ x: 45, y: 45 }),
-      arena: Object.freeze({ x0: 66, y0: 92, x1: 88, y1: 114 }),
-      arenaArrival: Object.freeze({ x: 77, y: 110 }),
-      arenaExit: Object.freeze({ x: 77, y: 112 }),
-      bossTile: Object.freeze({ x: 77, y: 94 }),
-      monkeyCount: 8,
+      arena: Object.freeze({ x0: 61, y0: 91, x1: 88, y1: 118 }),
+      arenaArrival: Object.freeze({ x: 74, y: 96 }),
+      arenaExit: Object.freeze({ x: 74, y: 98 }),
+      bossTile: Object.freeze({ x: 74, y: 112 }),
+      rooms: Object.freeze([
+        Object.freeze({
+          key: 'room1', name: 'SALA 1 — RUÍNAS',
+          rect: Object.freeze({ x0: 62, y0: 92, x1: 87, y1: 99 }),
+          gate: Object.freeze({ tiles: Object.freeze([Object.freeze({ x: 73, y: 100 }), Object.freeze({ x: 74, y: 100 }), Object.freeze({ x: 75, y: 100 })]) }),
+          monkeys: Object.freeze([
+            Object.freeze({ x: 66, y: 95, level: 2 }),
+            Object.freeze({ x: 80, y: 95, level: 2 }),
+            Object.freeze({ x: 70, y: 98, level: 2 }),
+            Object.freeze({ x: 82, y: 98, level: 2 })
+          ])
+        }),
+        Object.freeze({
+          key: 'room2', name: 'SALA 2 — PRAÇA TOMADA',
+          rect: Object.freeze({ x0: 62, y0: 101, x1: 87, y1: 108 }),
+          gate: Object.freeze({ tiles: Object.freeze([Object.freeze({ x: 73, y: 109 }), Object.freeze({ x: 74, y: 109 }), Object.freeze({ x: 75, y: 109 })]) }),
+          monkeys: Object.freeze([
+            Object.freeze({ x: 66, y: 104, level: 3 }),
+            Object.freeze({ x: 80, y: 104, level: 3 }),
+            Object.freeze({ x: 74, y: 106, level: 3 }),
+            Object.freeze({ x: 68, y: 107, level: 3 }),
+            Object.freeze({ x: 82, y: 107, level: 3 })
+          ])
+        }),
+        Object.freeze({
+          key: 'room3', name: 'SALA 3 — TRONO DO BRUTAMONTE',
+          rect: Object.freeze({ x0: 62, y0: 110, x1: 87, y1: 117 }),
+          gate: null,
+          monkeys: Object.freeze([])
+        })
+      ]),
       boss: Object.freeze({
         monsterId: 'monkey',
         name: 'Macaco Brutamonte',
@@ -4556,6 +4589,20 @@
 
     const isDungeonArenaCell = (x, y) => x >= DUNGEON_CONFIG.arena.x0 && x <= DUNGEON_CONFIG.arena.x1 && y >= DUNGEON_CONFIG.arena.y0 && y <= DUNGEON_CONFIG.arena.y1;
     const isDungeonArenaBorderCell = (x, y) => isDungeonArenaCell(x, y) && (x === DUNGEON_CONFIG.arena.x0 || x === DUNGEON_CONFIG.arena.x1 || y === DUNGEON_CONFIG.arena.y0 || y === DUNGEON_CONFIG.arena.y1);
+    // V100: helpers da cidade (paredes, portoes, entulho). Usados pela colisao e pelo visual.
+    const isDungeonGateCell = (x, y) => DUNGEON_CONFIG.rooms.some(room => room.gate && room.gate.tiles.some(t => t.x === x && t.y === y));
+    const isDungeonDividerWallCell = (x, y) => x >= 62 && x <= 87 && (y === 100 || y === 109) && !isDungeonGateCell(x, y);
+    const isDungeonWallCell = (x, y) => isDungeonArenaBorderCell(x, y) || isDungeonDividerWallCell(x, y);
+    const isDungeonProtectedCell = (x, y) => {
+      if (x === DUNGEON_CONFIG.arenaArrival.x && y === DUNGEON_CONFIG.arenaArrival.y) return true;
+      if (x === DUNGEON_CONFIG.arenaExit.x && y === DUNGEON_CONFIG.arenaExit.y) return true;
+      if (x === DUNGEON_CONFIG.bossTile.x && y === DUNGEON_CONFIG.bossTile.y) return true;
+      return DUNGEON_CONFIG.rooms.some(room => room.monkeys.some(m => m.x === x && m.y === y));
+    };
+    const isDungeonRubbleCell = (x, y) => {
+      if (!isDungeonArenaCell(x, y) || isDungeonWallCell(x, y) || isDungeonGateCell(x, y) || isDungeonProtectedCell(x, y)) return false;
+      return stableNoise(x, y, 151) < 0.06;
+    };
 
     function createChunkBlockedData(generator, chunkX, chunkY, chunkSize) {
       if (!generator || !Number.isInteger(chunkX) || !Number.isInteger(chunkY)) {
@@ -4576,9 +4623,9 @@
         const y = originY + localY;
         for (let localX = 0; localX < width; localX += 1) {
           const x = originX + localX;
-          // V99: a arena da dungeon sobrepoe qualquer terreno (inclusive oceano).
+          // V100: cidade murada — parede, portao e entulho bloqueiam; resto anda.
           if (isDungeonArenaCell(x, y)) {
-            blocked[localY][localX] = isDungeonArenaBorderCell(x, y) ? 1 : 0;
+            blocked[localY][localX] = (isDungeonWallCell(x, y) || isDungeonGateCell(x, y) || isDungeonRubbleCell(x, y)) ? 1 : 0;
             continue;
           }
           // Ocean is an absolute boundary: it remains blocked even if a road
@@ -4670,14 +4717,20 @@
         const y = originY + ly;
         for (let lx = 0; lx < width; lx += 1) {
           const x = originX + lx;
-          // V99: visual da arena — borda de pedra, interior de terra. Ignora as demais regras.
+          // V100: visual da cidade — muro de pedra, chao de terra/mato, entulho. Ignora as demais regras.
           if (isDungeonArenaCell(x, y)) {
-            if (isDungeonArenaBorderCell(x, y)) {
+            if (isDungeonWallCell(x, y)) {
               ground[ly][lx] = CLIFF_TILE_BY_MASK[15] ?? CLIFF_TILE_BY_MASK[0];
-            } else {
+            } else if (isDungeonGateCell(x, y)) {
               ground[ly][lx] = DIRT_PATH_BY_MASK[15] ?? DIRT_PATH_BY_MASK[0];
+            } else {
+              ground[ly][lx] = stableNoise(x, y, 153) < 0.6
+                ? (DIRT_PATH_BY_MASK[15] ?? DIRT_PATH_BY_MASK[0])
+                : GRASS_TILES[Math.floor(stableNoise(x, y, 157) * GRASS_TILES.length)];
             }
-            structures[ly][lx] = 0;
+            structures[ly][lx] = isDungeonRubbleCell(x, y)
+              ? (TREE_SPRITE_IDS[Math.floor(stableNoise(x, y, 109) * TREE_SPRITE_IDS.length)] || 0)
+              : 0;
             upperObjects[ly][lx] = 0;
             continue;
           }
@@ -5290,17 +5343,24 @@
         });
       }
 
-      // ===== V99 — DUNGEON: CIDADE ABANDONADA =====
+      // ===== V100 — DUNGEON: CIDADE ABANDONADA (3 salas) =====
       initDungeon() {
         this.dungeon = {
           active: false, entranceTile: null, bossId: null, bossDead: false,
           entranceText: null, exitText: null, portalText: null,
-          panel: null, panelBackdrop: null, exitButton: null, exiting: false
+          panel: null, panelBackdrop: null, exitButton: null, exiting: false,
+          rooms: [], trunkObjects: [], roomLabels: []
         };
         this.dungeon.entranceTile = this.computeDungeonEntranceTile();
         if (this.monsterSystem) {
           const arenaChunkId = `${Math.floor(DUNGEON_CONFIG.arena.x0 / CHUNK_TILES)}:${Math.floor(DUNGEON_CONFIG.arena.y0 / CHUNK_TILES)}`;
           this.monsterSystem.setDungeonArena(arenaChunkId, { x0: DUNGEON_CONFIG.arena.x0, y0: DUNGEON_CONFIG.arena.y0, x1: DUNGEON_CONFIG.arena.x1, y1: DUNGEON_CONFIG.arena.y1 });
+        // V100: estado das 3 salas (portao fechado, monstros vivos, sala limpa).
+        this.dungeon.rooms = DUNGEON_CONFIG.rooms.map(room => ({
+          key: room.key, name: room.name,
+          gateTiles: room.gate ? room.gate.tiles.map(t => ({ x: t.x, y: t.y })) : [],
+          gateOpen: false, cleared: false, alive: []
+        }));
         }
         this.createDungeonPanel();
         this.createDungeonExitButton();
@@ -5338,7 +5398,7 @@
         desc.textContent = 'Uma cidade tomada por macacos. No centro dela, o Brutamonte guarda o portal de saída.';
         Object.assign(desc.style, { color: '#d7c49e', font: '14px/1.5 Georgia,serif', marginBottom: '10px' });
         const meta = document.createElement('div');
-        meta.textContent = 'Nível recomendado: ' + DUNGEON_CONFIG.recommendedLevel + '  ·  Chefe: Macaco Brutamonte (Nv. ' + DUNGEON_CONFIG.boss.level + ')  ·  Recompensa: XP e drops';
+        meta.textContent = 'Nível recomendado: ' + DUNGEON_CONFIG.recommendedLevel + '  ·  3 salas  ·  Chefe: Macaco Brutamonte (Nv. ' + DUNGEON_CONFIG.boss.level + ')  ·  Recompensa: XP e drops';
         Object.assign(meta.style, { color: '#e7c987', font: 'bold 12px Georgia,serif', marginBottom: '16px' });
         const enterBtn = document.createElement('button');
         enterBtn.type = 'button'; enterBtn.textContent = '⚔  ENTRAR NA DUNGEON';
@@ -5432,13 +5492,18 @@
         d.active = true;
         d.bossDead = false;
         d.bossId = null;
+        // V100: salas resetam — portoes fechados, monstros novos a cada entrada.
+        for (const room of d.rooms || []) { room.gateOpen = false; room.cleared = false; room.alive = []; }
         if (this.monsterSystem) this.monsterSystem.setDungeonMode(true);
         this.clearPlayerPath();
         this.teleportPlayerTo(DUNGEON_CONFIG.arenaArrival);
         if (this.minimapUI && this.minimapUI.root) this.minimapUI.root.style.display = 'none';
         if (d.exitButton) d.exitButton.style.display = 'block';
         this.createDungeonExitText();
-        this.spawnDungeonBossAndMonkeys();
+        this.createDungeonTrunks();
+        this.createDungeonRoomLabels();
+        this.rebuildDungeonNavigation();
+        this.spawnDungeonRooms();
         this.showDungeonToast('Você entrou na Cidade Abandonada!');
         this.savePlayerPositionSafely(true);
       }
@@ -5459,6 +5524,11 @@
           if (t && t.active) t.destroy();
           d[key] = null;
         }
+        // V100: troncos e placas somem; salas resetam; navegacao volta com portoes fechados.
+        this.destroyDungeonTrunks();
+        this.destroyDungeonRoomLabels();
+        for (const room of d.rooms || []) { room.gateOpen = false; room.cleared = false; room.alive = []; }
+        this.rebuildDungeonNavigation();
         if (d.exitButton) d.exitButton.style.display = 'none';
         if (this.minimapUI && this.minimapUI.root) this.minimapUI.root.style.display = 'block';
         this.clearPlayerPath();
@@ -5472,36 +5542,154 @@
         d.exiting = false;
         this.savePlayerPositionSafely(true);
       }
-      spawnDungeonBossAndMonkeys() {
+      spawnDungeonRooms() {
         const ms = this.monsterSystem;
         const d = this.dungeon;
         if (!ms || !d) return;
         const cfg = DUNGEON_CONFIG;
         const arenaChunkX = Math.floor(cfg.arena.x0 / CHUNK_TILES);
         const arenaChunkY = Math.floor(cfg.arena.y0 / CHUNK_TILES);
-        const bossId = ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, cfg.boss.monsterId, null, {
-          fixedTile: { x: cfg.bossTile.x, y: cfg.bossTile.y },
-          level: cfg.boss.level,
-          stats: { maxHp: cfg.boss.hp, attack: cfg.boss.damage, defense: cfg.boss.defense, attackSpeed: cfg.boss.attackSpeed, moveSpeed: cfg.boss.speed, xpReward: cfg.boss.xp },
-          displayWidth: cfg.boss.displayWidth,
-          displayHeight: cfg.boss.displayHeight,
-          isBoss: true,
-          bossName: 'BRUTAMONTE',
-          bypassCaps: true,
-          inDungeon: true
-        });
-        if (typeof bossId === 'string') d.bossId = bossId;
-        for (let i = 0; i < cfg.monkeyCount; i += 1) {
-          ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, 'monkey', null, { bypassCaps: true, inDungeon: true });
+        const monkeyDef = ms.data && ms.data.MONSTERS ? ms.data.MONSTERS.monkey : null;
+        for (const roomCfg of cfg.rooms) {
+          const room = (d.rooms || []).find(r => r.key === roomCfg.key);
+          if (!room) continue;
+          if (roomCfg.key === 'room3') {
+            const bossId = ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, cfg.boss.monsterId, null, {
+              fixedTile: { x: cfg.bossTile.x, y: cfg.bossTile.y },
+              level: cfg.boss.level,
+              stats: { maxHp: cfg.boss.hp, attack: cfg.boss.damage, defense: cfg.boss.defense, attackSpeed: cfg.boss.attackSpeed, moveSpeed: cfg.boss.speed, xpReward: cfg.boss.xp },
+              displayWidth: cfg.boss.displayWidth,
+              displayHeight: cfg.boss.displayHeight,
+              isBoss: true,
+              bossName: 'BRUTAMONTE',
+              bypassCaps: true,
+              inDungeon: true
+            });
+            if (typeof bossId === 'string') d.bossId = bossId;
+            continue;
+          }
+          for (const spawn of roomCfg.monkeys) {
+            const overrides = { fixedTile: { x: spawn.x, y: spawn.y }, level: spawn.level, bypassCaps: true, inDungeon: true };
+            // Nv. 3 nao tem escala propria no spawn — aplica numeros de Nv. 3 na mao.
+            if (spawn.level >= 3 && monkeyDef) {
+              overrides.stats = {
+                maxHp: Math.max(1, Math.round((monkeyDef.hp || 1) * 2.2)),
+                attack: Math.max(0, Math.round((monkeyDef.attack ?? monkeyDef.damage ?? 0) * 1.5)),
+                defense: (monkeyDef.defense || 0) + 1,
+                xpReward: Math.max(0, Math.round((monkeyDef.xp || 0) * 2))
+              };
+            }
+            const id = ms.spawnOneMonsterForChunk(arenaChunkX, arenaChunkY, 'monkey', null, overrides);
+            if (typeof id === 'string') room.alive.push(id);
+          }
         }
+      }
+      // V100: reconstrói os snapshots de navegação com o estado atual dos portoes.
+      // As grades sao congeladas na criacao do mundo; sem isso, o A* continuaria
+      // tratando um portao aberto como parede (ou vice-versa).
+      rebuildDungeonNavigation() {
+        if (!this.blocked) return;
+        this.centerNavigationGridBase = Object.freeze(
+          this.blocked.map(row => Object.freeze(Array.from(row)))
+        );
+        const bodyBlocked = Array.from({ length: WORLD_HEIGHT_TILES }, () => new Uint8Array(WORLD_WIDTH_TILES));
+        for (let tileY = 0; tileY < WORLD_HEIGHT_TILES; tileY += 1) {
+          for (let tileX = 0; tileX < WORLD_WIDTH_TILES; tileX += 1) {
+            const waypointX = (tileX + 0.5) * TILE_SIZE;
+            const waypointY = (tileY + 0.5) * TILE_SIZE - PLAYER_BODY_CENTER_OFFSET_Y;
+            bodyBlocked[tileY][tileX] = this.isPlayerBodyPositionWalkable(waypointX, waypointY) ? 0 : 1;
+          }
+        }
+        this.navigationGridBase = Object.freeze(
+          bodyBlocked.map(row => Object.freeze(Array.from(row)))
+        );
+        this.bodyBlocked = this.navigationGridBase;
+      }
+      createDungeonTrunks() {
+        const d = this.dungeon;
+        if (!d) return;
+        this.destroyDungeonTrunks();
+        d.trunkObjects = [];
+        for (const room of d.rooms || []) {
+          if (!room.gateTiles.length) continue;
+          const xs = room.gateTiles.map(t => t.x);
+          const y = room.gateTiles[0].y;
+          const x0 = Math.min(...xs);
+          const log = this.add.graphics();
+          log.fillStyle(0x6b4423, 1);
+          log.fillRoundedRect(x0 * TILE_SIZE, y * TILE_SIZE + 4, room.gateTiles.length * TILE_SIZE, 8, 4);
+          log.fillStyle(0x4a2d15, 1);
+          log.fillRect(x0 * TILE_SIZE + 2, y * TILE_SIZE + 7, room.gateTiles.length * TILE_SIZE - 4, 2);
+          log.setDepth((y + 1) * TILE_SIZE);
+          const label = this.add.text((x0 + room.gateTiles.length / 2) * TILE_SIZE, y * TILE_SIZE - 4, '🪵 TRONCO CAÍDO', {
+            fontFamily: 'system-ui, sans-serif', fontSize: '9px', fontStyle: 'bold', color: '#ffe9b0',
+            stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 6, y: 3 }
+          });
+          label.setOrigin(0.5, 1);
+          label.setDepth((y + 1) * TILE_SIZE + 5);
+          d.trunkObjects.push({ key: room.key, objects: [log, label] });
+        }
+      }
+      destroyDungeonTrunks(roomKey) {
+        const d = this.dungeon;
+        if (!d) return;
+        const keep = [];
+        for (const entry of d.trunkObjects || []) {
+          if (roomKey && entry.key !== roomKey) { keep.push(entry); continue; }
+          for (const obj of entry.objects) { try { if (obj && obj.active) obj.destroy(); } catch (e) {} }
+        }
+        d.trunkObjects = keep;
+      }
+      createDungeonRoomLabels() {
+        const d = this.dungeon;
+        if (!d) return;
+        this.destroyDungeonRoomLabels();
+        d.roomLabels = [];
+        for (const roomCfg of DUNGEON_CONFIG.rooms) {
+          const text = this.add.text(((roomCfg.rect.x0 + roomCfg.rect.x1) / 2 + 0.5) * TILE_SIZE, (roomCfg.rect.y0 + 0.5) * TILE_SIZE - 10, roomCfg.name, {
+            fontFamily: 'system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#ffe9b0',
+            stroke: '#000000', strokeThickness: 3, align: 'center', backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 8, y: 4 }
+          });
+          text.setOrigin(0.5, 1);
+          text.setDepth(WORLD_WIDTH_PIXELS + WORLD_HEIGHT_PIXELS + 2000);
+          d.roomLabels.push(text);
+        }
+      }
+      destroyDungeonRoomLabels() {
+        const d = this.dungeon;
+        if (!d) return;
+        for (const t of d.roomLabels || []) { try { if (t && t.active) t.destroy(); } catch (e) {} }
+        d.roomLabels = [];
+      }
+      openDungeonGate(room) {
+        const d = this.dungeon;
+        if (!d || !room || room.gateOpen) return;
+        room.gateOpen = true;
+        this.destroyDungeonTrunks(room.key);
+        this.rebuildDungeonNavigation();
+        this.showDungeonToast('O tronco caiu! A passagem abriu.');
       }
       onDungeonMonsterDied(event) {
         const d = this.dungeon;
-        if (!d || !d.active || !event || event.entityId !== d.bossId) return;
-        d.bossDead = true;
-        d.bossId = null;
-        this.createDungeonPortal(event.tile);
-        this.showDungeonToast('O Brutamonte caiu! O portal de saída apareceu.');
+        if (!d || !d.active || !event) return;
+        if (event.entityId === d.bossId) {
+          d.bossDead = true;
+          d.bossId = null;
+          this.createDungeonPortal(event.tile);
+          this.showDungeonToast('O Brutamonte caiu! O portal de saída apareceu.');
+          return;
+        }
+        // V100: macaco de sala — quando a sala zera, o tronco cai e o portao abre.
+        for (const room of d.rooms || []) {
+          const idx = room.alive.indexOf(event.entityId);
+          if (idx === -1) continue;
+          room.alive.splice(idx, 1);
+          if (room.alive.length === 0 && !room.cleared) {
+            room.cleared = true;
+            if (room.gateTiles.length) this.openDungeonGate(room);
+          }
+          return;
+        }
       }
       onDungeonPlayerStatusChanged(event) {
         const d = this.dungeon;
@@ -5526,6 +5714,8 @@
         if (!d) return;
         for (const unsub of this._dungeonUnsubs || []) { try { unsub(); } catch (e) {} }
         this._dungeonUnsubs = [];
+        this.destroyDungeonTrunks();
+        this.destroyDungeonRoomLabels();
         if (d.panelBackdrop) d.panelBackdrop.remove();
         if (d.exitButton) d.exitButton.remove();
         for (const key of ['entranceText', 'exitText', 'portalText']) {
@@ -7206,6 +7396,9 @@
           for (let tileX = minX; tileX <= maxX; tileX += 1) {
             if (tileX < 0 || tileY < 0 || tileX >= WORLD_WIDTH_TILES || tileY >= WORLD_HEIGHT_TILES ||
                 !this.blocked[tileY] || this.blocked[tileY][tileX]) return false;
+            // V100: portao de tronco fechado bloqueia o corpo do jogador tambem.
+            if (this.dungeon && this.dungeon.active && (this.dungeon.rooms || []).some(room =>
+              !room.gateOpen && room.gateTiles.some(t => t.x === tileX && t.y === tileY))) return false;
           }
         }
         return true;
@@ -8488,7 +8681,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V99';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V100';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
