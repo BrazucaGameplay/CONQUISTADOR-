@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V136</title>
+<title>CONQUISTADOR DE WAIFU'S — V137</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V136</div>
+  <div id="version-badge">V137</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -5560,7 +5560,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     function buildDungeonLayout() {
       const W = DUNGEON_SCENE_CONFIG.width;
       const H = DUNGEON_SCENE_CONFIG.height;
-      // V136 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
+      // V137 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
       const rooms = DUNGEON_SCENE_CONFIG.rooms;
       const corridors = DUNGEON_SCENE_CONFIG.corridors;
       const inRect = (x, y, r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
@@ -5831,7 +5831,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           const ctx = tex.getContext();
           for (let y = 0; y < gh; y += 1) for (let x = 0; x < gw; x += 1) {
             const gid = this.layout.ground[y][x]; if (!gid) continue;
-            const tk = groundTextureForDungeonTile(gid, x, y); // V136 — mesma regra da V134, agora numa unica funcao.
+            const tk = groundTextureForDungeonTile(gid, x, y); // V137 — mesma regra da V134, agora numa unica funcao.
             const img = this.textures.get(tk).getSourceImage();
             ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
@@ -6624,7 +6624,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       return rows;
     }
 
-    // V136 — FIX: GROUND_*_GIDS / SNOW / MOUNTAIN / TALL_GRASS eram definidos só
+    // V137 — FIX: GROUND_*_GIDS / SNOW / MOUNTAIN / TALL_GRASS eram definidos só
 // dentro da IIFE do núcleo (linha ~4304) e usados em WorldScene.groundTextureForGid(),
 // fora dela — por isso "GROUND_DIRT_GIDS is not defined" e o mundo não carregava.
 // Agora vivem no escopo global, onde a cena enxerga. Valores idênticos aos da V134.
@@ -10100,7 +10100,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V136';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V137';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {

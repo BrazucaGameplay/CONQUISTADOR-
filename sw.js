@@ -1,5 +1,10 @@
-// CONQUISTADOR DE WAIFU'S - service worker V135
-const CACHE = 'conquistador-v135';
+// CONQUISTADOR DE WAIFU'S - service worker V137
+// V137 FIX do carregamento infinito: antes era cache-first para TUDO.
+// O navegador continuava servindo o index.html velho do cache e o SW
+// devolvia index.html no lugar do JSON do mapa-base externo.
+// Agora: HTML/SW = network-first, assets locais = cache-first,
+// URLs externas (jsDelivr / raw.githubusercontent) = rede direta, sem SW.
+const CACHE = 'conquistador-v137';
 const FILES = [
   './',
   './index.html',
@@ -43,10 +48,24 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  // Externo: nao intercepta — deixa o fetch normal (com timeout no jogo).
+  // Antes o SW devolvia index.html no lugar do JSON e o preload travava.
+  if (url.origin !== location.origin) return;
+  // HTML / SW: network-first — senao o navegador nunca ve a versao nova.
+  const isHTML = url.pathname.endsWith('/') || url.pathname.endsWith('index.html') || url.pathname.endsWith('sw.js');
+  if (isHTML) {
+    event.respondWith(fetch(event.request).then(response => {
+      if (response && response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
+      return response;
+    }).catch(() => caches.match(event.request).then(c => c || caches.match('./index.html'))));
+    return;
+  }
+  // Assets locais: cache-first.
   event.respondWith(caches.match(event.request).then(cached => {
     if (cached) return cached;
     return fetch(event.request).then(response => {
-      if (response && response.ok && new URL(event.request.url).origin === location.origin) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
+      if (response && response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
       return response;
     }).catch(() => caches.match('./index.html'));
   }));
