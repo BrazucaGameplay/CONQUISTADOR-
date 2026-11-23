@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V176 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
+<!-- V177 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -37,7 +37,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V176</div>
+  <div id="version-badge">V177</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -465,7 +465,7 @@
       }
     }
 
-    // DungeonSystem V176: catálogo validado, execução idempotente e progresso protegido.
+    // DungeonSystem V177: catálogo validado, execução idempotente e progresso protegido.
     class DungeonSystem {
       constructor(api) {
         if (!api || !api.progress || !api.data) throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
@@ -1055,8 +1055,10 @@
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
-        this.chunkRespawns = new Map();
+        this.chunkRespawns = new Map(); // V177: legado inativo, mantido apenas para leitura de saves antigos.
         this.chunkPopulation = new Map();
+        this.respawnRecords = new Map();
+        this.legacyUnclassified = [];
         this.lastPlayerAttackAt = -Infinity;
         this.playerAttackCooldownMs = Number.isFinite(options.playerAttackCooldownMs)
           ? Math.max(0, options.playerAttackCooldownMs) : 1000;
@@ -1939,7 +1941,7 @@
 
       scheduleChunkRespawn(record) {
         if (!record || !this.monsterTypes.includes(record.monsterId)) return false;
-        // V176 — compatibilidade com entidades antigas sem originChunkId:
+        // V177 — compatibilidade com entidades antigas sem originChunkId:
         // recupera o chunk a partir do tile atual em vez de descartar o respawn.
         let owner = null;
         if (record.originChunkId) {
@@ -2505,6 +2507,161 @@
         if (this.now > this.messageUntil && this.message) {
           this.message = '';
           this.refreshUI();
+        }
+      }
+
+      // V177 — RespawnSystem: reservas individuais e idempotentes. A população
+      // inicial é gerida separadamente; nenhuma fila agregada por espécie.
+      snapshotMonsters() {
+        const list = [];
+        for (const record of this.monsters.values()) {
+          if (!record || !record.alive) continue;
+          const hp = this.status ? this.status.getStat(record.id, 'hp') : null;
+          list.push({ monsterId: record.monsterId, level: record.level,
+            tile: { x: record.tile.x, y: record.tile.y },
+            hp: Number.isFinite(Number(hp)) ? Math.max(0, Math.floor(Number(hp))) : null,
+            originChunkId: record.originChunkId || this.getChunkId(record.originChunkX, record.originChunkY),
+            originChunkX: record.originChunkX, originChunkY: record.originChunkY,
+            xpReward: record.xpReward });
+        }
+        return { schemaVersion: 2, list,
+          respawnRecords: Array.from(this.respawnRecords.values()).map(r => ({ ...r })),
+          legacyUnclassified: this.legacyUnclassified.map(r => ({ ...r })) };
+      }
+
+      scheduleChunkRespawn(record) {
+        if (!record || !this.monsterTypes.includes(record.monsterId)) return false;
+        const originX = Number(record.originChunkX), originY = Number(record.originChunkY);
+        let owner = null;
+        if (Number.isInteger(originX) && Number.isInteger(originY) && originX >= 0 && originY >= 0 && originX < this.chunkGrid.columns && originY < this.chunkGrid.rows) {
+          owner = { chunkX: originX, chunkY: originY, id: this.getChunkId(originX, originY) };
+        } else if (record.originChunkId) {
+          const parts = String(record.originChunkId).split(':').map(Number);
+          if (parts.length === 2 && parts.every(Number.isInteger) && parts[0] >= 0 && parts[1] >= 0 && parts[0] < this.chunkGrid.columns && parts[1] < this.chunkGrid.rows) owner = { chunkX: parts[0], chunkY: parts[1], id: this.getChunkId(parts[0], parts[1]) };
+        } else owner = this.getChunkForTile(record.tile);
+        if (!owner) return false;
+        const chunkId = owner.id || this.getChunkId(owner.chunkX, owner.chunkY);
+        const id = `death:${String(record.id || record.entityId || `${record.monsterId}:${chunkId}:${Math.floor(this.now)}`)}`;
+        if (this.respawnRecords.has(id)) return true;
+        const reserved = Array.from(this.respawnRecords.values()).filter(r => r.chunkId === chunkId).length;
+        if (this.getAliveCountForChunk(chunkId) + reserved >= this.maxMonstersPerChunk) return false;
+        const item = { id, monsterId: record.monsterId, chunkId,
+          chunkX: owner.chunkX, chunkY: owner.chunkY,
+          createdAt: this.now, dueAt: this.now + this.respawnDelayMs,
+          attempts: 0, state: 'waiting' };
+        this.respawnRecords.set(id, item);
+        this.events.emit('monster:respawn-queued', { id, originChunkId: chunkId, monsterId: item.monsterId, respawnAt: item.dueAt });
+        this.scheduleMonsterSave();
+        return true;
+      }
+
+      updateChunkRespawns() {
+        if (!this.respawnRecords) return;
+        const ordered = Array.from(this.respawnRecords.values()).sort((a,b) => a.dueAt - b.dueAt || a.createdAt - b.createdAt);
+        for (const item of ordered) {
+          if (!this.active || this.now < item.dueAt) continue;
+          if (this.getAliveCountForChunk(item.chunkId) >= this.maxMonstersPerChunk) {
+            item.attempts += 1; item.dueAt = this.now + this.spawnRetryDelayMs; continue;
+          }
+          const typeLimit = (this.maxPerType && this.maxPerType[item.monsterId]) || this.maxPerMonsterType;
+          if (this.getAliveCountForChunk(item.chunkId, item.monsterId) >= typeLimit) {
+            item.attempts += 1; item.dueAt = this.now + this.spawnRetryDelayMs; continue;
+          }
+          const spawned = this.spawnOneMonsterForChunk(item.chunkX, item.chunkY, item.monsterId);
+          if (!spawned) { item.attempts += 1; item.dueAt = this.now + this.spawnRetryDelayMs; continue; }
+          this.respawnRecords.delete(item.id);
+          this.events.emit('monster:respawned', { id: item.id, originChunkId: item.chunkId, monsterId: item.monsterId });
+          this.scheduleMonsterSave();
+        }
+      }
+
+      restoreOrPopulate() {
+        let saved = null;
+        try { saved = this.progress ? this.progress.get('monsters') : null; } catch (_) { saved = null; }
+        const list = saved && Array.isArray(saved.list) ? saved.list : [];
+        for (const m of list) {
+          if (!m || !this.monsterTypes.includes(m.monsterId)) continue;
+          const hp = m.hp == null ? NaN : Number(m.hp);
+          if (Number.isFinite(hp) && hp <= 0) continue;
+          const tileChunk = m.tile && this.getChunkForTile(m.tile);
+          const ox = Number(m.originChunkX), oy = Number(m.originChunkY);
+          const originValid = Number.isInteger(ox) && Number.isInteger(oy) && ox >= 0 && oy >= 0 && ox < this.chunkGrid.columns && oy < this.chunkGrid.rows;
+          const owner = originValid ? { chunkX: ox, chunkY: oy } : tileChunk;
+          if (owner) this.spawnOneMonsterForChunk(owner.chunkX, owner.chunkY, m.monsterId, m);
+        }
+        this.respawnRecords.clear();
+        const records = saved && Array.isArray(saved.respawnRecords) ? saved.respawnRecords : [];
+        for (const raw of records) {
+          if (!raw || typeof raw.id !== 'string' || !this.monsterTypes.includes(raw.monsterId)) continue;
+          const x = Number(raw.chunkX), y = Number(raw.chunkY);
+          if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= this.chunkGrid.columns || y >= this.chunkGrid.rows) continue;
+          if (this.respawnRecords.has(raw.id)) continue;
+          this.respawnRecords.set(raw.id, { id: raw.id, monsterId: raw.monsterId,
+            chunkId: this.getChunkId(x,y), chunkX: x, chunkY: y,
+            createdAt: Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : this.now,
+            dueAt: Number.isFinite(Number(raw.dueAt)) ? Math.max(this.now, Number(raw.dueAt)) : this.now + this.respawnDelayMs,
+            attempts: Math.max(0, Math.floor(Number(raw.attempts) || 0)), state: 'waiting' });
+        }
+        // Migração conservadora: só converte filas legadas com espécie explícita.
+        for (const q of (saved && Array.isArray(saved.respawns) ? saved.respawns : [])) {
+          if (!q || !Number.isInteger(q.chunkX) || !Number.isInteger(q.chunkY)) continue;
+          const x=q.chunkX, y=q.chunkY;
+          if (x<0 || y<0 || x>=this.chunkGrid.columns || y>=this.chunkGrid.rows) continue;
+          const typed=q.pendingByMonster && typeof q.pendingByMonster==='object' ? q.pendingByMonster : {};
+          for (const type of this.monsterTypes) {
+            const n=Math.max(0,Math.min(this.maxMonstersPerChunk,Math.floor(Number(typed[type])||0)));
+            for(let k=0;k<n;k++) {
+              const id=`legacy:${x}:${y}:${type}:${k}`;
+              if (!this.respawnRecords.has(id)) this.respawnRecords.set(id,{id,monsterId:type,chunkId:this.getChunkId(x,y),chunkX:x,chunkY:y,createdAt:this.now,dueAt:this.now+this.respawnDelayMs,attempts:0,state:'waiting'});
+            }
+          }
+        }
+        this.legacyUnclassified = saved && Array.isArray(saved.legacyUnclassified) ? saved.legacyUnclassified.slice() : [];
+        for (const q of (saved && Array.isArray(saved.respawns) ? saved.respawns : [])) {
+          const typed=q && q.pendingByMonster && typeof q.pendingByMonster==='object' ? q.pendingByMonster : {};
+          const hasType=this.monsterTypes.some(t => Number(typed[t])>0);
+          if (q && Number(q.pending)>0 && !hasType) this.legacyUnclassified.push({ chunkX:q.chunkX, chunkY:q.chunkY, pending:Number(q.pending), source:'legacy-v1' });
+        }
+        this.populateAllChunks();
+        this.scheduleMonsterSave();
+      }
+
+      populateAllChunks() {
+        // PopulationManager: inicialização determinística, separada das mortes.
+        for (let y=0; y<this.chunkGrid.rows; y++) for (let x=0; x<this.chunkGrid.columns; x++) {
+          const chunkId=this.getChunkId(x,y);
+          let state=this.chunkPopulation.get(chunkId);
+          if (!state) { state={ initialSpawnAttempted:false, initialFillPending:false, initialRetryAt:0 }; this.chunkPopulation.set(chunkId,state); }
+          if (state.initialSpawnAttempted) continue;
+          state.initialSpawnAttempted=true;
+          const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
+          const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
+          for (const type of ordered) {
+            const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
+            while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
+              if (!this.spawnOneMonsterForChunk(x,y,type)) break;
+            }
+          }
+          state.initialFillPending=this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk;
+          state.initialRetryAt=this.now+this.spawnRetryDelayMs;
+        }
+      }
+
+      updateInitialChunkFill() {
+        for (const [chunkId,state] of this.chunkPopulation.entries()) {
+          if (!state.initialFillPending || this.now<state.initialRetryAt) continue;
+          const [x,y]=chunkId.split(':').map(Number);
+          if (!Number.isInteger(x)||!Number.isInteger(y)) { state.initialFillPending=false; continue; }
+          const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
+          const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
+          for (const type of ordered) {
+            const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
+            while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
+              if (!this.spawnOneMonsterForChunk(x,y,type)) break;
+            }
+          }
+          state.initialFillPending=this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk;
+          state.initialRetryAt=this.now+this.spawnRetryDelayMs;
         }
       }
 
@@ -5241,12 +5398,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // V115 — Banco de gelo: 2 tiles ao SUL do rio.
     // É terra (andável), pintado de neve, sem árvores nem estruturas.
     function isSouthernIceBankCell(generator, x, y) {
-      // V176 — o rio nao recebe mais faixa branca/neve na margem.
+      // V177 — o rio nao recebe mais faixa branca/neve na margem.
       // A agua azul clara chega ate a margem; a faixa central e mais escura.
       return false;
     }
 
-    // V176 — curso do rio em polilinha: segue para leste, curva para dentro
+    // V177 — curso do rio em polilinha: segue para leste, curva para dentro
     // da montanha e depois sobe em eixo vertical. A distância é calculada
     // até cada segmento, mantendo largura contínua e margens sem ruído.
     const RIVER_CENTERLINE = Object.freeze([
@@ -6421,7 +6578,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V176',
+        version: 'V177',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6534,7 +6691,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
 
     });
 
-    // V176 — tabelas de GIDs que faltavam na versão anterior.
+    // V177 — tabelas de GIDs que faltavam na versão anterior.
     // A ausência destas constantes interrompia buildDungeonLayout() antes
     // da cena terminar o create(), causando a entrada travada na Dungeon.
     const GRASS_GIDS = Object.freeze([1, 2, 3, 4]);
@@ -6810,7 +6967,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         // com launch(). Força também a visibilidade caso tenha sido reutilizada.
         this.scene.setVisible(true);
         this.scene.bringToTop();
-        // V176: pausa o mundo somente depois de a Dungeon estar pronta.
+        // V177: pausa o mundo somente depois de a Dungeon estar pronta.
         // O sinal é emitido após visuais, colisões, jogador, monstros e HUD.
         this.scene.sleep('WorldScene');
         this.game.events.emit('dungeon:ready', { floor: this.currentFloor });
@@ -7956,7 +8113,7 @@ class WorldScene extends Phaser.Scene {
         this.load.image('v132-dirt', V132_ASSETS.groundDirt);
         this.load.image('v132-stone', V132_ASSETS.groundStone);
         this.load.image('v132-water', V132_ASSETS.groundWater);
-        // V176 — tile de água enviado ao repositório.
+        // V177 — tile de água enviado ao repositório.
         this.load.image('water-river', 'assets/ground/water-river.png');
         this.load.image('v132-tree-leaf', V132_ASSETS.treeLeaf);
         this.load.image('v132-tree-pine', V132_ASSETS.treePine);
@@ -10422,11 +10579,11 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V176 — transição de cena determinística. O mundo dorme (não atualiza
+        // V177 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
-        // V176: manter o mundo ativo até a DungeonScene concluir create().
+        // V177: manter o mundo ativo até a DungeonScene concluir create().
         // Se a inicialização falhar, o jogador não fica preso numa tela vazia.
         this.scene.launch('DungeonScene');
       }
@@ -11276,7 +11433,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V176'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V177'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
