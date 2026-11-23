@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V141</title>
+<title>CONQUISTADOR DE WAIFU'S — V142</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +27,8 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V141</div>
+  <div id="version-badge">V142</div>
+  <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
@@ -4419,6 +4420,30 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       { x: 60, y: 155 }, { x: 100, y: 170 }, { x: 150, y: 175 }, { x: 20, y: 175 }
       // V119 — removidas as 34 árvores que a V118 adicionou (remendo).
     ];
+    // V142 — objetos novos do gelo (ZIP do gelo). Posições fixas, longe
+    // das estradas e sem sobrepor os picos/árvores que já existiam.
+    // icePeak2 tem base 3x2 como o pico antigo; o resto ocupa 1 tile.
+    const ICE_PEAKS_2 = [
+      { x: 60, y: 120 }, { x: 115, y: 145 }, { x: 145, y: 165 }
+    ];
+    const FROZEN_PINES_2 = [
+      { x: 35, y: 125 }, { x: 95, y: 135 }, { x: 135, y: 125 },
+      { x: 55, y: 165 }, { x: 105, y: 165 }
+    ];
+    const ICE_DECOR = [
+      { x: 45, y: 145, code: 'iceCrystal' },
+      { x: 120, y: 130, code: 'iceCrystal' },
+      { x: 160, y: 145, code: 'iceCrystal' },
+      { x: 50, y: 155, code: 'iceRock' },
+      { x: 100, y: 120, code: 'iceRock' },
+      { x: 140, y: 170, code: 'iceRock' },
+      { x: 65, y: 140, code: 'snowBush' },
+      { x: 115, y: 160, code: 'snowBush' },
+      { x: 155, y: 120, code: 'snowBush' },
+      { x: 85, y: 160, code: 'frozenStump' },
+      { x: 30, y: 150, code: 'frozenStump' },
+      { x: 170, y: 155, code: 'frozenStump' }
+    ];
     // V115 — manchas de pinheiros na montanha e na transição.
     const PINE_PATCHES = [
       // V121 — manchas de pinheiro quase pela metade (mesmo motivo).
@@ -4433,6 +4458,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const SNOW_GROUND_GID = 10001;
     const SNOW_GROUND_GID_2 = 10003;
     const SNOW_GROUND_GID_3 = 10004;
+    // V142 — chão novo do gelo (assets do ZIP do gelo). snow-8 é a branca.
+    const SNOW_GROUND_GID_4 = 10007;
+    const SNOW_GROUND_GID_5 = 10008;
+    const SNOW_GROUND_GID_6 = 10009;
+    const SNOW_GROUND_GID_7 = 10010;
+    const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
@@ -4444,11 +4475,33 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
     const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
     const GROUND_STONE_GIDS = new Set([85, 86, 88]);
+    // V142 — ÚNICA função que escolhe o chão do gelo. Causa raiz do gelo
+    // chapado: antes eram só 3 GIDs (40/30/30). Agora: 40% é a branca
+    // (snow-8) e os outros 60% se dividem entre as 4 neve novas + as 3
+    // antigas, para a branca não virar mancha lisa. Um único stableNoise
+    // (501) por tile: o mesmo tile sempre cai no mesmo GID.
+    function iceGroundGidFor(x, y) {
+      const n = stableNoise(x, y, 501);
+      if (n < 0.40) return SNOW_GROUND_GID_8; // branca — 40%
+      if (n < 0.52) return SNOW_GROUND_GID_4;
+      if (n < 0.64) return SNOW_GROUND_GID_5;
+      if (n < 0.76) return SNOW_GROUND_GID_6;
+      if (n < 0.88) return SNOW_GROUND_GID_7;
+      if (n < 0.94) return SNOW_GROUND_GID;   // snow-1 antiga
+      if (n < 0.97) return SNOW_GROUND_GID_2; // snow-2 antiga
+      return SNOW_GROUND_GID_3;               // snow-3 antiga
+    }
     const CUSTOM_ASSET_CODES = Object.freeze({
       mountain: 91001,
       icePeak: 91002,
       pine: 91003,
-      frozenTree: 91004
+      frozenTree: 91004,
+      icePeak2: 91005,
+      frozenPine2: 91006,
+      iceCrystal: 91007,
+      iceRock: 91008,
+      snowBush: 91009,
+      frozenStump: 91010
     });
 
 
@@ -4735,6 +4788,15 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       for (const tree of FROZEN_TREES) {
         if (tree.x === x && tree.y === y) return CUSTOM_ASSET_CODES.frozenTree;
       }
+      for (const peak of ICE_PEAKS_2) {
+        if (peak.x === x && peak.y === y) return CUSTOM_ASSET_CODES.icePeak2;
+      }
+      for (const tree of FROZEN_PINES_2) {
+        if (tree.x === x && tree.y === y) return CUSTOM_ASSET_CODES.frozenPine2;
+      }
+      for (const d of ICE_DECOR) {
+        if (d.x === x && d.y === y) return CUSTOM_ASSET_CODES[d.code];
+      }
       return 0;
     }
 
@@ -4745,6 +4807,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
       }
       for (const peak of ICE_PEAKS) {
+        if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
+      }
+      for (const peak of ICE_PEAKS_2) {
         if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
       }
       return false;
@@ -5121,7 +5186,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           if (!hasRoad(x, y) && !cliffMask[ly + 1][lx + 1]) {
             const regionHere = getRegionAt(generator, x, y);
             if (regionHere === 'ice') {
-              ground[ly][lx] = stableNoise(x, y, 501) < 0.4 ? SNOW_GROUND_GID : (stableNoise(x, y, 501) < 0.7 ? SNOW_GROUND_GID_2 : SNOW_GROUND_GID_3);
+              ground[ly][lx] = iceGroundGidFor(x, y);
               // O antigo mar vira gelo: sem estruturas do mapa original.
               if (isOriginal(x, y)) {
                 structures[ly][lx] = 0;
@@ -5168,7 +5233,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           // V132 — a margem norte é floresta (grama alta): só o banco de
           // gelo ao sul e o rio pintam por cima do resto.
           if (isSouthernIceBankCell(generator, x, y)) {
-            ground[ly][lx] = stableNoise(x, y, 501) < 0.4 ? SNOW_GROUND_GID : (stableNoise(x, y, 501) < 0.7 ? SNOW_GROUND_GID_2 : SNOW_GROUND_GID_3);
+            ground[ly][lx] = iceGroundGidFor(x, y);
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           } else if (isOceanCell(generator, x, y)) {
@@ -5418,6 +5483,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       SNOW_GROUND_GID,
       SNOW_GROUND_GID_2,
       SNOW_GROUND_GID_3,
+      SNOW_GROUND_GID_4,
+      SNOW_GROUND_GID_5,
+      SNOW_GROUND_GID_6,
+      SNOW_GROUND_GID_7,
+      SNOW_GROUND_GID_8,
       MOUNTAIN_GROUND_GID,
       MOUNTAIN_GROUND_GID_2,
       MOUNTAIN_GROUND_GID_3,
@@ -5496,6 +5566,17 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       snow: 'assets/ground/snow-1.png',
       snow2: 'assets/ground/snow-2.png',
       snow3: 'assets/ground/snow-3.png',
+      snow4: 'assets/ground/snow-4-neve-azulada.png',
+      snow5: 'assets/ground/snow-5-gelo-rachado.png',
+      snow6: 'assets/ground/snow-6-geada-escura.png',
+      snow7: 'assets/ground/snow-7-neve-pocas-gelo.png',
+      snow8: 'assets/ground/snow-8-branca.png',
+      frozenPine2: 'assets/trees/frozen-pine-2.png',
+      icePeak2: 'assets/world/ice-peak-2.png',
+      iceCrystal: 'assets/world/ice-crystal.png',
+      iceRock: 'assets/world/ice-rock.png',
+      snowBush: 'assets/world/snow-bush.png',
+      frozenStump: 'assets/world/frozen-stump.png',
       mountainGround: 'assets/ground/mountain-1.png',
       mountainGround2: 'assets/ground/mountain-2.png',
       mountainGround3: 'assets/ground/mountain-3.png',
@@ -5520,12 +5601,24 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       mountain: 91001,
       icePeak: 91002,
       pine: 91003,
-      frozenTree: 91004
+      frozenTree: 91004,
+      icePeak2: 91005,
+      frozenPine2: 91006,
+      iceCrystal: 91007,
+      iceRock: 91008,
+      snowBush: 91009,
+      frozenStump: 91010
     });
     // GID do chão de neve: firstgid do tile 'snow' em createTileLayer.
     const SNOW_GROUND_GID = 10001;
     const SNOW_GROUND_GID_2 = 10003;
     const SNOW_GROUND_GID_3 = 10004;
+    // V142 — chão novo do gelo (assets do ZIP do gelo). snow-8 é a branca.
+    const SNOW_GROUND_GID_4 = 10007;
+    const SNOW_GROUND_GID_5 = 10008;
+    const SNOW_GROUND_GID_6 = 10009;
+    const SNOW_GROUND_GID_7 = 10010;
+    const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
@@ -5542,7 +5635,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       [CUSTOM_ASSET_CODES.mountain]: { texture: 'asset-mountain', rows: 2 },
       [CUSTOM_ASSET_CODES.icePeak]: { texture: 'asset-icepeak', rows: 2 },
       [CUSTOM_ASSET_CODES.pine]: { texture: 'asset-pine', rows: 1, scale: 0.25 },
-      [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1, scale: 0.3 }
+      [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1, scale: 0.3 },
+      [CUSTOM_ASSET_CODES.icePeak2]: { texture: 'asset-icepeak2', rows: 2 },
+      [CUSTOM_ASSET_CODES.frozenPine2]: { texture: 'asset-frozenpine2', rows: 1, scale: 0.3 },
+      [CUSTOM_ASSET_CODES.iceCrystal]: { texture: 'asset-icecrystal', rows: 1, scale: 0.25 },
+      [CUSTOM_ASSET_CODES.iceRock]: { texture: 'asset-icerock', rows: 1, scale: 0.25 },
+      [CUSTOM_ASSET_CODES.snowBush]: { texture: 'asset-snowbush', rows: 1, scale: 0.25 },
+      [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.25 }
     });
     
     const DISPLAY_CONFIG = Object.freeze({
@@ -7024,6 +7123,17 @@ class WorldScene extends Phaser.Scene {
         this.load.image('mountain-tile', CUSTOM_ASSETS.mountainGround);
         this.load.image('snow-tile-2', CUSTOM_ASSETS.snow2);
         this.load.image('snow-tile-3', CUSTOM_ASSETS.snow3);
+        this.load.image('snow-tile-4', CUSTOM_ASSETS.snow4);
+        this.load.image('snow-tile-5', CUSTOM_ASSETS.snow5);
+        this.load.image('snow-tile-6', CUSTOM_ASSETS.snow6);
+        this.load.image('snow-tile-7', CUSTOM_ASSETS.snow7);
+        this.load.image('snow-tile-8', CUSTOM_ASSETS.snow8);
+        this.load.image('asset-icepeak2', CUSTOM_ASSETS.icePeak2);
+        this.load.image('asset-frozenpine2', CUSTOM_ASSETS.frozenPine2);
+        this.load.image('asset-icecrystal', CUSTOM_ASSETS.iceCrystal);
+        this.load.image('asset-icerock', CUSTOM_ASSETS.iceRock);
+        this.load.image('asset-snowbush', CUSTOM_ASSETS.snowBush);
+        this.load.image('asset-frozenstump', CUSTOM_ASSETS.frozenStump);
         this.load.image('mountain-tile-2', CUSTOM_ASSETS.mountainGround2);
         this.load.image('mountain-tile-3', CUSTOM_ASSETS.mountainGround3);
         this.load.image('asset-ruin', CUSTOM_ASSETS.ruin);
@@ -8602,6 +8712,11 @@ class WorldScene extends Phaser.Scene {
         if (gid === SNOW_GROUND_GID) return 'snow-tile';
         if (gid === SNOW_GROUND_GID_2) return 'snow-tile-2';
         if (gid === SNOW_GROUND_GID_3) return 'snow-tile-3';
+        if (gid === SNOW_GROUND_GID_4) return 'snow-tile-4';
+        if (gid === SNOW_GROUND_GID_5) return 'snow-tile-5';
+        if (gid === SNOW_GROUND_GID_6) return 'snow-tile-6';
+        if (gid === SNOW_GROUND_GID_7) return 'snow-tile-7';
+        if (gid === SNOW_GROUND_GID_8) return 'snow-tile-8';
         if (gid === MOUNTAIN_GROUND_GID) return 'mountain-tile';
         if (gid === MOUNTAIN_GROUND_GID_2) return 'mountain-tile-2';
         if (gid === MOUNTAIN_GROUND_GID_3) return 'mountain-tile-3';
