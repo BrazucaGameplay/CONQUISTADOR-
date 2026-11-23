@@ -16,7 +16,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V168</title>
+<title>CONQUISTADOR DE WAIFU'S — V170</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -35,7 +35,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V168</div>
+  <div id="version-badge">V170</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -1275,10 +1275,10 @@
             // V132 — respawn por regiao: nasce em floresta, transicao,
             // montanha e gelo. Cada chunk povoa com a regiao dos proprios
             // tiles, em vez de so a floresta povoar o mundo inteiro.
-            // Nunca nasce no rio, na ponte, nem na clareira da dungeon (23,88).
+            // Nunca nasce no rio, na ponte, nem na clareira da dungeon (90,82).
             if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) continue;
             if (this.world.isRiverCell && this.world.isRiverCell(x, y)) continue;
-            if (Math.max(Math.abs(x - 23), Math.abs(y - 88)) <= 3) continue;
+            if (Math.max(Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x), Math.abs(y - DUNGEON_SCENE_CONFIG.entranceTile.y)) <= 4) continue;
             if (this.world.getRegionAt) {
               const region = this.world.getRegionAt(x, y);
               if (region !== 'forest' && region !== 'transition' && region !== 'mountain' && region !== 'ice') continue;
@@ -2168,16 +2168,18 @@
           if (deathKeys && this.scene.textures && this.scene.textures.exists(deathKeys.death)) {
             const def = (record && record.definition) || (this.data && this.data.MONSTERS && this.data.MONSTERS[deathMonsterId]) || {};
             const deathAspect = (def.aspect && def.aspect.death) || 1;
-            const bodyLen = deathSprite.displayHeight;
+            const bodyLen = Math.max(1, Number(record.displayHeight) || Number(deathSprite.displayHeight) || 24);
             deathSprite.setTexture(deathKeys.death);
-            deathSprite.setDisplaySize(bodyLen, Math.max(1, Math.round(bodyLen / deathAspect)));
+            // Cada folha de morte tem dimensões próprias (algumas são spritesheets
+            // muito largas). Reaplica tamanho lógico fixo antes do fade.
+            deathSprite.setDisplaySize(Math.max(1, Math.round(bodyLen)), Math.max(1, Math.round(bodyLen / deathAspect)));
           }
           this.scene.tweens.killTweensOf(deathSprite);
+          // V170: não animar scale no sprite de morte. O fade/rotação mantém
+          // o tamanho lógico da folha e impede crescimento por escala herdada.
           this.scene.tweens.add({
             targets: deathSprite,
             alpha: 0,
-            scaleX: 0.35,
-            scaleY: 0.35,
             angle: (deathSprite.x % 2 ? 12 : -12),
             duration: 260,
             ease: 'Back.In',
@@ -5060,14 +5062,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // esta função, então se ajustam sozinhos. A largura é suavizada
     // com a média do ruído dos 3 vizinhos para não dar degrau de
     // 3 tiles entre uma coluna e a outra.
-    // EXCEÇÃO — entrada da dungeon (x=23): o rio triplo cobriria a
-    // ruína (x 21-25, y 83-87) e a entrada (23,88). Ali o rio mantém
-    // a largura antiga, com rampa de 6 tiles em cada lado.
+    // V170 — exceção do rio na entrada central da dungeon (x=90):
+    // mantém uma faixa estreita para a ruína (x 88-92, y 77-81) e o acesso
+    // (90,82), com rampa de 6 tiles em cada lado.
     function getRiverHalfWidth(x) {
       const smoothed = (stableNoise(x - 1, 0, 1234) + stableNoise(x, 0, 1234) + stableNoise(x + 1, 0, 1234)) / 3;
       const wide = smoothed < 0.6 ? 7 : 10;
       const narrow = smoothed < 0.6 ? 2 : 3;
-      const d = Math.abs(x - 23);
+      const d = Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x);
       if (d <= 4) return narrow;
       if (d >= 10) return wide;
       return Math.round(narrow + (wide - narrow) * ((d - 4) / 6));
@@ -5226,9 +5228,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     function getGeneratedTreeId(generator, x, y, cliff, checkSeal = true) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
           isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
-      // V118 — clareira da entrada da dungeon (23,88): a ruína ocupa
-      // x 21-25, y 83-87. Nenhuma árvore nasce aqui nem no acesso ao sul.
-      if (x >= 20 && x <= 26 && y >= 82 && y <= 90) return 0;
+      // V170 — clareira central da entrada (90,82): ruína em x 88-92,
+      // y 77-81; mantém livre a aproximação e o tile de acesso.
+      if (x >= 87 && x <= 93 && y >= 76 && y <= 85) return 0;
       // V115 — árvore de folha só nasce na floresta. Na montanha nascem
       // pinheiros; no gelo, árvores congeladas solitárias. Na transição,
       // só um raleio (as manchas de folha ficam a oeste).
@@ -6279,7 +6281,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V168',
+        version: 'V170',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6338,7 +6340,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       recommendedLevel: 5,
       width: 36,
       height: 30,
-      entranceTile: Object.freeze({ x: 23, y: 88 }), // clareira no meio das arvores (print do jogador).
+      entranceTile: Object.freeze({ x: 90, y: 82 }), // entrada reposicionada para o centro do mapa.
       arrivalTile: Object.freeze({ x: 8, y: 5 }),
       exitTile: Object.freeze({ x: 8, y: 3 }),
       bossTile: Object.freeze({ x: 18, y: 22 }),
@@ -6651,6 +6653,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         this.input.on('pointerdown', this.onDungeonPointerDown, this);
         this.input.on('pointermove', this.onDungeonPointerMove, this);
         this.input.on('pointerup', this.onDungeonPointerUp, this);
+        // A cena já foi criada: agora pode ser colocada no topo sem corrida
+        // com launch(). Força também a visibilidade caso tenha sido reutilizada.
+        this.scene.setVisible(true);
+        this.scene.bringToTop();
       }
 
       hideOverworldHud() {
@@ -7368,9 +7374,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           this.showToast('Você caiu... voltou para a entrada.', 2000);
         }
         this.restoreOverworldHud();
-        this.scene.resume('WorldScene');
+        // Encerra a instância atual antes de acordar o mundo. O WorldScene
+        // preservado volta a renderizar no mesmo estado/posição, sem restart.
+        this.scene.stop('DungeonScene');
+        this.scene.wake('WorldScene');
         this.scene.setVisible(true, 'WorldScene');
-        this.scene.stop();
+        this.scene.bringToTop('WorldScene');
       }
 
       // V110: regeneracao passa a rodar dentro da dungeon (antes era zero).
@@ -10079,7 +10088,7 @@ class WorldScene extends Phaser.Scene {
       // 3 cones com brasa pulsante e erupções periódicas de partículas.
       // Os rios de lava são só desenho sobre o chão: dá para atravessar a
       // lava andando — ela nunca bloqueia um lugar, como pedido.
-      // ===== V106 — DUNGEON: entrada na clareira da mata (23,88) =====
+      // ===== V170 — DUNGEON: entrada central na clareira da mata (90,82) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
       // aberto muda: a dungeon vive na DungeonScene, cena separada.
       createDungeonEntrance() {
@@ -10096,12 +10105,12 @@ class WorldScene extends Phaser.Scene {
         this.createDungeonRuin();
       }
 
-      // ===== V113 — RUINA na entrada da dungeon (23,88), no mundo =====
+      // ===== V170 — RUINA na entrada central da dungeon (90,82), no mundo =====
       // Salao em ruinas ao redor da entrada: muros quebrados, pilares
       // caidos, entulho e mata invadindo. A entrada (23,88) fica livre
       // no meio — o jogador pisa nela e o texto/painel funcionam igual.
 
-      // ===== V115 — RUÍNA NOVA na entrada da dungeon (23,88) =====
+      // ===== V170 — RUÍNA NOVA na entrada central da dungeon (90,82) =====
       // O asset aprovado (portal de pedra grandioso, musgo e trepadeiras)
       // substitui a fortaleza da V114, que renderizava quebrada no print
       // (quadrados laranja + quadrado preto). O sprite tem 5x5 tiles,
@@ -10110,8 +10119,8 @@ class WorldScene extends Phaser.Scene {
       // Colisão = pegada do sprite (5x5). Nada fora do sprite é sólido:
       // sem parede invisível.
       createDungeonRuin() {
-        const EX = DUNGEON_SCENE_CONFIG.entranceTile.x; // 23
-        const EY = DUNGEON_SCENE_CONFIG.entranceTile.y; // 88
+        const EX = DUNGEON_SCENE_CONFIG.entranceTile.x; // 90
+        const EY = DUNGEON_SCENE_CONFIG.entranceTile.y; // 82
         const bodies = [];
         const ruin = this.add.image((EX + 0.5) * TILE_SIZE, EY * TILE_SIZE, 'asset-ruin');
         ruin.setOrigin(0.5, 1);
@@ -10218,9 +10227,12 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
+        // V170 — transição de cena determinística. O mundo dorme (não atualiza
+        // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
+        // A Dungeon só assume a tela em seu próprio create(), quando já existe.
+        // Isso evita esconder o mundo antes de a nova cena estar pronta.
+        this.scene.sleep('WorldScene');
         this.scene.launch('DungeonScene');
-        this.scene.pause();
-        this.scene.setVisible(false);
       }
 
       createPlayerAnimations() {
@@ -11068,7 +11080,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V168'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V170'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
