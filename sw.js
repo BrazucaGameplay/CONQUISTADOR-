@@ -1,7 +1,7 @@
 // CONQUISTADOR DE WAIFU'S - service worker (torna o jogo instalável como app)
 // Ao subir, renomear este arquivo para sw.js. O conteúdo já usa os nomes
 // pós-rename: cacheia ./index.html (não o nome versionado).
-const CACHE = 'conquistador-v133';
+const CACHE = 'conquistador-v134';
 const FILES = [
   './',
   './index.html',
