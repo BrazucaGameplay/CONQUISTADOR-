@@ -2,13 +2,34 @@
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
-<head>
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
+</style>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V137</title>
+<title>CONQUISTADOR DE WAIFU'S — V146</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,11 +48,25 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V137</div>
+  <div id="version-badge">V146</div>
+  <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
+  <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
+  <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
-\n  <script id="conquistador-systems-v44">
+\n  <script id="conquistador-data-v141">
+  (function (root) { 'use strict';
+    // V140 — dados canônicos de data/monsters.json + data/waifus.json,
+    // embutidos no build para o jogo não depender de fetch. Edite os JSONs
+    // em data/ e regenere — nunca edite este bloco à mão.
+    root.CONQUISTADOR_DATA = Object.freeze({
+      monsters: {"version":1,"source":"V146 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":22,"displayHeight":24,"aspect":{"idle":0.911,"walk":0.958,"attack":1.537,"death":2.63},"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v3","frames":{"walk":{"sprite":"assets/monsters/slime_walk.png","textureKey":"conquistador-monster-slime-v3-walk"},"attack":{"sprite":"assets/monsters/slime_attack.png","textureKey":"conquistador-monster-slime-v3-attack"},"death":{"sprite":"assets/monsters/slime_death.png","textureKey":"conquistador-monster-slime-v3-death"}}},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":18,"displayHeight":32,"aspect":{"idle":0.571,"walk":0.955,"attack":1.671,"death":2.576},"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v3","frames":{"walk":{"sprite":"assets/monsters/monkey_walk.png","textureKey":"conquistador-monster-monkey-v3-walk"},"attack":{"sprite":"assets/monsters/monkey_attack.png","textureKey":"conquistador-monster-monkey-v3-attack"},"death":{"sprite":"assets/monsters/monkey_death.png","textureKey":"conquistador-monster-monkey-v3-death"}}},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":20,"displayHeight":22,"aspect":{"idle":0.894,"walk":1.108,"attack":1.903,"death":3.532},"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v3","frames":{"walk":{"sprite":"assets/monsters/rat_walk.png","textureKey":"conquistador-monster-rat-v3-walk"},"attack":{"sprite":"assets/monsters/rat_attack.png","textureKey":"conquistador-monster-rat-v3-attack"},"death":{"sprite":"assets/monsters/rat_death.png","textureKey":"conquistador-monster-rat-v3-death"}}},"snake":{"id":"snake","name":"Cobra","hp":40,"damage":7,"defense":0,"xp":22,"speed":70,"dropId":"snake_scale","displayWidth":31,"displayHeight":22,"aspect":{"idle":1.404,"walk":0.691,"attack":0.577,"death":3.11},"sprite":"assets/monsters/snake.png","textureKey":"conquistador-monster-snake-v3","frames":{"walk":{"sprite":"assets/monsters/snake_walk.png","textureKey":"conquistador-monster-snake-v3-walk"},"attack":{"sprite":"assets/monsters/snake_attack.png","textureKey":"conquistador-monster-snake-v3-attack"},"death":{"sprite":"assets/monsters/snake_death.png","textureKey":"conquistador-monster-snake-v3-death"}}},"wolf":{"id":"wolf","name":"Lobo","hp":60,"damage":8,"defense":1,"xp":35,"speed":80,"dropId":"wolf_fang","displayWidth":15,"displayHeight":28,"aspect":{"idle":0.54,"walk":0.626,"attack":1.53,"death":3.424},"sprite":"assets/monsters/wolf.png","textureKey":"conquistador-monster-wolf-v3","frames":{"walk":{"sprite":"assets/monsters/wolf_walk.png","textureKey":"conquistador-monster-wolf-v3-walk"},"attack":{"sprite":"assets/monsters/wolf_attack.png","textureKey":"conquistador-monster-wolf-v3-attack"},"death":{"sprite":"assets/monsters/wolf_death.png","textureKey":"conquistador-monster-wolf-v3-death"}}},"eagle":{"id":"eagle","name":"Águia","hp":50,"damage":9,"defense":0,"xp":32,"speed":90,"dropId":"eagle_feather","displayWidth":16,"displayHeight":26,"aspect":{"idle":0.625,"walk":0.88,"attack":1.575,"death":2.953},"sprite":"assets/monsters/eagle.png","textureKey":"conquistador-monster-eagle-v3","frames":{"walk":{"sprite":"assets/monsters/eagle_walk.png","textureKey":"conquistador-monster-eagle-v3-walk"},"attack":{"sprite":"assets/monsters/eagle_attack.png","textureKey":"conquistador-monster-eagle-v3-attack"},"death":{"sprite":"assets/monsters/eagle_death.png","textureKey":"conquistador-monster-eagle-v3-death"}}},"spider":{"id":"spider","name":"Aranha","hp":55,"damage":8,"defense":1,"xp":30,"speed":70,"dropId":"spider_silk","displayWidth":32,"displayHeight":28,"aspect":{"idle":1.132,"walk":1.08,"attack":1.674,"death":1.893},"sprite":"assets/monsters/spider.png","textureKey":"conquistador-monster-spider-v3","frames":{"walk":{"sprite":"assets/monsters/spider_walk.png","textureKey":"conquistador-monster-spider-v3-walk"},"attack":{"sprite":"assets/monsters/spider_attack.png","textureKey":"conquistador-monster-spider-v3-attack"},"death":{"sprite":"assets/monsters/spider_death.png","textureKey":"conquistador-monster-spider-v3-death"}}},"bear":{"id":"bear","name":"Urso","hp":110,"damage":12,"defense":2,"xp":55,"speed":45,"dropId":"bear_claw","displayWidth":35,"displayHeight":34,"aspect":{"idle":1.042,"walk":1.203,"attack":1.803,"death":2.584},"sprite":"assets/monsters/bear.png","textureKey":"conquistador-monster-bear-v3","frames":{"walk":{"sprite":"assets/monsters/bear_walk.png","textureKey":"conquistador-monster-bear-v3-walk"},"attack":{"sprite":"assets/monsters/bear_attack.png","textureKey":"conquistador-monster-bear-v3-attack"},"death":{"sprite":"assets/monsters/bear_death.png","textureKey":"conquistador-monster-bear-v3-death"}}},"goblin":{"id":"goblin","name":"Goblin","hp":70,"damage":10,"defense":1,"xp":40,"speed":70,"dropId":"goblin_ear","displayWidth":17,"displayHeight":34,"aspect":{"idle":0.508,"walk":0.842,"attack":1.72,"death":2.484},"sprite":"assets/monsters/goblin.png","textureKey":"conquistador-monster-goblin-v3","frames":{"walk":{"sprite":"assets/monsters/goblin_walk.png","textureKey":"conquistador-monster-goblin-v3-walk"},"attack":{"sprite":"assets/monsters/goblin_attack.png","textureKey":"conquistador-monster-goblin-v3-attack"},"death":{"sprite":"assets/monsters/goblin_death.png","textureKey":"conquistador-monster-goblin-v3-death"}}},"cyclops":{"id":"cyclops","name":"Ciclope","hp":130,"damage":14,"defense":2,"xp":70,"speed":55,"dropId":"cyclops_eye","displayWidth":29,"displayHeight":38,"aspect":{"idle":0.761,"walk":1.018,"attack":1.604,"death":2.95},"sprite":"assets/monsters/cyclops.png","textureKey":"conquistador-monster-cyclops-v3","frames":{"walk":{"sprite":"assets/monsters/cyclops_walk.png","textureKey":"conquistador-monster-cyclops-v3-walk"},"attack":{"sprite":"assets/monsters/cyclops_attack.png","textureKey":"conquistador-monster-cyclops-v3-attack"},"death":{"sprite":"assets/monsters/cyclops_death.png","textureKey":"conquistador-monster-cyclops-v3-death"}}},"ogre":{"id":"ogre","name":"Ogro","hp":180,"damage":18,"defense":3,"xp":100,"speed":40,"dropId":"ogre_bone","displayWidth":27,"displayHeight":42,"aspect":{"idle":0.651,"walk":0.868,"attack":1.436,"death":3.204},"sprite":"assets/monsters/ogre.png","textureKey":"conquistador-monster-ogre-v3","frames":{"walk":{"sprite":"assets/monsters/ogre_walk.png","textureKey":"conquistador-monster-ogre-v3-walk"},"attack":{"sprite":"assets/monsters/ogre_attack.png","textureKey":"conquistador-monster-ogre-v3-attack"},"death":{"sprite":"assets/monsters/ogre_death.png","textureKey":"conquistador-monster-ogre-v3-death"}}}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"},"snake_scale":{"id":"snake_scale","name":"Escama de Cobra","category":"material"},"wolf_fang":{"id":"wolf_fang","name":"Presa de Lobo","category":"material"},"eagle_feather":{"id":"eagle_feather","name":"Pena de Águia","category":"material"},"spider_silk":{"id":"spider_silk","name":"Seda de Aranha","category":"material"},"bear_claw":{"id":"bear_claw","name":"Garra de Urso","category":"material"},"goblin_ear":{"id":"goblin_ear","name":"Orelha de Goblin","category":"material"},"cyclops_eye":{"id":"cyclops_eye","name":"Olho de Ciclope","category":"material"},"ogre_bone":{"id":"ogre_bone","name":"Osso de Ogro","category":"material"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
+      waifus: {"version":1,"source":"V146 WAIFUS","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]},"goblina":{"id":"goblina","name":"Goblina","gift":"rose","xpPerGift":10,"description":"Uma goblinaa esperta que trocou a espada pela sua companhia. Pequena, rápida e sempre com um plano.","bonuses":["Lâmina Rápida — +0,15 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"portrait":"assets/waifus/goblina.png","activeSkill":{"id":"goblina_dagger","name":"Punhalada","damage":16,"scalePerLevel":1.2,"cooldownMs":8000,"description":"Causa 16 + 1,2 de dano por nível do jogador.","icon":"🗡️","meta":"16 de dano · Recarga 8s","desc":"Causa 16 de dano."},"passives":[{"id":"goblina_swift","name":"Lâmina Rápida","description":"+0,15 Velocidade de ataque","stats":{"attackSpeed":0.15}},{"id":"goblina_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"lamia":{"id":"lamia","name":"Lamia Púrpura","gift":"rose","xpPerGift":10,"description":"Uma lamia das cavernas roxas, de escamas cintilantes e olhar hipnótico. Enrola-se ao seu lado como se fosse seu trono.","bonuses":["Escama Dura — +1 Defesa","Corpo de Serpente — +0,1 Velocidade de movimento"],"portrait":"assets/waifus/lamia.png","activeSkill":{"id":"lamia_bite","name":"Mordida Venenosa","damage":10,"scalePerLevel":1.0,"cooldownMs":6000,"description":"Causa 10 + 1 de dano por nível do jogador.","icon":"🐍","meta":"10 de dano · Recarga 6s","desc":"Causa 10 de dano."},"passives":[{"id":"lamia_scale","name":"Escama Dura","description":"+1 Defesa","stats":{"defense":1}},{"id":"lamia_body","name":"Corpo de Serpente","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}}]},"loba":{"id":"loba","name":"Loba da Lua","gift":"rose","xpPerGift":10,"description":"Uma loba de olhar prateado que uiva para a lua cheia. Feroz com os monstros, mansa com você.","bonuses":["Uivo Veloz — +0,2 Velocidade de ataque","Pele de Loba — +5 HP máximo"],"portrait":"assets/waifus/loba.png","activeSkill":{"id":"loba_howl","name":"Uivo da Matilha","durationMs":4000,"cooldownMs":12000,"multiplier":1.15,"description":"Por 4 segundos, o ataque básico vira à distância e causa 1,15x do dano de ataque.","icon":"🌕","meta":"Recarga 12s","desc":"Por 4 segundos, o ataque básico vira à distância e causa 1,15x do dano de ataque."},"passives":[{"id":"loba_swift","name":"Uivo Veloz","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"loba_body","name":"Pele de Loba","description":"+5 HP máximo","stats":{"maxHp":5}}]},"harpia":{"id":"harpia","name":"Harpia Roxa","gift":"rose","xpPerGift":10,"description":"Uma harpia de penas roxas que desceu do céu para caçar ao seu lado. Voa alto, ataca rápido e nunca erra o alvo.","bonuses":["Asas Ligeiras — +0,15 Velocidade de movimento","Garra Afiada — +0,5 Penetração"],"portrait":"assets/waifus/harpia.png","activeSkill":{"id":"harpia_dive","name":"Rasante","damage":20,"scalePerLevel":1.2,"cooldownMs":10000,"description":"Causa 20 + 1,2 de dano por nível do jogador.","icon":"🦅","meta":"20 de dano · Recarga 10s","desc":"Causa 20 de dano."},"passives":[{"id":"harpia_wings","name":"Asas Ligeiras","description":"+0,15 Velocidade de movimento","stats":{"moveSpeed":0.15}},{"id":"harpia_claw","name":"Garra Afiada","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"ursa":{"id":"ursa","name":"Ursa","gift":"rose","xpPerGift":10,"description":"Uma ursa guerreira de cabelos castanhos que carrega uma clava maior que você. Bate primeiro, pergunta depois.","bonuses":["Pele de Urso — +1 Defesa","Corpo de Urso — +10 HP máximo"],"portrait":"assets/waifus/ursa.png","activeSkill":{"id":"ursa_smash","name":"Esmagamento","damage":24,"scalePerLevel":1.5,"cooldownMs":12000,"description":"Causa 24 + 1,5 de dano por nível do jogador.","icon":"🔨","meta":"24 de dano · Recarga 12s","desc":"Causa 24 de dano."},"passives":[{"id":"ursa_skin","name":"Pele de Urso","description":"+1 Defesa","stats":{"defense":1}},{"id":"ursa_body","name":"Corpo de Urso","description":"+10 HP máximo","stats":{"maxHp":10}}]},"ogra":{"id":"ogra","name":"Ogra","gift":"rose","xpPerGift":10,"description":"Uma ogra que luta com fúria e ri no meio da batalha. Sua clava nunca erra duas vezes o mesmo monstro.","bonuses":["Fúria — +0,2 Velocidade de ataque","Pele de Ogra — +5 HP máximo"],"portrait":"assets/waifus/ogra.png","activeSkill":{"id":"ogra_fury","name":"Fúria da Ogra","durationMs":5000,"cooldownMs":12000,"multiplier":1.25,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,25x do dano de ataque.","icon":"💥","meta":"Recarga 12s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,25x do dano de ataque."},"passives":[{"id":"ogra_fury_passive","name":"Fúria","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"ogra_body","name":"Pele de Ogra","description":"+5 HP máximo","stats":{"maxHp":5}}]},"ciclopesa":{"id":"ciclopesa","name":"Ciclopesa","gift":"rose","xpPerGift":10,"description":"Uma ciclopesa de cabelos brancos, silenciosa e paciente. Onde ela passa, os monstros hesitam em atacar.","bonuses":["Véu de Ossos — +1 Defesa","Corpo de Ciclope — +15 HP máximo"],"portrait":"assets/waifus/ciclopesa.png","activeSkill":{"id":"ciclopesa_veil","name":"Véu de Ossos","durationMs":4000,"cooldownMs":14000,"description":"Imune a dano por 4 segundos.","icon":"💀","meta":"Recarga 14s","desc":"Imune a dano por 4 segundos."},"passives":[{"id":"ciclopesa_veil_passive","name":"Véu de Ossos","description":"+1 Defesa","stats":{"defense":1}},{"id":"ciclopesa_body","name":"Corpo de Ciclope","description":"+15 HP máximo","stats":{"maxHp":15}}]}}}
+    });
+  })(window);
+  </script>
+<script id="conquistador-systems-v44">
   (function (root) {
     'use strict';
 
@@ -623,7 +658,24 @@
         });
         this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 10));
         this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
-        this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
+        this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat', 'snake', 'wolf', 'eagle', 'spider', 'bear', 'goblin', 'cyclops', 'ogre']);
+        // V140 — POOL DE MONSTROS: visuais (sprite + rótulo + barra HP) são
+        // criados uma vez e reutilizados. Antes cada spawn criava 4 objetos
+        // novos e cada morte destruía tudo (GC + queda de FPS no celular).
+        // Pool cresce sob demanda, mas devolve ao pool em vez de destruir.
+        this.monsterVisualPool = { slime: [], monkey: [], rat: [], snake: [], wolf: [], eagle: [], spider: [], bear: [], goblin: [], cyclops: [], ogre: [] };
+        // V146 — teto por espécie: ogro, ciclope e urso são raros (1 por chunk).
+        this.maxPerType = Object.freeze({ ogre: 1, cyclops: 1, bear: 1 });
+        this.monsterVisualPoolMax = 30;
+        // V141 — CULLING: monstro fora da câmera dorme. Sem movimento,
+        // sem buscar jogador, sem ataque, sem pathfinding, sem rótulo.
+        // Margem de 96px (~3 tiles) evita piscar na borda da tela.
+        // Acorda sozinho quando a câmera chega perto: o teste é por
+        // frame, sem estado travado — nenhum reset manual é preciso.
+        this.cullMarginPx = 96;
+        // V140 — POOL DE EFEITOS DE HIT: os 4 círculos do impacto também
+        // são reutilizados em vez de criar/destruir a cada golpe.
+        this.hitEffectPool = [];
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
@@ -697,32 +749,64 @@
       }
 
       createMonsterTextures() {
+        // V146 — 11 monstros + 3 frames cada (andar/batalha/morte) + o chefe Brutamonte.
         const spriteSources = {
           slime: "assets/monsters/slime.png",
           monkey: "assets/monsters/monkey.png",
-          brutamonte: root.CONQUISTADOR_BOSS_SPRITE || '',
-          rat: "assets/monsters/rat.png"
+          rat: "assets/monsters/rat.png",
+          snake: "assets/monsters/snake.png",
+          wolf: "assets/monsters/wolf.png",
+          eagle: "assets/monsters/eagle.png",
+          spider: "assets/monsters/spider.png",
+          bear: "assets/monsters/bear.png",
+          goblin: "assets/monsters/goblin.png",
+          cyclops: "assets/monsters/cyclops.png",
+          ogre: "assets/monsters/ogre.png",
+          brutamonte: root.CONQUISTADOR_BOSS_SPRITE || ''
         };
         root.CONQUISTADOR_MONSTER_ART = Object.freeze({ ...spriteSources });
         const versionedKeys = {
-          slime: 'conquistador-monster-slime-v2',
-          monkey: 'conquistador-monster-monkey-v2',
-          rat: 'conquistador-monster-rat-v2',
+          slime: 'conquistador-monster-slime-v3',
+          monkey: 'conquistador-monster-monkey-v3',
+          rat: 'conquistador-monster-rat-v3',
+          snake: 'conquistador-monster-snake-v3',
+          wolf: 'conquistador-monster-wolf-v3',
+          eagle: 'conquistador-monster-eagle-v3',
+          spider: 'conquistador-monster-spider-v3',
+          bear: 'conquistador-monster-bear-v3',
+          goblin: 'conquistador-monster-goblin-v3',
+          cyclops: 'conquistador-monster-cyclops-v3',
+          ogre: 'conquistador-monster-ogre-v3',
           brutamonte: 'conquistador-boss-brutamonte-v1'
         };
         this.monsterTextureKeys = Object.freeze(versionedKeys);
-        const types = Object.keys(spriteSources);
+        // Frames por estado: andar (idle/walk), batalha (attack), morte (death).
+        const frameKeys = {};
+        const toLoad = [];
+        for (const type of Object.keys(spriteSources)) {
+          toLoad.push({ type, key: versionedKeys[type], src: spriteSources[type] });
+        }
+        for (const type of ['slime', 'monkey', 'rat', 'snake', 'wolf', 'eagle', 'spider', 'bear', 'goblin', 'cyclops', 'ogre']) {
+          frameKeys[type] = {
+            walk: `conquistador-monster-${type}-v3-walk`,
+            attack: `conquistador-monster-${type}-v3-attack`,
+            death: `conquistador-monster-${type}-v3-death`
+          };
+          toLoad.push({ type, key: frameKeys[type].walk, src: `assets/monsters/${type}_walk.png` });
+          toLoad.push({ type, key: frameKeys[type].attack, src: `assets/monsters/${type}_attack.png` });
+          toLoad.push({ type, key: frameKeys[type].death, src: `assets/monsters/${type}_death.png` });
+        }
+        this.monsterFrameKeys = Object.freeze(frameKeys);
         let loaded = 0;
         const finish = () => {
           loaded += 1;
-          if (loaded !== types.length || !this.active) return;
+          if (loaded !== toLoad.length || !this.active) return;
           this.texturesReady = true;
           this.restoreOrPopulate();
           this.refreshUI();
         };
-
-        for (const type of types) {
-          const key = versionedKeys[type];
+        for (const entry of toLoad) {
+          const key = entry.key;
           if (this.scene.textures && this.scene.textures.exists(key)) {
             finish();
             continue;
@@ -734,14 +818,13 @@
             finish();
           };
           image.onerror = () => {
-            this.message = `Falha ao carregar visual: ${type}`;
+            this.message = `Falha ao carregar visual: ${entry.type}`;
             this.messageUntil = this.now + 5000;
             finish();
           };
-          image.src = spriteSources[type];
+          image.src = entry.src;
         }
       }
-
       createUI() {
         const root = document.createElement('div');
         root.setAttribute('aria-label', 'Interface de combate');
@@ -957,6 +1040,21 @@
         if (animation.tween && animation.tween.isPlaying()) animation.tween.stop();
         animation.tween = null;
         animation.state = state;
+        // V146 — frame por estado (andar/batalha). A morte troca no killMonster.
+        // Cada frame aparece na proporção real da sua arte (aspect medido no
+        // arquivo): o retângulo fixo da V145 esmagava lobo, águia, goblin e
+        // ogro. A altura de exibição não muda; só a largura segue o frame.
+        const frameKeys = this.monsterFrameKeys && this.monsterFrameKeys[record.monsterId];
+        if (frameKeys && sprite && this.scene.textures) {
+          const frameKey = state === 'attack' ? frameKeys.attack : frameKeys.walk;
+          if (frameKey && this.scene.textures.exists(frameKey)) {
+            const def = (record && record.definition) || (this.data && this.data.MONSTERS && this.data.MONSTERS[record.monsterId]) || {};
+            const frameAspect = (def.aspect && def.aspect[state === 'attack' ? 'attack' : 'walk']) || (def.aspect && def.aspect.idle) || 1;
+            const dh = sprite.displayHeight;
+            sprite.setTexture(frameKey);
+            sprite.setDisplaySize(Math.max(1, Math.round(dh * frameAspect)), dh);
+          }
+        }
         const baseX = animation.baseScaleX;
         const baseY = animation.baseScaleY;
         sprite.setScale(baseX, baseY);
@@ -997,12 +1095,102 @@
         }
       }
 
+      // V140 — POOL: pega um conjunto visual pronto ou cria um novo.
+      acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight) {
+        const pool = this.monsterVisualPool[monsterId];
+        if (pool && pool.length) {
+          const v = pool.pop();
+          const sprite = v.sprite;
+          sprite.setTexture(this.monsterTextureKeys[monsterId]);
+          sprite.setDisplaySize(displayWidth, displayHeight);
+          sprite.setOrigin(0.5, 0.86);
+          sprite.setPosition(x, y);
+          sprite.setDepth(y + 10);
+          sprite.setAlpha(1); sprite.setAngle(0); sprite.clearTint();
+          sprite.setScale(1, 1);
+          sprite.setVisible(true);
+          const levelLabel = v.levelLabel;
+          levelLabel.setText(String(level));
+          levelLabel.setPosition(x, y - displayHeight * 0.86 - 4);
+          levelLabel.setDepth(sprite.depth + 20);
+          levelLabel.setVisible(true);
+          const hpBarWidth = Math.max(30, displayWidth + 6);
+          const hpBarBg = v.hpBarBg;
+          hpBarBg.setPosition(x, y + 6);
+          hpBarBg.setDepth(sprite.depth + 21);
+          hpBarBg.setVisible(true);
+          const hpBarFill = v.hpBarFill;
+          hpBarFill.setPosition(x - hpBarWidth / 2, y + 6);
+          hpBarFill.setDepth(sprite.depth + 22);
+          hpBarFill.setVisible(true);
+          return { sprite, levelLabel, hpBarBg, hpBarFill, hpBarWidth };
+        }
+        const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
+        sprite.setDisplaySize(displayWidth, displayHeight);
+        sprite.setOrigin(0.5, 0.86);
+        sprite.setDepth(y + 10);
+        const levelLabel = this.scene.add.text(x, y - displayHeight * 0.86 - 4, String(level), {
+          fontFamily: 'system-ui, sans-serif', fontSize: '8px', fontStyle: 'normal',
+          color: '#f1f4ed', stroke: '#17251b', strokeThickness: 2, align: 'center'
+        });
+        levelLabel.setOrigin(0.5, 1);
+        levelLabel.setDepth(sprite.depth + 20);
+        const hpBarWidth = Math.max(30, displayWidth + 6);
+        const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
+        hpBarBg.setDepth(sprite.depth + 21);
+        hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
+        const hpBarFill = this.scene.add.rectangle(x - hpBarWidth / 2, y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
+        hpBarFill.setOrigin(0, 0.5);
+        hpBarFill.setDepth(sprite.depth + 22);
+        return { sprite, levelLabel, hpBarBg, hpBarFill, hpBarWidth };
+      }
+
+      // V140 — POOL: devolve o visual ao pool em vez de destruir.
+      releaseMonsterVisual(monsterId, visual) {
+        if (!visual || !visual.sprite) return;
+        const pool = this.monsterVisualPool[monsterId];
+        if (!pool) { if (visual.sprite.destroy) visual.sprite.destroy(); return; }
+        if (pool.length >= this.monsterVisualPoolMax) {
+          if (visual.sprite.destroy) visual.sprite.destroy();
+          if (visual.levelLabel && visual.levelLabel.destroy) visual.levelLabel.destroy();
+          if (visual.hpBarBg && visual.hpBarBg.destroy) visual.hpBarBg.destroy();
+          if (visual.hpBarFill && visual.hpBarFill.destroy) visual.hpBarFill.destroy();
+          return;
+        }
+        const s = visual.sprite;
+        s.setAlpha(1); s.setAngle(0); s.clearTint(); s.setScale(1, 1); s.setVisible(false);
+        if (visual.levelLabel) visual.levelLabel.setVisible(false);
+        if (visual.hpBarBg) visual.hpBarBg.setVisible(false);
+        if (visual.hpBarFill) visual.hpBarFill.setVisible(false);
+        pool.push(visual);
+      }
+
+      // V140 — POOL de efeitos: pega um círculo pronto ou cria novo.
+      acquireHitCircle(x, y, radius, color, alpha, depth) {
+        let c = null;
+        if (this.hitEffectPool.length) {
+          c = this.hitEffectPool.pop();
+          c.setPosition(x, y); c.setRadius(radius); c.setFillStyle(color, alpha);
+          c.setDepth(depth); c.setAlpha(alpha); c.setScale(1, 1); c.setVisible(true);
+        } else {
+          c = this.scene.add.circle(x, y, radius, color, alpha);
+          c.setDepth(depth);
+        }
+        return c;
+      }
+      releaseHitCircle(c) {
+        if (!c) return;
+        if (this.hitEffectPool.length >= 24) { if (c.destroy) c.destroy(); return; }
+        c.setVisible(false); c.setAlpha(0);
+        this.hitEffectPool.push(c);
+      }
+
       spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         const definition = this.data.MONSTERS[monsterId];
         if (!definition || !this.monsterTextureKeys[monsterId]) return false;
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
-        if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
+        if (this.getAliveCountForChunk(chunkId, monsterId) >= ((this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType)) return false;
 
         // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
         const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y) ? { x: saved.tile.x, y: saved.tile.y } : null;
@@ -1052,29 +1240,14 @@
 
         const displayWidth = definition.displayWidth || 30;
         const displayHeight = definition.displayHeight || 24;
-        const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
-        sprite.setDisplaySize(displayWidth, displayHeight);
-        sprite.setOrigin(0.5, 0.86);
-        sprite.setDepth(y + 10);
-        const levelLabel = this.scene.add.text(x, y - displayHeight * 0.86 - 4, String(level), {
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: '8px',
-          fontStyle: 'normal',
-          color: '#f1f4ed',
-          stroke: '#17251b',
-          strokeThickness: 2,
-          align: 'center'
-        });
-        levelLabel.setOrigin(0.5, 1);
-        levelLabel.setDepth(sprite.depth + 20);
+        // V140 — POOL: reusa sprite + rótulo + barra em vez de criar 4 novos.
+        const _visual = this.acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight);
+        const sprite = _visual.sprite;
+        const levelLabel = _visual.levelLabel;
         // V77: barra de HP embaixo do monstro, proporcional ao tamanho do sprite.
-        const hpBarWidth = Math.max(30, displayWidth + 6);
-        const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
-        hpBarBg.setDepth(sprite.depth + 21);
-        hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
-        const hpBarFill = this.scene.add.rectangle(x - hpBarWidth / 2, y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
-        hpBarFill.setOrigin(0, 0.5);
-        hpBarFill.setDepth(sprite.depth + 22);
+        const hpBarWidth = _visual.hpBarWidth;
+        const hpBarBg = _visual.hpBarBg;
+        const hpBarFill = _visual.hpBarFill;
         const record = {
           id,
           monsterId,
@@ -1184,7 +1357,11 @@
             const population = this.getChunkPopulationState(chunkId);
             if (population.initialSpawnAttempted) continue;
             population.initialSpawnAttempted = true;
-            for (const monsterId of this.monsterTypes) {
+            // V145 — rodízio por chunk: a ordem de spawn gira com o chunk, senão
+            // as 5 primeiras espécies lotariam o chunk (teto 10) e as outras nunca nasceriam.
+            const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
+            const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
+            for (const monsterId of orderedTypes) {
               for (let count = 0; count < this.maxPerMonsterType; count += 1) {
                 if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
               }
@@ -1204,7 +1381,9 @@
           const queue = this.chunkRespawns.get(chunkId);
           let needsRetry = false;
 
-          for (const monsterId of this.monsterTypes) {
+          const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
+          const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
+          for (const monsterId of orderedTypes) {
             const queued = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
             let available = this.maxPerMonsterType -
               this.getAliveCountForChunk(chunkId, monsterId) - queued;
@@ -1468,33 +1647,21 @@
 
         // Small, localized impact burst: three tiny red sparks and a brief
         // warm flash, visually contained within the monster's sprite bounds.
-        const burst = this.scene.add.circle(
-          sprite.x,
-          sprite.y - 5,
-          3,
-          0xffd18a,
-          0.9
-        );
-        burst.setDepth(sprite.depth + 5);
+        // V140 — POOL: círculo do impacto reutilizado.
+        const burst = this.acquireHitCircle(sprite.x, sprite.y - 5, 3, 0xffd18a, 0.9, sprite.depth + 5);
         this.scene.tweens.add({
           targets: burst,
           scale: 1.7,
           alpha: 0,
           duration: 115,
           ease: 'Quad.Out',
-          onComplete: () => burst.destroy()
+          onComplete: () => this.releaseHitCircle(burst)
         });
 
         for (let i = 0; i < 3; i += 1) {
           const angle = (-Math.PI * 0.8) + (i / 2) * (Math.PI * 0.6);
-          const particle = this.scene.add.circle(
-            sprite.x,
-            sprite.y - 5,
-            1.25,
-            i === 1 ? 0xf06a62 : 0xc83e42,
-            0.95
-          );
-          particle.setDepth(sprite.depth + 6);
+          // V140 — POOL: partícula reutilizada.
+          const particle = this.acquireHitCircle(sprite.x, sprite.y - 5, 1.25, i === 1 ? 0xf06a62 : 0xc83e42, 0.95, sprite.depth + 6);
           this.scene.tweens.add({
             targets: particle,
             x: sprite.x + Math.cos(angle) * 5,
@@ -1503,7 +1670,7 @@
             scale: 0.45,
             duration: 135,
             ease: 'Quad.Out',
-            onComplete: () => particle.destroy()
+            onComplete: () => this.releaseHitCircle(particle)
           });
         }
 
@@ -1551,11 +1718,26 @@
         this.createDrop(record);
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
-        if (record.levelLabel && record.levelLabel.active) record.levelLabel.destroy();
-        if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.destroy();
-        if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.destroy();
+        // V140 — POOL: esconde rótulo/barra na hora e devolve o conjunto
+        // ao pool ao fim da animação de morte, em vez de destruir tudo.
+        if (record.levelLabel) record.levelLabel.setVisible(false);
+        if (record.hpBarBg) record.hpBarBg.setVisible(false);
+        if (record.hpBarFill) record.hpBarFill.setVisible(false);
         if (record.sprite && record.sprite.active) {
           const deathSprite = record.sprite;
+          const deathVisual = { sprite: deathSprite, levelLabel: record.levelLabel, hpBarBg: record.hpBarBg, hpBarFill: record.hpBarFill, hpBarWidth: record.hpBarWidth };
+          const deathMonsterId = record.monsterId;
+          // V146 — frame de morte antes do fade. O corpo deitado é largo e
+          // baixo: a largura fica igual à altura em pé (o comprimento do
+          // corpo) e a altura segue a proporção real do frame de morte.
+          const deathKeys = this.monsterFrameKeys && this.monsterFrameKeys[deathMonsterId];
+          if (deathKeys && this.scene.textures && this.scene.textures.exists(deathKeys.death)) {
+            const def = (record && record.definition) || (this.data && this.data.MONSTERS && this.data.MONSTERS[deathMonsterId]) || {};
+            const deathAspect = (def.aspect && def.aspect.death) || 1;
+            const bodyLen = deathSprite.displayHeight;
+            deathSprite.setTexture(deathKeys.death);
+            deathSprite.setDisplaySize(bodyLen, Math.max(1, Math.round(bodyLen / deathAspect)));
+          }
           this.scene.tweens.killTweensOf(deathSprite);
           this.scene.tweens.add({
             targets: deathSprite,
@@ -1565,7 +1747,7 @@
             angle: (deathSprite.x % 2 ? 12 : -12),
             duration: 260,
             ease: 'Back.In',
-            onComplete: () => deathSprite.destroy()
+            onComplete: () => this.releaseMonsterVisual(deathMonsterId, deathVisual)
           });
         }
         this.refreshUI();
@@ -1803,6 +1985,19 @@
         }
       }
 
+      // V141 — CULLING: fora da câmera + margem = dormindo. Retorna true
+      // e o update() pula TODO o trabalho do monstro (IA, path, rótulo).
+      // Sem câmera (teste / cena sem render) = nunca dorme, jogo igual.
+      isMonsterCulled(record) {
+        if (!record || !record.sprite) return false;
+        const cam = this.scene && this.scene.cameras && this.scene.cameras.main;
+        const view = cam && cam.worldView;
+        if (!view) return false;
+        const m = this.cullMarginPx || 96;
+        return record.sprite.x < view.x - m || record.sprite.x > view.x + view.width + m ||
+          record.sprite.y < view.y - m || record.sprite.y > view.y + view.height + m;
+      }
+
       update(time, delta) {
         if (!this.active) return;
         this.now = Number.isFinite(time) ? time : this.now + (Number(delta) || 0);
@@ -1813,6 +2008,14 @@
         const playerPoint = this.getPlayerPoint();
         if (playerPoint) {
           for (const record of Array.from(this.monsters.values())) {
+            // V141 — CULLING: dorme antes de qualquer custo. Limpa o
+            // caminho para não retomar rota velha ao acordar; animação
+            // idle só é aplicada 1x (evita re-setar anim todo frame).
+            if (this.isMonsterCulled(record)) {
+              if (record.path && record.path.length) { record.path = []; record.targetKey = null; }
+              if (!record.animation || record.animation.state !== 'idle') this.setMonsterAnimation(record, 'idle');
+              continue;
+            }
             this.updateMonster(record, playerPoint, this.now, Number(delta) || 0);
             this.updateMonsterLevelLabel(record);
           }
@@ -1844,6 +2047,18 @@
           if (record.sprite && record.sprite.destroy) record.sprite.destroy();
           this.entities.remove(record.id);
         }
+        // V140 — POOL: destrói também os visuais guardados no pool.
+        for (const key of Object.keys(this.monsterVisualPool || {})) {
+          for (const v of this.monsterVisualPool[key]) {
+            if (v.sprite && v.sprite.destroy) v.sprite.destroy();
+            if (v.levelLabel && v.levelLabel.destroy) v.levelLabel.destroy();
+            if (v.hpBarBg && v.hpBarBg.destroy) v.hpBarBg.destroy();
+            if (v.hpBarFill && v.hpBarFill.destroy) v.hpBarFill.destroy();
+          }
+          this.monsterVisualPool[key] = [];
+        }
+        for (const c of this.hitEffectPool || []) { if (c && c.destroy) c.destroy(); }
+        this.hitEffectPool = [];
         for (const drop of this.drops.values()) if (drop.sprite && drop.sprite.destroy) drop.sprite.destroy();
         this.monsters.clear();
         this.drops.clear();
@@ -1855,32 +2070,40 @@
     }
 
     const GameData = Object.freeze({
-      MONSTERS: Object.freeze({
-        // First end-to-end proof entity. Balance values are intentionally exact
-        // to the approved test specification: 30 HP, 5 damage, 10 XP, speed 50.
-        slime: Object.freeze({
-          id: 'slime', name: 'Slime', hp: 30, damage: 5, defense: 0,
-          xp: 12, speed: 50, dropId: 'slime_gel', displayWidth: 30, displayHeight: 24
-        }),
-        monkey: Object.freeze({
-          id: 'monkey', name: 'Macaco', hp: 45, damage: 5, defense: 1,
-          xp: 25, speed: 65, attackSpeed: 0.8, dropId: 'monkey_fur', displayWidth: 30, displayHeight: 32
-        }),
-        rat: Object.freeze({
-          id: 'rat', name: 'Rato', hp: 20, damage: 4, defense: 0,
-          xp: 8, speed: 75, dropId: 'rat_tail', displayWidth: 32, displayHeight: 22
-        })
-      }),
+      // V140 — MONSTERS vem de data/monsters.json (window.CONQUISTADOR_DATA).
+      // A cópia embutida abaixo é fallback: se data/ ainda não foi subida,
+      // o jogo usa estes valores idênticos aos da V140 e continua igual.
+      MONSTERS: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.monsters;
+        const src = fromData || {
+          slime: { id: 'slime', name: 'Slime', hp: 30, damage: 5, defense: 0, xp: 12, speed: 50, dropId: 'slime_gel', displayWidth: 22, displayHeight: 24, aspect: { idle: 0.911, walk: 0.958, attack: 1.537, death: 2.63 } },
+          monkey: { id: 'monkey', name: 'Macaco', hp: 45, damage: 5, defense: 1, xp: 25, speed: 65, attackSpeed: 0.8, dropId: 'monkey_fur', displayWidth: 18, displayHeight: 32, aspect: { idle: 0.571, walk: 0.955, attack: 1.671, death: 2.576 } },
+          rat: { id: 'rat', name: 'Rato', hp: 20, damage: 4, defense: 0, xp: 8, speed: 75, dropId: 'rat_tail', displayWidth: 20, displayHeight: 22, aspect: { idle: 0.894, walk: 1.108, attack: 1.903, death: 3.532 } }
+        };
+        const out = {};
+        for (const k of Object.keys(src)) out[k] = Object.freeze({ ...src[k] });
+        return out;
+      })()),
       PETS: Object.freeze({}),
       WAIFUS: Object.freeze({}),
       DUNGEONS: Object.freeze({}),
-      ITEMS: Object.freeze({
-        slime_gel: Object.freeze({ id: 'slime_gel', name: 'Gel de Slime', category: 'material' }),
-        monkey_fur: Object.freeze({ id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' }),
-        rat_tail: Object.freeze({ id: 'rat_tail', name: 'Cauda de Rato', category: 'material' }),
-        rose: Object.freeze({ id: 'rose', name: 'Rosa', category: 'presente' })
-      }),
-      LEVEL_CURVE: Object.freeze({ baseXp: 60, exponent: 1.25 })
+      // V140 — ITEMS / LEVEL_CURVE também vêm de data/monsters.json, mesmo fallback V140.
+      ITEMS: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.items;
+        const src = fromData || {
+          slime_gel: { id: 'slime_gel', name: 'Gel de Slime', category: 'material' },
+          monkey_fur: { id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' },
+          rat_tail: { id: 'rat_tail', name: 'Cauda de Rato', category: 'material' },
+          rose: { id: 'rose', name: 'Rosa', category: 'presente' }
+        };
+        const out = {};
+        for (const k of Object.keys(src)) out[k] = Object.freeze({ ...src[k] });
+        return out;
+      })()),
+      LEVEL_CURVE: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.levelCurve;
+        return { ...(fromData || { baseXp: 60, exponent: 1.25 }) };
+      })())
     });
 
     root.CONQUISTADOR_V13_SYSTEMS = Object.freeze({
@@ -2719,6 +2942,7 @@
   window.CONQUISTADOR_WAIFU_ART = "assets/waifu/slime.jpg";
   window.CONQUISTADOR_WAIFU_ART_MONKEY = "assets/waifu/monkey.jpg";
   window.CONQUISTADOR_WAIFU_ART_RAT = "assets/waifu/rat.jpg";
+   window.CONQUISTADOR_WAIFU_ART_BY_ID = { slime: "assets/waifu/slime.jpg", monkey: "assets/waifu/monkey.jpg", rat: "assets/waifu/rat.jpg", goblina: "assets/waifus/goblina.png", lamia: "assets/waifus/lamia.png", loba: "assets/waifus/loba.png", harpia: "assets/waifus/harpia.png", ursa: "assets/waifus/ursa.png", ogra: "assets/waifus/ogra.png", ciclopesa: "assets/waifus/ciclopesa.png" };
 window.CONQUISTADOR_BOSS_ART = "assets/boss/art.jpg";
 window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 
@@ -2802,17 +3026,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           ...oldBestiary,
           monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
         };
-        const WAIFU_BY_MONSTER = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' };
-        if (WAIFU_BY_MONSTER[event.monsterId] && this.killCounts[event.monsterId] >= 20) {
+        // V146 — monstro -> waifu: o id desbloqueado é o DA WAIFU (antes era
+        // o do monstro; funcionava só porque os ids coincidiam).
+        const WAIFU_BY_MONSTER = { slime: { id: 'slime', name: 'Donzela Slime' }, monkey: { id: 'monkey', name: 'Donzela Macaca' }, rat: { id: 'rat', name: 'Donzela Rata' }, goblin: { id: 'goblina', name: 'Goblina' }, snake: { id: 'lamia', name: 'Lamia Púrpura' }, wolf: { id: 'loba', name: 'Loba da Lua' }, eagle: { id: 'harpia', name: 'Harpia Roxa' }, cyclops: { id: 'ciclopesa', name: 'Ciclopesa' }, ogre: { id: 'ogra', name: 'Ogra' }, bear: { id: 'ursa', name: 'Ursa' } };
+        const waifuUnlock = WAIFU_BY_MONSTER[event.monsterId];
+        if (waifuUnlock && this.killCounts[event.monsterId] >= 20) {
           const currentWaifus = this.api.progress.get('waifus') || {};
           const waifus = currentWaifus && typeof currentWaifus === 'object' ? { ...currentWaifus } : {};
           const unlocked = Array.isArray(waifus.unlocked) ? waifus.unlocked.slice() : [];
-          if (!unlocked.includes(event.monsterId)) {
-            unlocked.push(event.monsterId);
+          if (!unlocked.includes(waifuUnlock.id)) {
+            unlocked.push(waifuUnlock.id);
             waifus.unlocked = unlocked;
             if (typeof this.api.progress.updateBatch === 'function') {
               this.api.progress.updateBatch({ flags, waifus });
-              this.api.events.emit('waifu:unlocked', { waifuId: event.monsterId, name: WAIFU_BY_MONSTER[event.monsterId] });
+              this.api.events.emit('waifu:unlocked', { waifuId: waifuUnlock.id, name: waifuUnlock.name });
             } else {
               this.api.progress.update('flags', flags);
               this.api.progress.update('waifus', waifus);
@@ -3046,6 +3273,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         for (const entry of entries) {
           const isWaifu = ['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name);
           const isBossArt = entry.id === 'brutamonte';
+          const isMonsterCard = !!entry.fallbackImage;
           const card = this.el('button', {
             minWidth: '0', minHeight: isWaifu ? '0' : '148px',
             padding: isWaifu ? '0' : '7px 5px 9px',
@@ -3062,16 +3290,18 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           card.type = 'button';
           if (entry.image) {
             const art = this.el('img', {
-              display: 'block', width: '100%', height: (isWaifu || isBossArt) ? 'auto' : '96px',
+              display: 'block', width: '100%', height: (isWaifu || isBossArt || isMonsterCard) ? 'auto' : '96px',
               // V112: o retrato do boss usa a mesma proporção das cartas das
               // waifus (2/3 + contain). Antes era 1/1 + cover: o retrato
               // vertical era espremido num quadrado e cortava em cima/embaixo.
-              aspectRatio: (isWaifu || isBossArt) ? '0.68' : '1 / 1', objectFit: (isWaifu || isBossArt) ? 'contain' : 'cover',
+              aspectRatio: (isWaifu || isBossArt || isMonsterCard) ? '0.68' : '1 / 1', objectFit: (isWaifu || isBossArt || isMonsterCard) ? 'contain' : 'cover',
               objectPosition: 'center',
               borderRadius: isWaifu ? '0' : '5px',
               filter: entry.known ? 'none' : 'grayscale(1) brightness(.48)'
             });
             art.src = entry.image; art.alt = entry.name || 'Registro desconhecido';
+            // V146 — carta do bestiário: se a carta não foi subida, volta para o sprite do monstro.
+            if (entry.fallbackImage) art.onerror = () => { if (!art.dataset.fallbackDone && entry.fallbackImage) { art.dataset.fallbackDone = '1'; art.src = entry.fallbackImage; } };
             if (isWaifu) {
               // V86: moldura + placa de nome REAIS, iguais pras 3 waifus. Antes, Macaca e
               // Rata so PARECIAM ter moldura e nome porque isso vem desenhado dentro do
@@ -3321,26 +3551,34 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           tab.setAttribute('aria-pressed', String(active));
         }
 
+        const BESTIARY_META = {
+          slime: { icon: '◈', home: 'Cavernas de Slime', description: 'Uma gosma viva que habita as cavernas. Lenta, mas insistente: gruda em quem passa e dissolve tudo com seu corpo ácido.' },
+          monkey: { icon: '♟', home: 'Copas da Floresta', description: 'Um macaco travesso das copas. Rápido e esperto, ataca em bando e some entre as árvores antes de você reagir.' },
+          rat: { icon: '♧', home: 'Cavernas Roxas', description: 'Um rato das cavernas roxas. Pequeno e veloz, morde e some na escuridão antes do seu golpe chegar.' },
+          snake: { icon: '🐍', home: 'Cavernas Roxas', description: 'Uma cobra verde das cavernas. Silenciosa, ataca num bote e some antes que você pisque.' },
+          wolf: { icon: '🐺', home: 'Floresta Sombria', description: 'Um lobo cinzento que caça em matilha. Rápido e feroz, cerca a presa antes de morder.' },
+          eagle: { icon: '🦅', home: 'Picos da Montanha', description: 'Uma águia de penas brancas e marrons. Mergulha do céu com as garras abertas e some nas alturas.' },
+          spider: { icon: '🕷️', home: 'Cavernas Roxas', description: 'Uma aranha roxa e peluda. Tece teias nas cavernas e salta sobre quem passa distraído.' },
+          bear: { icon: '🐻', home: 'Floresta Profunda', description: 'Um urso pardo enorme. Lento, mas um golpe só dele derruba qualquer um.' },
+          goblin: { icon: '👺', home: 'Cavernas Roxas', description: 'Um goblin guerreiro de espada curta. Pequeno, esperto e sempre atacando em grupo.' },
+          cyclops: { icon: '👁️', home: 'Terras Baldias', description: 'Um ciclope de um olho só, com uma clava maior que você. Forte, teimoso e adora esmagar.' },
+          ogre: { icon: '💀', home: 'Terras Baldias', description: 'Um ogro cinzento gigante. O monstro mais forte destas terras — fuja ou lute com tudo.' }
+        };
         const configs = {
           monsters: {
             heading: 'MONSTROS',
             entries: Object.values(this.api.data.MONSTERS || {}).map(monster => ({
               id: monster.id,
               name: monster.name,
-              icon: monster.id === 'slime' ? '◈' : monster.id === 'monkey' ? '♟' : '♧',
-              image: (root.CONQUISTADOR_MONSTER_ART || {})[monster.id] || '',
+              icon: (BESTIARY_META[monster.id] || {}).icon || '♧',
+              image: 'assets/bestiary/' + monster.id + '.jpg',
+              fallbackImage: (root.CONQUISTADOR_MONSTER_ART || {})[monster.id] || '',
               known: true,
               detail: true,
               type: 'Monstro',
               species: monster.name,
-              home: monster.id === 'slime' ? 'Cavernas de Slime' : monster.id === 'monkey' ? 'Copas da Floresta' : 'Cavernas Roxas',
-              description: monster.id === 'slime'
-                ? 'Uma gosma viva que habita as cavernas. Lenta, mas insistente: gruda em quem passa e dissolve tudo com seu corpo ácido.'
-                : monster.id === 'monkey'
-                  ? 'Um macaco travesso das copas. Rápido e esperto, ataca em bando e some entre as árvores antes de você reagir.'
-                  : monster.id === 'rat'
-                    ? 'Um rato das cavernas roxas. Pequeno e veloz, morde e some na escuridão antes do seu golpe chegar.'
-                    : 'Um monstro selvagem que habita este mundo.',
+              home: (BESTIARY_META[monster.id] || {}).home || 'Este mundo',
+              description: (BESTIARY_META[monster.id] || {}).description || 'Um monstro selvagem que habita este mundo.',
               stats: { hp: monster.hp || 0, damage: monster.damage || 0, defense: monster.defense || 0, xp: monster.xp || 0, speed: monster.speed || 0 },
               countLabel: `Derrotados: ${(this.killCounts[monster.id] || 0).toLocaleString('pt-BR')}`,
               skillNote: `Ataque — ${monster.damage || 0} de dano`
@@ -3436,7 +3674,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 <script id="conquistador-waifu-collection-v2">
   (function (root) {
     'use strict';
-    const QUALITY = [
+    // V140 — QUALITY vem de data/waifus.json, fallback = V140.
+    const QUALITY = (root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.qualities) || [
       { id: 'plebeia', name: 'Plebeia', chance: 0.90, color: '#a9a9a9' },
       { id: 'dama', name: 'Dama', chance: 0.04, color: '#55a8e8' },
       { id: 'condessa', name: 'Condessa', chance: 0.03, color: '#b16ce2' },
@@ -3445,32 +3684,37 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     ];
 
     // Catálogo extensível: presentes, curva e habilidades ficam declarados por waifu.
-    const WAIFU_DEFINITIONS = Object.freeze({
-      slime: Object.freeze({
-        id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'acid_slime', name: 'Gosma Ácida', damage: 12, description: 'Causa 12 + 1,5 de dano por nível do jogador.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'slime_skin', name: 'Pele de Gosma', description: '+1 Defesa', stats: Object.freeze({ defense: 1 }) }),
-          Object.freeze({ id: 'slime_body', name: 'Corpo de Slime', description: '+10 HP máximo', stats: Object.freeze({ maxHp: 10 }) })
-        ])
-      }),
-      monkey: Object.freeze({
-        id: 'monkey', name: 'Donzela Macaca', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'monkey_ranged', name: 'Chuva de Sinos', durationMs: 5000, cooldownMs: 10000, multiplier: 1.1, description: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'monkey_swift', name: 'Agilidade da Macaca', description: '+0,2 Velocidade de ataque', stats: Object.freeze({ attackSpeed: 0.2 }) }),
-          Object.freeze({ id: 'monkey_pierce', name: 'Sino Perfurante', description: '+0,5 Penetração', stats: Object.freeze({ penetration: 0.5 }) })
-        ])
-      }),
-      rat: Object.freeze({
-        id: 'rat', name: 'Donzela Rata', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'rat_soap', name: 'Ensaboado', durationMs: 3000, cooldownMs: 10000, description: 'Imune a dano por 3 segundos.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'rat_quick', name: 'Patas Ligeiras', description: '+0,1 Velocidade de movimento', stats: Object.freeze({ moveSpeed: 0.1 }) }),
-          Object.freeze({ id: 'rat_body', name: 'Corpo de Rata', description: '+10 HP máximo', stats: Object.freeze({ maxHp: 10 }) })
-        ])
-      })
-    });
+    const WAIFU_DEFINITIONS = Object.freeze((function () {
+      // V140 — waifus vêm de data/waifus.json (window.CONQUISTADOR_DATA).
+      // Fallback embutido = valores idênticos aos da V140.
+      const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus;
+      const src = fromData || {
+        slime: { id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'acid_slime', name: 'Gosma Ácida', damage: 12, description: 'Causa 12 + 1,5 de dano por nível do jogador.' },
+          passives: [
+            { id: 'slime_skin', name: 'Pele de Gosma', description: '+1 Defesa', stats: { defense: 1 } },
+            { id: 'slime_body', name: 'Corpo de Slime', description: '+10 HP máximo', stats: { maxHp: 10 } }
+          ] },
+        monkey: { id: 'monkey', name: 'Donzela Macaca', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'monkey_ranged', name: 'Chuva de Sinos', durationMs: 5000, cooldownMs: 10000, multiplier: 1.1, description: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' },
+          passives: [
+            { id: 'monkey_swift', name: 'Agilidade da Macaca', description: '+0,2 Velocidade de ataque', stats: { attackSpeed: 0.2 } },
+            { id: 'monkey_pierce', name: 'Sino Perfurante', description: '+0,5 Penetração', stats: { penetration: 0.5 } }
+          ] },
+        rat: { id: 'rat', name: 'Donzela Rata', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'rat_soap', name: 'Ensaboado', durationMs: 3000, cooldownMs: 10000, description: 'Imune a dano por 3 segundos.' },
+          passives: [
+            { id: 'rat_quick', name: 'Patas Ligeiras', description: '+0,1 Velocidade de movimento', stats: { moveSpeed: 0.1 } },
+            { id: 'rat_body', name: 'Corpo de Rata', description: '+10 HP máximo', stats: { maxHp: 10 } }
+          ] }
+      };
+      const out = {};
+      for (const k of Object.keys(src)) {
+        const w = src[k];
+        out[k] = Object.freeze({ ...w, activeSkill: Object.freeze({ ...w.activeSkill }), passives: Object.freeze((w.passives || []).map(p => Object.freeze({ ...p, stats: Object.freeze({ ...(p.stats || {}) }) }))) });
+      }
+      return out;
+    })());
 
     class WaifuDropSystem {
       constructor(api, options = {}) {
@@ -3551,7 +3795,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         }
 
         // V80: cada monstro derruba a carta da waifu correspondente (Slime, Macaca, Rata); mesma chance e qualidades.
-        if (['slime', 'monkey', 'rat'].includes(event.monsterId) && Math.random() < 0.20) {
+        // V146 — cada monstro derruba a carta da sua waifu.
+        const WAIFU_DROPS = { slime: ['slime'], monkey: ['monkey'], rat: ['rat'], goblin: ['goblina'], snake: ['lamia'], wolf: ['loba'], eagle: ['harpia'], cyclops: ['ciclopesa'], ogre: ['ogra'], bear: ['ursa'] };
+        const dropWaifus = WAIFU_DROPS[event.monsterId];
+        if (dropWaifus && Math.random() < 0.20) {
+          const waifuId = dropWaifus[Math.floor(Math.random() * dropWaifus.length)];
           const quality = this.rollQuality();
           const cardId = `waifu-drop-${Date.now()}-${this.sequence++}`;
           const cardSprite = this.scene.add.text(x - 8, y - 15, '♥', {
@@ -3562,8 +3810,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             targets: cardSprite, y: y - 24, duration: 520, yoyo: true, repeat: -1,
             ease: 'Sine.InOut'
           });
-          this.drops.set(cardId, { id: cardId, type: 'waifu-card', waifuId: event.monsterId, quality: quality.id, x: x - 8, y, sprite: cardSprite });
-          this.api.events.emit('waifu:card-dropped', { id: cardId, waifuId: event.monsterId, quality: quality.id });
+          this.drops.set(cardId, { id: cardId, type: 'waifu-card', waifuId: waifuId, quality: quality.id, x: x - 8, y, sprite: cardSprite });
+          this.api.events.emit('waifu:card-dropped', { id: cardId, waifuId: waifuId, quality: quality.id });
           dropped = true;
         }
         return dropped;
@@ -3827,7 +4075,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           stack.setAttribute('aria-label', `${speciesName}, nivel ${group.level}, qualidade ${quality.name}`);
           const art = this.document.createElement('img');
           art.className = 'cg-art';
-          art.src = group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+          art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[group.speciesId] || (group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
           art.alt = `Ilustracao de ${speciesName}`;
           const quantity = this.document.createElement('span');
           quantity.className = 'cg-count';
@@ -3930,7 +4178,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           borderRadius: '0', background: 'transparent',
           border: 'none'
         });
-        art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
           position: 'relative', flex: '0 0 auto', padding: '2px 4px',
@@ -4204,7 +4452,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     // y ~= 90 e separa o norte (floresta + montanha) do sul (gelo).
     const RIVER_BASELINE_Y = 90;
     const BRIDGE_XS = [38, 80];
-    const BRIDGE_HALF_WIDTH = 1;
+    // V144 — ponte 2x mais larga: 3 -> 6 tiles (x-2 até x+3).
+    // O comprimento continua acompanhando o rio sozinho.
+    const BRIDGE_X_MIN = -2;
+    const BRIDGE_X_MAX = 3;
     // Sem estruturas fixas herdadas: a V114 não tinha nenhuma, e os pilares
     // de obsidiana / torres da V115 rejeitada não voltam.
     const STRUCTURE_PLACEMENTS = [];
@@ -4223,29 +4474,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.12 },
       { x: 66, y: 68, rx: 8, ry: 7, density: 0.12 }
     ];
-    const ROAD_POLYLINES = [
-      { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
-      { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
-      { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      // V115 — trilha sul até a ponte 1, atravessa o rio e entra no gelo.
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 39, y: 86 }, { x: 38, y: 100 }, { x: 45, y: 112 }], width: 2 },
-      // V115 — acesso à ponte 2 e ao gelo a leste dela.
-      { points: [{ x: 80, y: 62 }, { x: 82, y: 78 }, { x: 80, y: 90 }, { x: 80, y: 102 }, { x: 88, y: 115 }, { x: 95, y: 128 }], width: 2 },
-      // V115 — estrada da montanha: sai da floresta e termina na base do
-      // pico escalável (o pico fica 2 tiles ao norte do fim da estrada).
-      { points: [{ x: 91, y: 45 }, { x: 115, y: 40 }, { x: 130, y: 45 }, { x: 145, y: 38 }, { x: 148, y: 42 }], width: 2 },
-      // V115 — trilha da montanha: serpenteia entre os picos, sem atravessar
-      // a base de nenhum deles.
-      { points: [{ x: 130, y: 45 }, { x: 145, y: 55 }, { x: 155, y: 65 }, { x: 160, y: 62 }, { x: 175, y: 50 }, { x: 172, y: 40 }, { x: 165, y: 25 }, { x: 155, y: 35 }, { x: 145, y: 20 }, { x: 135, y: 30 }], width: 1 },
-      // V115 — trilha do gelo: liga as duas pontes pelo sul do rio e segue
-      // para o leste do gelo.
-      { points: [{ x: 45, y: 112 }, { x: 60, y: 120 }, { x: 80, y: 125 }, { x: 95, y: 128 }, { x: 110, y: 130 }, { x: 130, y: 135 }, { x: 150, y: 130 }], width: 2 },
-      // V115 — trilha funda do gelo: desce até o sul do mundo.
-      { points: [{ x: 60, y: 120 }, { x: 55, y: 140 }, { x: 70, y: 160 }, { x: 90, y: 170 }, { x: 120, y: 165 }, { x: 150, y: 170 }], width: 1 },
-      { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
-      { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
-      { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
-    ];
+    // V144 — SEM ESTRADA: o jogador pediu para tirar a estrada de chão.
+    // roadCells fica vazio; todo o código que testava isRoadCell() passa
+    // a ver chão de bioma. O rio continua bloqueado fora das pontes.
+    const ROAD_POLYLINES = [];
     // V115 — PICOS SOLTOS da montanha (leste). Cada pico é um asset de
     // montanha de verdade, ancorado num tile; a base (3x2) bloqueia.
     // O pico escalável é o primeiro: a estrada da montanha termina na base.
@@ -4279,6 +4511,30 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       { x: 60, y: 155 }, { x: 100, y: 170 }, { x: 150, y: 175 }, { x: 20, y: 175 }
       // V119 — removidas as 34 árvores que a V118 adicionou (remendo).
     ];
+    // V142 — objetos novos do gelo (ZIP do gelo). Posições fixas, longe
+    // das estradas e sem sobrepor os picos/árvores que já existiam.
+    // icePeak2 tem base 3x2 como o pico antigo; o resto ocupa 1 tile.
+    const ICE_PEAKS_2 = [
+      { x: 60, y: 120 }, { x: 115, y: 145 }, { x: 145, y: 165 }
+    ];
+    const FROZEN_PINES_2 = [
+      { x: 35, y: 125 }, { x: 95, y: 135 }, { x: 135, y: 125 },
+      { x: 55, y: 165 }, { x: 105, y: 165 }
+    ];
+    const ICE_DECOR = [
+      { x: 45, y: 145, code: 'iceCrystal' },
+      { x: 120, y: 130, code: 'iceCrystal' },
+      { x: 160, y: 145, code: 'iceCrystal' },
+      { x: 50, y: 155, code: 'iceRock' },
+      { x: 100, y: 120, code: 'iceRock' },
+      { x: 140, y: 170, code: 'iceRock' },
+      { x: 65, y: 140, code: 'snowBush' },
+      { x: 115, y: 160, code: 'snowBush' },
+      { x: 155, y: 120, code: 'snowBush' },
+      { x: 85, y: 160, code: 'frozenStump' },
+      { x: 30, y: 150, code: 'frozenStump' },
+      { x: 170, y: 155, code: 'frozenStump' }
+    ];
     // V115 — manchas de pinheiros na montanha e na transição.
     const PINE_PATCHES = [
       // V121 — manchas de pinheiro quase pela metade (mesmo motivo).
@@ -4293,6 +4549,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const SNOW_GROUND_GID = 10001;
     const SNOW_GROUND_GID_2 = 10003;
     const SNOW_GROUND_GID_3 = 10004;
+    // V142 — chão novo do gelo (assets do ZIP do gelo). snow-8 é a branca.
+    const SNOW_GROUND_GID_4 = 10007;
+    const SNOW_GROUND_GID_5 = 10008;
+    const SNOW_GROUND_GID_6 = 10009;
+    const SNOW_GROUND_GID_7 = 10010;
+    const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
+    const BRIDGE_GROUND_GID = 10012; // V144 — deck de madeira da ponte
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
@@ -4304,11 +4567,35 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
     const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
     const GROUND_STONE_GIDS = new Set([85, 86, 88]);
+    // V142 — ÚNICA função que escolhe o chão do gelo. Causa raiz do gelo
+    // chapado: antes eram só 3 GIDs (40/30/30). Agora: 40% é a branca
+    // (snow-8) e os outros 60% se dividem entre as 4 neve novas + as 3
+    // antigas, para a branca não virar mancha lisa. Um único stableNoise
+    // (501) por tile: o mesmo tile sempre cai no mesmo GID.
+    function iceGroundGidFor(x, y) {
+      const n = stableNoise(x, y, 501);
+      // V144 — branca 40% -> 60% e SEM a cor mais escura:
+      // a geada escura (SNOW_GROUND_GID_6) sai da roleta. Os outros
+      // 40% se dividem entre as claras.
+      if (n < 0.60) return SNOW_GROUND_GID_8; // branca — 60%
+      if (n < 0.70) return SNOW_GROUND_GID_4; // azulada — 10%
+      if (n < 0.78) return SNOW_GROUND_GID_5; // rachado — 8%
+      if (n < 0.86) return SNOW_GROUND_GID_7; // poças — 8%
+      if (n < 0.92) return SNOW_GROUND_GID;   // snow-1 antiga — 6%
+      if (n < 0.96) return SNOW_GROUND_GID_2; // snow-2 antiga — 4%
+      return SNOW_GROUND_GID_3;               // snow-3 antiga — 4%
+    }
     const CUSTOM_ASSET_CODES = Object.freeze({
       mountain: 91001,
       icePeak: 91002,
       pine: 91003,
-      frozenTree: 91004
+      frozenTree: 91004,
+      icePeak2: 91005,
+      frozenPine2: 91006,
+      iceCrystal: 91007,
+      iceRock: 91008,
+      snowBush: 91009,
+      frozenStump: 91010
     });
 
 
@@ -4331,23 +4618,40 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     }
 
     // V115 — O RIO. O antigo "mar" perdeu a identidade de mar: agora é um
-    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 5 ou 7
+    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 15 ou 21
     // tiles de largura (centro +-2 ou +-3); a margem norte é grama alta e
     // a margem sul é banco de gelo. Duas pontes de pedra
     // (x=38 e x=80) atravessam o rio e ligam floresta e montanhas.
     function getSouthernCoastlineY(generator, x) {
       const cx = Math.max(0, Math.min(generator.worldTiles - 1, x));
-      const broadBend = Math.sin(cx * 0.09 + 0.5) * 2;
-      const smallBend = Math.sin(cx * 0.21 + 1.3) * 1.2;
-      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 1.5;
+      // V144 — margem mais lisa: curva larga mais lenta e mais rasa,
+      // ondulação curta quase zerada e ruído de +-0.75 -> +-0.25.
+      // Balanço total cai de ~+-4.5 para ~+-2.25 tiles.
+      const broadBend = Math.sin(cx * 0.05 + 0.5) * 1.5;
+      const smallBend = Math.sin(cx * 0.11 + 1.3) * 0.5;
+      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 0.5;
       return Math.round(RIVER_BASELINE_Y + broadBend + smallBend + roughness);
     }
 
     // V132 — rio mais grosso: meia-largura 2 ou 3 (rio de 5 ou 7 tiles,
     // antes 3 ou 5). Ponte, banco de gelo e região já usam a meia-largura
     // local, então se ajustam sozinhos.
+    // V144 — rio 3x mais grosso: meia-largura 2/3 -> 7/10 (rio de
+    // 5/7 tiles -> 15/21 tiles). Ponte, banco de gelo e região usam
+    // esta função, então se ajustam sozinhos. A largura é suavizada
+    // com a média do ruído dos 3 vizinhos para não dar degrau de
+    // 3 tiles entre uma coluna e a outra.
+    // EXCEÇÃO — entrada da dungeon (x=23): o rio triplo cobriria a
+    // ruína (x 21-25, y 83-87) e a entrada (23,88). Ali o rio mantém
+    // a largura antiga, com rampa de 6 tiles em cada lado.
     function getRiverHalfWidth(x) {
-      return stableNoise(x, 0, 1234) < 0.6 ? 2 : 3;
+      const smoothed = (stableNoise(x - 1, 0, 1234) + stableNoise(x, 0, 1234) + stableNoise(x + 1, 0, 1234)) / 3;
+      const wide = smoothed < 0.6 ? 7 : 10;
+      const narrow = smoothed < 0.6 ? 2 : 3;
+      const d = Math.abs(x - 23);
+      if (d <= 4) return narrow;
+      if (d >= 10) return wide;
+      return Math.round(narrow + (wide - narrow) * ((d - 4) / 6));
     }
 
     // V115 — Borda leste da floresta: a partir daqui começa a transição.
@@ -4379,10 +4683,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     function isBridgeCell(generator, x, y) {
       if (x < 0 || y < 0 || x >= generator.worldTiles || y >= generator.worldHeight) return false;
       for (let i = 0; i < BRIDGE_XS.length; i += 1) {
-        if (Math.abs(x - BRIDGE_XS[i]) > BRIDGE_HALF_WIDTH) continue;
+        if (x < BRIDGE_XS[i] + BRIDGE_X_MIN || x > BRIDGE_XS[i] + BRIDGE_X_MAX) continue;
         let north = Infinity;
         let south = -Infinity;
-        for (let bx = BRIDGE_XS[i] - BRIDGE_HALF_WIDTH; bx <= BRIDGE_XS[i] + BRIDGE_HALF_WIDTH; bx += 1) {
+        for (let bx = BRIDGE_XS[i] + BRIDGE_X_MIN; bx <= BRIDGE_XS[i] + BRIDGE_X_MAX; bx += 1) {
           const c = getSouthernCoastlineY(generator, bx);
           const h = getRiverHalfWidth(bx);
           north = Math.min(north, c - h);
@@ -4411,20 +4715,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       return Math.abs(y - getSouthernCoastlineY(generator, x)) <= getRiverHalfWidth(x);
     }
 
+    // V144 — SEM tiles de margem: a arte dos tiles de margem do
+    // tileset (313, 287, 283...) tem grama verde desenhada. Era ela
+    // que aparecia como faixa verde entre o rio e a neve e como marca
+    // verde ao lado da ponte. Com a margem desligada, o rio usa só
+    // água pura (311/316) e encosta direto na grama/neve.
     function getShorelineTileId(generator, x, y) {
-      // As margens do rio: fora do mundo, a água só continua na faixa do rio.
-      const isWaterAt = (tx, ty) => {
-        if (tx < 0 || tx >= generator.worldTiles || ty < 0 || ty >= generator.worldHeight) {
-          return Math.abs(ty - getSouthernCoastlineY(generator, tx)) <= getRiverHalfWidth(tx);
-        }
-        return isOceanCell(generator, tx, ty);
-      };
-      const mask =
-        (isWaterAt(x, y - 1) ? 1 : 0) |
-        (isWaterAt(x + 1, y) ? 2 : 0) |
-        (isWaterAt(x, y + 1) ? 4 : 0) |
-        (isWaterAt(x - 1, y) ? 8 : 0);
-      return mask === 15 ? 0 : (SHORELINE_TILE_BY_MASK[mask] || 0);
+      return 0;
     }
 
     function getOceanTileId(generator, x, y) {
@@ -4595,6 +4892,15 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       for (const tree of FROZEN_TREES) {
         if (tree.x === x && tree.y === y) return CUSTOM_ASSET_CODES.frozenTree;
       }
+      for (const peak of ICE_PEAKS_2) {
+        if (peak.x === x && peak.y === y) return CUSTOM_ASSET_CODES.icePeak2;
+      }
+      for (const tree of FROZEN_PINES_2) {
+        if (tree.x === x && tree.y === y) return CUSTOM_ASSET_CODES.frozenPine2;
+      }
+      for (const d of ICE_DECOR) {
+        if (d.x === x && d.y === y) return CUSTOM_ASSET_CODES[d.code];
+      }
       return 0;
     }
 
@@ -4605,6 +4911,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
       }
       for (const peak of ICE_PEAKS) {
+        if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
+      }
+      for (const peak of ICE_PEAKS_2) {
         if (x >= peak.x - 1 && x <= peak.x + 1 && y >= peak.y && y <= peak.y + 1) return true;
       }
       return false;
@@ -4981,7 +5290,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           if (!hasRoad(x, y) && !cliffMask[ly + 1][lx + 1]) {
             const regionHere = getRegionAt(generator, x, y);
             if (regionHere === 'ice') {
-              ground[ly][lx] = stableNoise(x, y, 501) < 0.4 ? SNOW_GROUND_GID : (stableNoise(x, y, 501) < 0.7 ? SNOW_GROUND_GID_2 : SNOW_GROUND_GID_3);
+              ground[ly][lx] = iceGroundGidFor(x, y);
               // O antigo mar vira gelo: sem estruturas do mapa original.
               if (isOriginal(x, y)) {
                 structures[ly][lx] = 0;
@@ -5028,7 +5337,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           // V132 — a margem norte é floresta (grama alta): só o banco de
           // gelo ao sul e o rio pintam por cima do resto.
           if (isSouthernIceBankCell(generator, x, y)) {
-            ground[ly][lx] = stableNoise(x, y, 501) < 0.4 ? SNOW_GROUND_GID : (stableNoise(x, y, 501) < 0.7 ? SNOW_GROUND_GID_2 : SNOW_GROUND_GID_3);
+            ground[ly][lx] = iceGroundGidFor(x, y);
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           } else if (isOceanCell(generator, x, y)) {
@@ -5037,7 +5346,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             upperObjects[ly][lx] = 0;
           }
           if (isBridgeCell(generator, x, y)) {
-            ground[ly][lx] = 33;
+            // V144 — ponte de madeira: deck próprio, não pedra.
+            ground[ly][lx] = BRIDGE_GROUND_GID;
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           }
@@ -5243,6 +5553,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       return [];
     }
 
+    // ============================================================
+    // V141 — FRONTEIRA CONGELADA (CORE / SCENE / SYSTEMS)
+    // 1. CORE só gera o mundo e diz o que é sólido (funções puras,
+    //    sem desenhar, sem input, sem guardar estado de cena).
+    // 2. WorldScene só desenha e recebe input. É a ÚNICA dona do
+    //    `blocked` do mundo principal (monta 1x via core e congela).
+    // 3. NENHUM sistema lê `blocked` direto. Pergunta via worldAPI:
+    //    world.isWalkable(x, y, profile) / world.findPath(start, goal).
+    //    MonsterSystem / Inventory / Waifu / Casa passam por aqui.
+    // 4. DungeonScene é a ÚNICA que escreve em `layout.blocked`,
+    //    só no portão de tronco e na trava da sala do boss.
+    //    Qualquer sistema novo que precisar abrir caminho PEDE para
+    //    a dona da grade — nunca escreve blocked[y][x] por conta própria.
+    // ============================================================
     root.CONQUISTADOR_CORE = {
       findPath,
       worldToTile,
@@ -5264,6 +5588,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       SNOW_GROUND_GID,
       SNOW_GROUND_GID_2,
       SNOW_GROUND_GID_3,
+      SNOW_GROUND_GID_4,
+      SNOW_GROUND_GID_5,
+      SNOW_GROUND_GID_6,
+      SNOW_GROUND_GID_7,
+      SNOW_GROUND_GID_8,
+      BRIDGE_GROUND_GID,
       MOUNTAIN_GROUND_GID,
       MOUNTAIN_GROUND_GID_2,
       MOUNTAIN_GROUND_GID_3,
@@ -5301,7 +5631,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       // V122 — chave do cache do mundo renderizado (IndexedDB). NÃO é o
       // worldId do save: o save valida por worldId e mudar apagaria os saves.
       // O cache muda quando as regras de geração mudam.
-      renderCacheKey: 'overworld-180x180-v132'
+      renderCacheKey: 'overworld-180x180-v144'
       // V133 — geração igual à V132: chave mantida para mundos V132 em
       // cache continuarem válidos e não forçarem nova busca do mapa-base.
     });
@@ -5342,6 +5672,18 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       snow: 'assets/ground/snow-1.png',
       snow2: 'assets/ground/snow-2.png',
       snow3: 'assets/ground/snow-3.png',
+      snow4: 'assets/ground/snow-4-neve-azulada.png',
+      snow5: 'assets/ground/snow-5-gelo-rachado.png',
+      snow6: 'assets/ground/snow-6-geada-escura.png',
+      snow7: 'assets/ground/snow-7-neve-pocas-gelo.png',
+      snow8: 'assets/ground/snow-8-branca.png',
+      frozenPine2: 'assets/trees/frozen-pine-2.png',
+      icePeak2: 'assets/world/ice-peak-2.png',
+      iceCrystal: 'assets/world/ice-crystal.png',
+      iceRock: 'assets/world/ice-rock.png',
+      snowBush: 'assets/world/snow-bush.png',
+      frozenStump: 'assets/world/frozen-stump.png',
+      bridgeDeck: 'assets/world/bridge.png',
       mountainGround: 'assets/ground/mountain-1.png',
       mountainGround2: 'assets/ground/mountain-2.png',
       mountainGround3: 'assets/ground/mountain-3.png',
@@ -5366,22 +5708,48 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       mountain: 91001,
       icePeak: 91002,
       pine: 91003,
-      frozenTree: 91004
+      frozenTree: 91004,
+      icePeak2: 91005,
+      frozenPine2: 91006,
+      iceCrystal: 91007,
+      iceRock: 91008,
+      snowBush: 91009,
+      frozenStump: 91010
     });
     // GID do chão de neve: firstgid do tile 'snow' em createTileLayer.
     const SNOW_GROUND_GID = 10001;
     const SNOW_GROUND_GID_2 = 10003;
     const SNOW_GROUND_GID_3 = 10004;
+    // V142 — chão novo do gelo (assets do ZIP do gelo). snow-8 é a branca.
+    const SNOW_GROUND_GID_4 = 10007;
+    const SNOW_GROUND_GID_5 = 10008;
+    const SNOW_GROUND_GID_6 = 10009;
+    const SNOW_GROUND_GID_7 = 10010;
+    const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
+    const BRIDGE_GROUND_GID = 10012; // V144 — deck de madeira da ponte
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
+    const TALL_GRASS_GID = 1001;
+    const TALL_GRASS_GID_2 = 1002;
+    // V140 — GROUND_*_GIDS no mesmo escopo da cena (antes só dentro do núcleo):
+    // groundTextureForGid() usa aqui fora. Valores idênticos aos da V134.
+    const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
+    const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
+    const GROUND_STONE_GIDS = new Set([85, 86, 88]);
     // Como desenhar cada asset: textura + quantas linhas a base ocupa.
     // O sprite é ancorado no centro da base (origin 0.5,1), em escala 1.
     const CUSTOM_ASSET_RENDER = Object.freeze({
       [CUSTOM_ASSET_CODES.mountain]: { texture: 'asset-mountain', rows: 2 },
       [CUSTOM_ASSET_CODES.icePeak]: { texture: 'asset-icepeak', rows: 2 },
       [CUSTOM_ASSET_CODES.pine]: { texture: 'asset-pine', rows: 1, scale: 0.25 },
-      [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1, scale: 0.3 }
+      [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1, scale: 0.3 },
+      [CUSTOM_ASSET_CODES.icePeak2]: { texture: 'asset-icepeak2', rows: 2, scale: 0.06 },
+      [CUSTOM_ASSET_CODES.frozenPine2]: { texture: 'asset-frozenpine2', rows: 1, scale: 0.05 },
+      [CUSTOM_ASSET_CODES.iceCrystal]: { texture: 'asset-icecrystal', rows: 1, scale: 0.04 },
+      [CUSTOM_ASSET_CODES.iceRock]: { texture: 'asset-icerock', rows: 1, scale: 0.03 },
+      [CUSTOM_ASSET_CODES.snowBush]: { texture: 'asset-snowbush', rows: 1, scale: 0.025 },
+      [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.025 }
     });
     
     const DISPLAY_CONFIG = Object.freeze({
@@ -5560,7 +5928,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     function buildDungeonLayout() {
       const W = DUNGEON_SCENE_CONFIG.width;
       const H = DUNGEON_SCENE_CONFIG.height;
-      // V137 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
+      // V140 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
       const rooms = DUNGEON_SCENE_CONFIG.rooms;
       const corridors = DUNGEON_SCENE_CONFIG.corridors;
       const inRect = (x, y, r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
@@ -5831,7 +6199,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           const ctx = tex.getContext();
           for (let y = 0; y < gh; y += 1) for (let x = 0; x < gw; x += 1) {
             const gid = this.layout.ground[y][x]; if (!gid) continue;
-            const tk = groundTextureForDungeonTile(gid, x, y); // V137 — mesma regra da V134, agora numa unica funcao.
+            const tk = groundTextureForDungeonTile(gid, x, y); // V140 — mesma regra da V134, agora numa unica funcao.
             const img = this.textures.get(tk).getSourceImage();
             ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
@@ -6238,6 +6606,24 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const playerDef = this.statusSystem.getStat('player', 'defense') ?? 0;
         for (const monster of this.monsters) {
           if (!monster.alive) continue;
+          // V141 — CULLING (dungeon): fora da câmera + margem = dorme
+          // ANTES de depth/rótulo/barra. Sala continua sendo território
+          // (cheque abaixo), mas monstro fora da tela nem custa rótulo.
+          // Boss com agro travado NÃO dorme: updateBossSlam() é separado
+          // e o agro da sala 3 continua valendo ao acordar.
+          {
+            const cam = this.cameras && this.cameras.main;
+            const view = cam && cam.worldView;
+            const m = 96;
+            const culled = Boolean(view) && monster.sprite &&
+              (monster.sprite.x < view.x - m || monster.sprite.x > view.x + view.width + m ||
+               monster.sprite.y < view.y - m || monster.sprite.y > view.y + view.height + m);
+            if (culled && !(monster.isBoss && monster.hasAggro)) {
+              if (monster._path && monster._path.length) monster._path = [];
+              monster.sprite.body.setVelocity(0, 0);
+              continue;
+            }
+          }
           // V114: agro do boss NAO solta mais. Pegou o agro (jogador na
           // sala 3) = persegue ate morrer. Antes, o tile do corpo do
           // jogador piscava pro corredor na beira da boca e o boss parava.
@@ -6432,6 +6818,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           });
         }
         if (gate.label && gate.label.active) gate.label.destroy();
+        // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (portão de tronco).
         for (const t of gate.tiles) this.layout.blocked[t.y][t.x] = 0;
         this.showToast('🪵 O tronco caiu! A passagem abriu.', 2600);
       }
@@ -6462,6 +6849,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           rect.setDepth(50);
           this.physics.add.existing(rect, true);
           bodies.push(rect);
+          // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (trava da sala do boss).
           this.layout.blocked[t.y][t.x] = 1;
         }
         this.physics.add.collider(this.player, bodies);
@@ -6486,6 +6874,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         this.bossGate = null;
         this.bossGateLocked = false;
         for (const body of g.bodies) if (body.active) body.destroy();
+        // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (destrava sala do boss).
         for (const t of g.tiles) this.layout.blocked[t.y][t.x] = 0;
         if (g.treeImage && g.treeImage.active) {
           this.tweens.add({
@@ -6624,21 +7013,6 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       return rows;
     }
 
-    // V137 — FIX: GROUND_*_GIDS / SNOW / MOUNTAIN / TALL_GRASS eram definidos só
-// dentro da IIFE do núcleo (linha ~4304) e usados em WorldScene.groundTextureForGid(),
-// fora dela — por isso "GROUND_DIRT_GIDS is not defined" e o mundo não carregava.
-// Agora vivem no escopo global, onde a cena enxerga. Valores idênticos aos da V134.
-const SNOW_GROUND_GID = 10001;
-const SNOW_GROUND_GID_2 = 10003;
-const SNOW_GROUND_GID_3 = 10004;
-const MOUNTAIN_GROUND_GID = 10002;
-const MOUNTAIN_GROUND_GID_2 = 10005;
-const MOUNTAIN_GROUND_GID_3 = 10006;
-const TALL_GRASS_GID = 1001;
-const TALL_GRASS_GID_2 = 1002;
-const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
-const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
-const GROUND_STONE_GIDS = new Set([85, 86, 88]);
 class WorldScene extends Phaser.Scene {
       constructor() {
         super('WorldScene');
@@ -6668,6 +7042,10 @@ class WorldScene extends Phaser.Scene {
         this.statusSystem = GAME_RUNTIME.statusSystem;
         this.levelSystem = GAME_RUNTIME.levelSystem;
         this.saveSystem = GAME_RUNTIME.saveSystem;
+        // V141 — FRONTEIRA CONGELADA: worldAPI é a ÚNICA porta de
+        // entrada para colisão/navegação do mundo principal.
+        // Sistemas NUNCA leem this.blocked / scene.blocked direto.
+        // WorldScene é dona do `blocked`; core só gera; systems perguntam.
         this.worldAPI = Object.freeze({
           isWalkable: (tileX, tileY, profile = 'center') => {
             const grid = this.getNavigationGrid(profile === 'player' ? false : true);
@@ -6853,6 +7231,18 @@ class WorldScene extends Phaser.Scene {
         this.load.image('mountain-tile', CUSTOM_ASSETS.mountainGround);
         this.load.image('snow-tile-2', CUSTOM_ASSETS.snow2);
         this.load.image('snow-tile-3', CUSTOM_ASSETS.snow3);
+        this.load.image('snow-tile-4', CUSTOM_ASSETS.snow4);
+        this.load.image('snow-tile-5', CUSTOM_ASSETS.snow5);
+        this.load.image('snow-tile-6', CUSTOM_ASSETS.snow6);
+        this.load.image('snow-tile-7', CUSTOM_ASSETS.snow7);
+        this.load.image('snow-tile-8', CUSTOM_ASSETS.snow8);
+        this.load.image('asset-icepeak2', CUSTOM_ASSETS.icePeak2);
+        this.load.image('asset-frozenpine2', CUSTOM_ASSETS.frozenPine2);
+        this.load.image('asset-icecrystal', CUSTOM_ASSETS.iceCrystal);
+        this.load.image('asset-icerock', CUSTOM_ASSETS.iceRock);
+        this.load.image('asset-snowbush', CUSTOM_ASSETS.snowBush);
+        this.load.image('asset-frozenstump', CUSTOM_ASSETS.frozenStump);
+        this.load.image('bridge-tile', CUSTOM_ASSETS.bridgeDeck);
         this.load.image('mountain-tile-2', CUSTOM_ASSETS.mountainGround2);
         this.load.image('mountain-tile-3', CUSTOM_ASSETS.mountainGround3);
         this.load.image('asset-ruin', CUSTOM_ASSETS.ruin);
@@ -7092,7 +7482,7 @@ class WorldScene extends Phaser.Scene {
                   art.style.minHeight = '0';
                   art.style.width = '100%';
                   art.style.objectFit = 'contain';
-                  art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
                   foot.className = 'cg-foot';
@@ -7181,7 +7571,7 @@ class WorldScene extends Phaser.Scene {
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
                 const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15', border: '3px solid ' + qinfo.color, outline: '1px solid ' + qinfo.color, outlineOffset: '-6px' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
-                art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''); art.alt = 'Carta de ' + name;
+                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '')); art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
                 const descLabel = el('div', { margin: '14px 0 6px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
                 descLabel.textContent = 'DESCRIÇÃO';
@@ -8431,6 +8821,12 @@ class WorldScene extends Phaser.Scene {
         if (gid === SNOW_GROUND_GID) return 'snow-tile';
         if (gid === SNOW_GROUND_GID_2) return 'snow-tile-2';
         if (gid === SNOW_GROUND_GID_3) return 'snow-tile-3';
+        if (gid === SNOW_GROUND_GID_4) return 'snow-tile-4';
+        if (gid === SNOW_GROUND_GID_5) return 'snow-tile-5';
+        if (gid === SNOW_GROUND_GID_6) return 'snow-tile-6';
+        if (gid === SNOW_GROUND_GID_7) return 'snow-tile-7';
+        if (gid === SNOW_GROUND_GID_8) return 'snow-tile-8';
+        if (gid === BRIDGE_GROUND_GID) return 'bridge-tile';
         if (gid === MOUNTAIN_GROUND_GID) return 'mountain-tile';
         if (gid === MOUNTAIN_GROUND_GID_2) return 'mountain-tile-2';
         if (gid === MOUNTAIN_GROUND_GID_3) return 'mountain-tile-3';
@@ -9935,9 +10331,22 @@ class WorldScene extends Phaser.Scene {
 <script id="conquistador-v52">(function () {
   'use strict';
   const SKILLS = Object.freeze({
-    slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, cooldownMs:5000, icon:'🫧' }),
+    slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, scalePerLevel:1.5, cooldownMs:5000, icon:'🫧' }),
     monkey: Object.freeze({ id:'monkey_ranged', name:'Chuva de Sinos', cooldownMs:10000, durationMs:5000, multiplier:1.1, icon:'🔔', buff:'monkey' }),
-    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'rat' })
+    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'rat' }),
+    goblina: Object.freeze({ id:'goblina_dagger', name:'Punhalada', damage:16, scalePerLevel:1.2, cooldownMs:8000, icon:'🗡️' }),
+    lamia: Object.freeze({ id:'lamia_bite', name:'Mordida Venenosa', damage:10, scalePerLevel:1.0, cooldownMs:6000, icon:'🐍' }),
+    loba: Object.freeze({ id:'loba_howl', name:'Uivo da Matilha', cooldownMs:12000, durationMs:4000, multiplier:1.15, icon:'🌕', buff:'monkey' }),
+    harpia: Object.freeze({ id:'harpia_dive', name:'Rasante', damage:20, scalePerLevel:1.2, cooldownMs:10000, icon:'🦅' }),
+    ursa: Object.freeze({ id:'ursa_smash', name:'Esmagamento', damage:24, scalePerLevel:1.5, cooldownMs:12000, icon:'🔨' }),
+    ogra: Object.freeze({ id:'ogra_fury', name:'Fúria da Ogra', cooldownMs:12000, durationMs:5000, multiplier:1.25, icon:'💥', buff:'monkey' }),
+    ciclopesa: Object.freeze({ id:'ciclopesa_veil', name:'Véu de Ossos', cooldownMs:14000, durationMs:4000, icon:'💀', buff:'rat' })
+  });
+  // V146 — passivos por waifu equipada (tabela única; antes eram 3 ifs fixos).
+  const PASSIVES = Object.freeze({
+    slime: { defense:1, maxHp:10 }, monkey: { attackSpeed:0.2, penetration:0.5 }, rat: { moveSpeed:0.1, maxHp:10 },
+    goblina: { attackSpeed:0.15, penetration:0.5 }, lamia: { defense:1, moveSpeed:0.1 }, loba: { attackSpeed:0.2, maxHp:5 },
+    harpia: { moveSpeed:0.15, penetration:0.5 }, ursa: { defense:1, maxHp:10 }, ogra: { attackSpeed:0.2, maxHp:5 }, ciclopesa: { defense:1, maxHp:15 }
   });
   // V80: buffs lidos pelo sistema de combate (alcance da Macaca, imunidade da Rata).
   window.CONQUISTADOR_WAIFU_BUFFS = window.CONQUISTADOR_WAIFU_BUFFS || { monkeyRangedUntil:0, ratImmuneUntil:0 };
@@ -9959,13 +10368,12 @@ class WorldScene extends Phaser.Scene {
     if(!runtime?.status||!runtime?.progress)return false;
     const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped:[];
     const has=id=>equipped.some(eid=>{const c=pool.find(x=>x&&x.instanceId===eid);return !!c&&String(c.waifuId||c.waifuType||c.id||'')===id;});
-    // V80: passivos por waifu equipada — Slime, Macaca (+0,2 vel. ataque, +0,5 penetração), Rata (+0,1 mov., +10 HP).
-    if(has('slime')) runtime.status.addModifier('player',{id:PASSIVE_ID,stats:{defense:1,maxHp:10}});
-    else runtime.status.removeModifier('player',PASSIVE_ID);
-    if(has('monkey')) runtime.status.addModifier('player',{id:PASSIVE_MONKEY,stats:{attackSpeed:0.2,penetration:0.5}});
-    else runtime.status.removeModifier('player',PASSIVE_MONKEY);
-    if(has('rat')) runtime.status.addModifier('player',{id:PASSIVE_RAT,stats:{moveSpeed:0.1,maxHp:10}});
-    else runtime.status.removeModifier('player',PASSIVE_RAT);
+    // V146 — passivos por waifu equipada, via tabela PASSIVES (todas as 10 waifus).
+    for (const id of Object.keys(PASSIVES)) {
+      const pid = 'waifu:' + id + ':intimacy';
+      if (has(id)) runtime.status.addModifier('player', { id: pid, stats: PASSIVES[id] });
+      else runtime.status.removeModifier('player', pid);
+    }
     return true;
   }
   function notify(msg){if(!toast)return;toast.textContent=msg;toast.style.opacity='1';if(toast._timer)clearTimeout(toast._timer);toast._timer=setTimeout(()=>toast.style.opacity='0',1400);}
@@ -10031,15 +10439,15 @@ class WorldScene extends Phaser.Scene {
     // V80: habilidades de buff (Macaca / Rata) não precisam de alvo — ativam na hora.
     if(skill.buff){
       nextCastAt[slot]=Date.now()+skill.cooldownMs;
-      if(skill.buff==='monkey'){ window.CONQUISTADOR_WAIFU_BUFFS.monkeyRangedUntil=Date.now()+skill.durationMs; notify('🔔 Chuva de Sinos! Ataque à distância por 5s.'); }
-      if(skill.buff==='rat'){ window.CONQUISTADOR_WAIFU_BUFFS.ratImmuneUntil=Date.now()+skill.durationMs; notify('🧼 Ensaboado! Imune a dano por 3s.'); }
+      if(skill.buff==='monkey'){ window.CONQUISTADOR_WAIFU_BUFFS.monkeyRangedUntil=Date.now()+skill.durationMs; notify((skill.icon||'🔔')+' '+skill.name+'! Ataque à distância por '+(skill.durationMs/1000)+'s.'); }
+      if(skill.buff==='rat'){ window.CONQUISTADOR_WAIFU_BUFFS.ratImmuneUntil=Date.now()+skill.durationMs; notify((skill.icon||'🧼')+' '+skill.name+'! Imune a dano por '+(skill.durationMs/1000)+'s.'); }
       runtime.events.emit('waifu:skill-cast',{waifuId:waifu,skillId:skill.id,skillName:skill.name});
       render(); return true;
     }
     const dungeonScene=dungeonSceneActive();
     // V110: Gosma Acida escala com o nivel do jogador (12 + 1,5/nivel).
     const playerLevel=runtime.levels?.snapshot?.('player')?.level||1;
-    const skillDamage=skill.id==='acid_slime'?skill.damage+1.5*playerLevel:skill.damage;
+    const skillDamage=skill.damage+(skill.scalePerLevel||0)*playerLevel;
     const target=dungeonScene?dungeonTargetInRange(dungeonScene):targetInRange();if(!target){if(manual)notify('Nenhum adversário ao alcance.');return false;}
     pendingCast[slot]=true;pendingSince[slot]=Date.now();
     const launched=launchAcid(target,()=>{
@@ -10100,7 +10508,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V137';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V146';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -10245,5 +10653,5 @@ class WorldScene extends Phaser.Scene {
 })();
 </script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
-</body>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>

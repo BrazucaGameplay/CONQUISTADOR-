@@ -1,10 +1,9 @@
-// CONQUISTADOR DE WAIFU'S - service worker V137
-// V137 FIX do carregamento infinito: antes era cache-first para TUDO.
-// O navegador continuava servindo o index.html velho do cache e o SW
-// devolvia index.html no lugar do JSON do mapa-base externo.
-// Agora: HTML/SW = network-first, assets locais = cache-first,
-// URLs externas (jsDelivr / raw.githubusercontent) = rede direta, sem SW.
-const CACHE = 'conquistador-v137';
+// CONQUISTADOR DE WAIFU'S - service worker V146
+// V146: cache novo (v146) — limpa o cache v145 e força baixar o ciclope,
+// os retratos goblina/ursa/ogra/ciclopesa e as 11 cartas do bestiário.
+// HTML/SW = network-first, assets locais = cache-first,
+// URLs externas = rede direta, sem SW.
+const CACHE = 'conquistador-v146';
 const FILES = [
   './',
   './index.html',
@@ -14,9 +13,69 @@ const FILES = [
   './assets/monsters/slime.png',
   './assets/monsters/monkey.png',
   './assets/monsters/rat.png',
+  './assets/monsters/snake.png',
+  './assets/monsters/wolf.png',
+  './assets/monsters/eagle.png',
+  './assets/monsters/spider.png',
+  './assets/monsters/bear.png',
+  './assets/monsters/goblin.png',
+  './assets/monsters/cyclops.png',
+  './assets/monsters/ogre.png',
+  './assets/monsters/slime_walk.png',
+  './assets/monsters/slime_attack.png',
+  './assets/monsters/slime_death.png',
+  './assets/monsters/monkey_walk.png',
+  './assets/monsters/monkey_attack.png',
+  './assets/monsters/monkey_death.png',
+  './assets/monsters/rat_walk.png',
+  './assets/monsters/rat_attack.png',
+  './assets/monsters/rat_death.png',
+  './assets/monsters/snake_walk.png',
+  './assets/monsters/snake_attack.png',
+  './assets/monsters/snake_death.png',
+  './assets/monsters/wolf_walk.png',
+  './assets/monsters/wolf_attack.png',
+  './assets/monsters/wolf_death.png',
+  './assets/monsters/eagle_walk.png',
+  './assets/monsters/eagle_attack.png',
+  './assets/monsters/eagle_death.png',
+  './assets/monsters/spider_walk.png',
+  './assets/monsters/spider_attack.png',
+  './assets/monsters/spider_death.png',
+  './assets/monsters/bear_walk.png',
+  './assets/monsters/bear_attack.png',
+  './assets/monsters/bear_death.png',
+  './assets/monsters/goblin_walk.png',
+  './assets/monsters/goblin_attack.png',
+  './assets/monsters/goblin_death.png',
+  './assets/monsters/cyclops_walk.png',
+  './assets/monsters/cyclops_attack.png',
+  './assets/monsters/cyclops_death.png',
+  './assets/monsters/ogre_walk.png',
+  './assets/monsters/ogre_attack.png',
+  './assets/monsters/ogre_death.png',
+  // V146 — cartas do bestiário.
+  './assets/bestiary/slime.jpg',
+  './assets/bestiary/monkey.jpg',
+  './assets/bestiary/rat.jpg',
+  './assets/bestiary/snake.jpg',
+  './assets/bestiary/wolf.jpg',
+  './assets/bestiary/eagle.jpg',
+  './assets/bestiary/spider.jpg',
+  './assets/bestiary/bear.jpg',
+  './assets/bestiary/goblin.jpg',
+  './assets/bestiary/cyclops.jpg',
+  './assets/bestiary/ogre.jpg',
   './assets/waifu/slime.jpg',
   './assets/waifu/monkey.jpg',
   './assets/waifu/rat.jpg',
+  './assets/waifus/goblina.png',
+  './assets/waifus/lamia.png',
+  './assets/waifus/loba.png',
+  './assets/waifus/harpia.png',
+  './assets/waifus/ursa.png',
+  './assets/waifus/ogra.png',
+  './assets/waifus/ciclopesa.png',
   './assets/boss/art.jpg',
   './assets/boss/sprite.png',
   './assets/world/mountain.png',
@@ -49,10 +108,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  // Externo: nao intercepta — deixa o fetch normal (com timeout no jogo).
-  // Antes o SW devolvia index.html no lugar do JSON e o preload travava.
   if (url.origin !== location.origin) return;
-  // HTML / SW: network-first — senao o navegador nunca ve a versao nova.
   const isHTML = url.pathname.endsWith('/') || url.pathname.endsWith('index.html') || url.pathname.endsWith('sw.js');
   if (isHTML) {
     event.respondWith(fetch(event.request).then(response => {
@@ -61,12 +117,11 @@ self.addEventListener('fetch', event => {
     }).catch(() => caches.match(event.request).then(c => c || caches.match('./index.html'))));
     return;
   }
-  // Assets locais: cache-first.
   event.respondWith(caches.match(event.request).then(cached => {
     if (cached) return cached;
     return fetch(event.request).then(response => {
       if (response && response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
       return response;
-    }).catch(() => caches.match('./index.html'));
+    });
   }));
 });
