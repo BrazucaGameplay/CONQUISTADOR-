@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V178 — água multi-textura, população de monstros verificável e piso de floresta na Dungeon. -->
+<!-- V179 — correções integradas de combate, habilidades, passivos e população; limpeza de métodos legados duplicados. Base visual/mundo V178 preservada. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -18,7 +18,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V170</title>
+<title>CONQUISTADOR DE WAIFU'S — V179</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -37,7 +37,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V178</div>
+  <div id="version-badge">V179</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -422,16 +422,18 @@
         const payload = {
           attackerId, targetId, damage: result.damage,
           hp: result.hp, remainingHp: result.hp, defeated: result.defeated,
-          kind: options.kind || 'basic'
+          kind: options.kind || 'basic',
+          skillId: options.skillId || null,
+          skillName: options.skillName || null
         };
         this.events.emit('combat:hit', payload);
         if (result.defeated) this.events.emit('combat:defeated', payload);
         return payload;
       }
-      applyFixedDamage(attackerId, targetId, amount, kind = 'skill') {
+      applyFixedDamage(attackerId, targetId, amount, kind = 'skill', metadata = {}) {
         const damage = Number(amount);
         if (!Number.isFinite(damage) || damage < 0) return null;
-        return this.attack(attackerId, targetId, { damage, kind });
+        return this.attack(attackerId, targetId, { damage, kind, skillId: metadata.skillId || null, skillName: metadata.skillName || null });
       }
     }
 
@@ -1055,7 +1057,6 @@
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
-        this.chunkRespawns = new Map(); // V178: legado inativo, mantido apenas para leitura de saves antigos.
         this.chunkPopulation = new Map();
         this.respawnRecords = new Map();
         this.legacyUnclassified = [];
@@ -1720,27 +1721,7 @@
       }
 
       // V76: monstros passam a fazer parte do save.
-      snapshotMonsters() {
-        const list = [];
-        for (const record of this.monsters.values()) {
-          if (!record || !record.alive) continue;
-          const hp = this.status ? this.status.getStat(record.id, 'hp') : null;
-          list.push({
-            monsterId: record.monsterId, level: record.level,
-            tile: { x: record.tile.x, y: record.tile.y },
-            hp: Number.isFinite(Number(hp)) ? Math.max(0, Math.floor(Number(hp))) : null,
-            originChunkId: record.originChunkId || this.getChunkId(record.originChunkX, record.originChunkY),
-            originChunkX: record.originChunkX, originChunkY: record.originChunkY,
-            xpReward: record.xpReward
-          });
-        }
-        const respawns = [];
-        for (const [chunkId, queue] of this.chunkRespawns.entries()) {
-          if (!queue || !queue.pending) continue;
-          respawns.push({ chunkId, chunkX: queue.chunkX, chunkY: queue.chunkY, pending: queue.pending, pendingByMonster: { ...(queue.pendingByMonster || {}) } });
-        }
-        return { list, respawns };
-      }
+
       flushMonsterSnapshot(reason = 'manual') {
         // Um único caminho atende debounce, pagehide e shutdown. Limpar o timer
         // antes da escrita evita flush duplicado em transições rápidas.
@@ -1767,280 +1748,16 @@
           this.flushMonsterSnapshot('debounce');
         }, 800);
       }
-      restoreRespawnQueues(respawns) {
-        if (!Array.isArray(respawns)) return 0;
 
-        // Consolida entradas repetidas do mesmo chunk antes de aplicar os
-        // limites. Um .set() por registro descartaria filas anteriores.
-        const grouped = new Map();
-        for (const savedQueue of respawns) {
-          if (!savedQueue || !Number.isInteger(savedQueue.chunkX) || !Number.isInteger(savedQueue.chunkY)) continue;
-          const chunkX = savedQueue.chunkX;
-          const chunkY = savedQueue.chunkY;
-          if (chunkX < 0 || chunkY < 0 || chunkX >= this.chunkGrid.columns || chunkY >= this.chunkGrid.rows) continue;
 
-          const rawPending = Math.floor(Number(savedQueue.pending));
-          if (!Number.isFinite(rawPending) || rawPending <= 0) continue;
-          const rawByType = savedQueue.pendingByMonster && typeof savedQueue.pendingByMonster === 'object'
-            ? savedQueue.pendingByMonster : {};
-          const normalized = Object.fromEntries(this.monsterTypes.map(type => [type, 0]));
-          let declaredTotal = 0;
-          for (const type of this.monsterTypes) {
-            const count = Math.floor(Number(rawByType[type]));
-            if (Number.isFinite(count) && count > 0) {
-              normalized[type] = Math.min(count, this.maxMonstersPerChunk);
-              declaredTotal += normalized[type];
-            }
-          }
 
-          // Snapshots antigos sem contagem por espécie são tratados como slime.
-          if (declaredTotal === 0) {
-            normalized.slime = Math.min(rawPending, this.maxMonstersPerChunk);
-            declaredTotal = normalized.slime;
-          }
 
-          const chunkId = this.getChunkId(chunkX, chunkY);
-          let aggregate = grouped.get(chunkId);
-          if (!aggregate) {
-            aggregate = {
-              chunkX, chunkY, pendingTotal: 0,
-              pendingByMonster: Object.fromEntries(this.monsterTypes.map(type => [type, 0]))
-            };
-            grouped.set(chunkId, aggregate);
-          }
-          aggregate.pendingTotal = Math.min(
-            this.maxMonstersPerChunk,
-            aggregate.pendingTotal + Math.min(rawPending, this.maxMonstersPerChunk)
-          );
-          for (const type of this.monsterTypes) {
-            aggregate.pendingByMonster[type] = Math.min(
-              this.maxMonstersPerChunk,
-              aggregate.pendingByMonster[type] + normalized[type]
-            );
-          }
-        }
 
-        let restored = 0;
-        for (const [chunkId, aggregate] of grouped.entries()) {
-          // Reconcile total, per-species caps and capacity against restored
-          // living monsters. The generated chunk ID remains authoritative.
-          let remaining = Math.min(
-            aggregate.pendingTotal,
-            this.monsterTypes.reduce((sum, type) => sum + aggregate.pendingByMonster[type], 0),
-            Math.max(0, this.maxMonstersPerChunk - this.getAliveCountForChunk(chunkId))
-          );
-          const acceptedByType = Object.fromEntries(this.monsterTypes.map(type => [type, 0]));
-          for (const type of this.monsterTypes) {
-            const typeLimit = (this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
-            const perTypeRoom = Math.max(0, typeLimit - this.getAliveCountForChunk(chunkId, type));
-            const accepted = Math.min(aggregate.pendingByMonster[type], perTypeRoom, remaining);
-            acceptedByType[type] = accepted;
-            remaining -= accepted;
-          }
-          const pending = this.monsterTypes.reduce((sum, type) => sum + acceptedByType[type], 0);
-          if (!pending) continue;
-          this.chunkRespawns.set(chunkId, {
-            chunkX: aggregate.chunkX,
-            chunkY: aggregate.chunkY,
-            pending,
-            pendingByMonster: acceptedByType,
-            nextAt: this.now + this.respawnDelayMs
-          });
-          restored += pending;
-        }
-        return restored;
-      }
 
-      restoreOrPopulate() {
-        let saved = null;
-        try { saved = this.progress ? this.progress.get('monsters') : null; } catch (e) { saved = null; }
-        const list = saved && Array.isArray(saved.list) ? saved.list.filter(m => m && this.monsterTypes.includes(m.monsterId)) : [];
-        if (list.length) {
-          // Restaura monstros salvos nas posicoes exatas, sem re-rolar nivel/HP.
-          for (const m of list) {
-            // HP zero significa entidade morta: não restaurar nem convertê-la
-            // em um monstro vivo. O preenchimento inicial abaixo recompõe
-            // apenas a população necessária do chunk.
-            const savedHp = m.hp != null ? Number(m.hp) : NaN;
-            if (Number.isFinite(savedHp) && savedHp <= 0) continue;
 
-            const tileChunk = m.tile && this.getChunkForTile(m.tile);
-            const originIsValid =
-              Number.isInteger(m.originChunkX) && Number.isInteger(m.originChunkY) &&
-              m.originChunkX >= 0 && m.originChunkY >= 0 &&
-              m.originChunkX < this.chunkGrid.columns && m.originChunkY < this.chunkGrid.rows;
-            // O chunk de origem é a propriedade imutável que controla o
-            // respawn. Preserva-o quando válido, mesmo se o monstro migrou;
-            // usa o chunk do tile apenas para metadados ausentes/corrompidos.
-            const ownerChunk = originIsValid
-              ? { chunkX: m.originChunkX, chunkY: m.originChunkY }
-              : tileChunk;
-            if (!ownerChunk) continue;
-            this.spawnOneMonsterForChunk(ownerChunk.chunkX, ownerChunk.chunkY, m.monsterId, m);
-          }
-          // Respawns pendentes: valida coordenadas, espécies e limites do chunk.
-          this.restoreRespawnQueues(saved.respawns);
-          // Completa chunks que ficaram abaixo do minimo (ex.: monstro morto sem respawn salvo).
-          this.populateAllChunks();
-          return;
-        }
-        this.populateAllChunks();
-        this.scheduleMonsterSave();
-      }
-      populateAllChunks() {
-        for (let chunkY = 0; chunkY < this.chunkGrid.rows; chunkY += 1) {
-          for (let chunkX = 0; chunkX < this.chunkGrid.columns; chunkX += 1) {
-            const chunkId = this.getChunkId(chunkX, chunkY);
-            const population = this.getChunkPopulationState(chunkId);
-            if (population.initialSpawnAttempted) continue;
-            population.initialSpawnAttempted = true;
-            const queue = this.chunkRespawns.get(chunkId);
-            // V145 — rodízio por chunk: a ordem de spawn gira com o chunk, senão
-            // as 5 primeiras espécies lotariam o chunk (teto 10) e as outras nunca nasceriam.
-            const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
-            const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
-            for (const monsterId of orderedTypes) {
-              const queuedForType = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
-              let available = this.maxPerType && this.maxPerType[monsterId] || this.maxPerMonsterType;
-              available -= this.getAliveCountForChunk(chunkId, monsterId) + queuedForType;
-              while (available > 0 &&
-                this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
-                if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
-                available -= 1;
-              }
-            }
-            if (this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
-              population.initialFillPending = true;
-              population.initialRetryAt = this.now + this.spawnRetryDelayMs;
-            }
-          }
-        }
-      }
 
-      updateInitialChunkFill() {
-        for (const [chunkId, population] of this.chunkPopulation.entries()) {
-          if (!population.initialFillPending || this.now < population.initialRetryAt) continue;
-          const [chunkX, chunkY] = chunkId.split(':').map(Number);
-          const queue = this.chunkRespawns.get(chunkId);
-          let needsRetry = false;
 
-          const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
-          const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
-          for (const monsterId of orderedTypes) {
-            const queued = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
-            const typeLimit = (this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType;
-            let available = typeLimit -
-              this.getAliveCountForChunk(chunkId, monsterId) - queued;
-            while (available > 0 &&
-              this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
-              if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) {
-                needsRetry = true;
-                break;
-              }
-              available -= 1;
-            }
-          }
 
-          const totalAlive = this.getAliveCountForChunk(chunkId);
-          const totalQueued = queue ? queue.pending : 0;
-          if (totalAlive + totalQueued >= this.maxMonstersPerChunk) {
-            population.initialFillPending = false;
-          } else {
-            population.initialRetryAt = this.now + this.spawnRetryDelayMs;
-          }
-        }
-      }
-
-      scheduleChunkRespawn(record) {
-        if (!record || !this.monsterTypes.includes(record.monsterId)) return false;
-        // V178 — compatibilidade com entidades antigas sem originChunkId:
-        // recupera o chunk a partir do tile atual em vez de descartar o respawn.
-        let owner = null;
-        if (record.originChunkId) {
-          const parts = String(record.originChunkId).split(':').map(Number);
-          owner = {
-            id: String(record.originChunkId),
-            chunkX: Number.isInteger(Number(record.originChunkX)) ? Number(record.originChunkX) : parts[0],
-            chunkY: Number.isInteger(Number(record.originChunkY)) ? Number(record.originChunkY) : parts[1]
-          };
-        } else owner = this.getChunkForTile(record.tile);
-        if (!owner || !Number.isInteger(owner.chunkX) || !Number.isInteger(owner.chunkY)) return false;
-        const chunkId = owner.id || this.getChunkId(owner.chunkX, owner.chunkY);
-        let queue = this.chunkRespawns.get(chunkId);
-        if (!queue) {
-          queue = {
-            chunkX: owner.chunkX,
-            chunkY: owner.chunkY,
-            pending: 0,
-            pendingByMonster: { slime: 0, monkey: 0, rat: 0 },
-            nextAt: this.now + this.respawnDelayMs
-          };
-          this.chunkRespawns.set(chunkId, queue);
-        }
-        const currentAlive = this.getAliveCountForChunk(chunkId);
-        const reserved = queue.pending;
-        if (currentAlive + reserved >= this.maxMonstersPerChunk) return false;
-        queue.pending += 1;
-        queue.pendingByMonster[record.monsterId] =
-          (queue.pendingByMonster[record.monsterId] || 0) + 1;
-        this.events.emit('monster:respawn-queued', {
-          originChunkId: chunkId,
-          monsterId: record.monsterId,
-          pending: queue.pending,
-          respawnAt: queue.nextAt
-        });
-        return true;
-      }
-
-      updateChunkRespawns() {
-        for (const [chunkId, queue] of Array.from(this.chunkRespawns.entries())) {
-          if (!queue || queue.pending <= 0) {
-            this.chunkRespawns.delete(chunkId);
-            continue;
-          }
-          if (this.now < queue.nextAt) continue;
-          if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) {
-            // The chunk is temporarily full: preserve the death reservation
-            // and its species, then retry when a slot may become available.
-            queue.nextAt = this.now + this.spawnRetryDelayMs;
-            continue;
-          }
-
-          let monsterId = this.monsterTypes.find(type =>
-            queue.pendingByMonster && queue.pendingByMonster[type] > 0
-          );
-          if (!monsterId && queue.pending > 0) {
-            // Saves antigos guardavam apenas pending total; nao descarta a fila.
-            monsterId = 'slime';
-            queue.pendingByMonster = queue.pendingByMonster || {};
-            queue.pendingByMonster.slime = Math.max(1, Number(queue.pendingByMonster.slime) || 0);
-          }
-          if (!monsterId) {
-            this.chunkRespawns.delete(chunkId);
-            continue;
-          }
-
-          const spawned = this.spawnOneMonsterForChunk(queue.chunkX, queue.chunkY, monsterId, null);
-          if (!spawned) {
-            // Retain the species reservation and retry later if no safe tile exists.
-            queue.nextAt = this.now + this.spawnRetryDelayMs;
-            continue;
-          }
-
-          queue.pending -= 1;
-          queue.pendingByMonster[monsterId] -= 1;
-          if (queue.pending <= 0) {
-            this.chunkRespawns.delete(chunkId);
-          } else {
-            queue.nextAt = this.now + this.respawnDelayMs;
-          }
-          this.events.emit('monster:respawned', {
-            originChunkId: chunkId,
-            monsterId,
-            pending: queue.pending
-          });
-        }
-      }
 
       getPlayerPoint() {
         const tile = this.world.getPlayerBodyTile();
@@ -2054,9 +1771,8 @@
       }
 
       effectiveAttackRange() {
-        const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
-        const ranged = buffs && Date.now() < (buffs.monkeyRangedUntil || 0);
-        return this.attackRange + (ranged ? 120 : 0);
+        const ranged = window.CONQUISTADOR_WAIFU_HELPERS?.activeRangedBuff?.();
+        return this.attackRange + (ranged ? ranged.range : 0);
       }
 
       getNearestMonsterInRange(playerPoint) {
@@ -2181,10 +1897,9 @@
 
         const baseDamage = this.combat.calculateDamage('player', record.id);
         if (baseDamage === null) return false;
-        // V80: Chuva de Sinos ativa — ataque básico causa 1,1x do dano.
-        const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
-        const ranged = buffs && Date.now() < (buffs.monkeyRangedUntil || 0);
-        const damage = Math.max(1, Math.floor(baseDamage * (ranged ? 1.1 : 1)));
+        // Buff de alcance ativo — cada habilidade usa seu multiplicador definido no catálogo.
+        const ranged = window.CONQUISTADOR_WAIFU_HELPERS?.activeRangedBuff?.();
+        const damage = Math.max(1, Math.floor(baseDamage * (ranged ? ranged.multiplier : 1)));
         const hit = this.combat.attack('player', record.id, { damage, kind: 'overworld-basic' });
         if (!hit) return false;
 
@@ -2394,10 +2109,8 @@
             const cooldown = this.status.getAttackCooldown(record.id);
             record.nextAttackAt = time + cooldown;
             this.setMonsterAnimation(record, 'attack', dxToPlayer, dyToPlayer);
-            const ratBuffs = window.CONQUISTADOR_WAIFU_BUFFS;
-        const ratImmune = ratBuffs && Date.now() < (ratBuffs.ratImmuneUntil || 0);
-        // V80: Ensaboado ativo — jogador imune a dano.
-        const hit = ratImmune ? null : this.combat.attack(record.id, 'player', { kind: 'overworld-monster' });
+            // Habilidades de imunidade (Rata/Ciclopesa) bloqueiam qualquer fonte de dano.
+            const hit = window.CONQUISTADOR_WAIFU_HELPERS?.playerIsImmune?.() ? null : this.combat.attack(record.id, 'player', { kind: 'overworld-monster' });
             if (hit) {
               this.events.emit('monster:attack', {
                 entityId: record.id, targetId: 'player', damage: hit.damage,
@@ -2576,7 +2289,8 @@
             item.attempts += 1; item.dueAt = this.now + this.spawnRetryDelayMs; continue;
           }
           const typeLimit = (this.maxPerType && this.maxPerType[item.monsterId]) || this.maxPerMonsterType;
-          if (this.getAliveCountForChunk(item.chunkId, item.monsterId) >= typeLimit) {
+          const otherReserved = Array.from(this.respawnRecords.values()).filter(r=>r.chunkId===item.chunkId&&r.monsterId===item.monsterId&&r.id!==item.id).length;
+          if (this.getAliveCountForChunk(item.chunkId, item.monsterId) + otherReserved >= typeLimit) {
             item.attempts += 1; item.dueAt = this.now + this.spawnRetryDelayMs; continue;
           }
           const spawned = this.spawnOneMonsterForChunk(item.chunkX, item.chunkY, item.monsterId);
@@ -2628,12 +2342,26 @@
             }
           }
         }
-        this.legacyUnclassified = saved && Array.isArray(saved.legacyUnclassified) ? saved.legacyUnclassified.slice() : [];
-        for (const q of (saved && Array.isArray(saved.respawns) ? saved.respawns : [])) {
-          const typed=q && q.pendingByMonster && typeof q.pendingByMonster==='object' ? q.pendingByMonster : {};
-          const hasType=this.monsterTypes.some(t => Number(typed[t])>0);
-          if (q && Number(q.pending)>0 && !hasType) this.legacyUnclassified.push({ chunkX:q.chunkX, chunkY:q.chunkY, pending:Number(q.pending), source:'legacy-v1' });
+        this.legacyUnclassified = [];
+        const migrateUnclassified=(entry,source)=>{
+          if(!entry)return;
+          const x=Number(entry.chunkX),y=Number(entry.chunkY),count=Math.max(0,Math.floor(Number(entry.pending)||0));
+          if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=this.chunkGrid.columns||y>=this.chunkGrid.rows||!count)return;
+          const chunkId=this.getChunkId(x,y);
+          const existing=Array.from(this.respawnRecords.values()).filter(r=>r.chunkId===chunkId).length;
+          const room=Math.max(0,this.maxMonstersPerChunk-this.getAliveCountForChunk(chunkId)-existing);
+          const accepted=Math.min(count,room);
+          for(let k=0;k<accepted;k++){
+            const id=`legacy-untyped:${x}:${y}:slime:${k}`;
+            if(!this.respawnRecords.has(id))this.respawnRecords.set(id,{id,monsterId:'slime',chunkId,chunkX:x,chunkY:y,createdAt:this.now,dueAt:this.now+this.respawnDelayMs,attempts:0,state:'waiting',migratedFrom:source});
+          }
+          if(accepted<count)this.legacyUnclassified.push({chunkX:x,chunkY:y,pending:count-accepted,source,reason:'chunk-capacity'});
+        };
+        for(const q of (saved&&Array.isArray(saved.respawns)?saved.respawns:[])){
+          const typed=q&&q.pendingByMonster&&typeof q.pendingByMonster==='object'?q.pendingByMonster:{};
+          if(q&&Number(q.pending)>0&&!this.monsterTypes.some(t=>Number(typed[t])>0))migrateUnclassified(q,'legacy-v1');
         }
+        for(const q of (saved&&Array.isArray(saved.legacyUnclassified)?saved.legacyUnclassified:[]))migrateUnclassified(q,q.source||'legacy-unclassified');
         this.populateAllChunks();
         this.scheduleMonsterSave();
       }
@@ -2649,20 +2377,23 @@
           if (state.initialSpawnAttempted) continue;
           state.initialSpawnAttempted=true;
           const candidates=this.getSpawnCandidates(x,y);
+          const pending=Array.from(this.respawnRecords.values()).filter(r=>r.chunkId===chunkId);
+          const reservedTotal=pending.length;
           const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
           const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
           let spawned=0;
           for (const type of ordered) {
             if (!this.availableMonsterTypes || !this.availableMonsterTypes.has(type)) continue;
             const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
-            while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
+            const reservedType=pending.filter(r=>r.monsterId===type).length;
+            while (this.getAliveCountForChunk(chunkId,type)+reservedType<limit && this.getAliveCountForChunk(chunkId)+reservedTotal<this.maxMonstersPerChunk) {
               if (!this.spawnOneMonsterForChunk(x,y,type)) break;
               spawned++;
             }
             if (this.getAliveCountForChunk(chunkId)>=this.maxMonstersPerChunk) break;
           }
           const alive=this.getAliveCountForChunk(chunkId);
-          state.initialFillPending=alive<this.maxMonstersPerChunk && candidates.length>0;
+          state.initialFillPending=alive+reservedTotal<this.maxMonstersPerChunk && candidates.length>0;
           state.initialRetryAt=this.now+this.spawnRetryDelayMs;
           this.populationDiagnostics[chunkId]={
             candidates:candidates.length, spawned, alive,
@@ -2682,16 +2413,19 @@
           if (!state.initialFillPending || this.now<state.initialRetryAt) continue;
           const [x,y]=chunkId.split(':').map(Number);
           if (!Number.isInteger(x)||!Number.isInteger(y)) { state.initialFillPending=false; continue; }
+          const pending=Array.from(this.respawnRecords.values()).filter(r=>r.chunkId===chunkId);
+          const reservedTotal=pending.length;
           const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
           const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
           for (const type of ordered) {
             if (!this.availableMonsterTypes || !this.availableMonsterTypes.has(type)) continue;
             const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
-            while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
+            const reservedType=pending.filter(r=>r.monsterId===type).length;
+            while (this.getAliveCountForChunk(chunkId,type)+reservedType<limit && this.getAliveCountForChunk(chunkId)+reservedTotal<this.maxMonstersPerChunk) {
               if (!this.spawnOneMonsterForChunk(x,y,type)) break;
             }
           }
-          state.initialFillPending=this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk;
+          state.initialFillPending=this.getAliveCountForChunk(chunkId)+reservedTotal<this.maxMonstersPerChunk;
           state.initialRetryAt=this.now+this.spawnRetryDelayMs;
         }
       }
@@ -6609,7 +6343,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V178',
+        version: 'V179',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -7436,11 +7170,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           const dist = Math.hypot(monster.sprite.x - this.player.x, monster.sprite.y - this.player.y);
           if (dist < nearestDist) { nearestDist = dist; nearest = monster; }
         }
-        // V109: Chuva de Sinos (Macaca) amplia o alcance do ataque basico na dungeon.
-        const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
-        const ranged = buffs && Date.now() < (buffs.monkeyRangedUntil || 0);
+        // Buff de alcance (Macaca/Loba/Ogra) amplia o alcance do ataque básico na dungeon.
+        const ranged = window.CONQUISTADOR_WAIFU_HELPERS?.activeRangedBuff?.();
         if (!nearest || nearestDist > (ranged ? 120 : 52)) return;
-        const hit = this.combatSystem.attack('player', nearest.id, { kind: 'dungeon-basic' });
+        const baseDamage = this.combatSystem.calculateDamage('player', nearest.id);
+        const damageAmount = Math.max(1, Math.floor(baseDamage * (ranged ? ranged.multiplier : 1)));
+        const hit = this.combatSystem.attack('player', nearest.id, { damage: damageAmount, kind: 'dungeon-basic' });
         if (!hit) return;
         const damage = hit.damage;
         nearest.hp = Math.max(0, hit.hp);
@@ -7532,9 +7267,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           monster.sprite.body.setVelocity(0, 0);
           if (now < monster.nextAttackAt) continue;
           // V109: Ensaboado (Rata) bloqueia o dano dos monstros da dungeon.
-          const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
-          const immune = buffs && Date.now() < (buffs.ratImmuneUntil || 0);
-          const hit = immune ? null : this.combatSystem.attack(monster.id, 'player', { kind: 'dungeon-monster' });
+          const hit = window.CONQUISTADOR_WAIFU_HELPERS?.playerIsImmune?.() ? null : this.combatSystem.attack(monster.id, 'player', { kind: 'dungeon-monster' });
           if (hit && hit.damage > 0) {
             this.cameras.main.shake(80, 0.006);
           }
@@ -7570,9 +7303,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           this.slamPending = null;
           if (dist <= slam.radiusTiles * TILE_SIZE) {
             // V109: Ensaboado tambem bloqueia a Pancada Sismica.
-            const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
-            const immune = buffs && Date.now() < (buffs.ratImmuneUntil || 0);
-            if (!immune) this.combatSystem.applyFixedDamage(boss.id, 'player', slam.damage, 'dungeon-boss-slam');
+            if (!window.CONQUISTADOR_WAIFU_HELPERS?.playerIsImmune?.()) this.combatSystem.applyFixedDamage(boss.id, 'player', slam.damage, 'dungeon-boss-slam');
             this.cameras.main.shake(160, 0.02);
             this.showToast('💥 PANCADA SÍSMICA!', 1400);
           }
@@ -11309,15 +11040,15 @@ class WorldScene extends Phaser.Scene {
   'use strict';
   const SKILLS = Object.freeze({
     slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, scalePerLevel:1.5, cooldownMs:5000, icon:'🫧' }),
-    monkey: Object.freeze({ id:'monkey_ranged', name:'Chuva de Sinos', cooldownMs:10000, durationMs:5000, multiplier:1.1, icon:'🔔', buff:'monkey' }),
-    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'rat' }),
+    monkey: Object.freeze({ id:'monkey_ranged', name:'Chuva de Sinos', cooldownMs:10000, durationMs:5000, multiplier:1.1, icon:'🔔', buff:'ranged' }),
+    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'immunity' }),
     goblina: Object.freeze({ id:'goblina_dagger', name:'Punhalada', damage:16, scalePerLevel:1.2, cooldownMs:8000, icon:'🗡️' }),
     lamia: Object.freeze({ id:'lamia_bite', name:'Mordida Venenosa', damage:10, scalePerLevel:1.0, cooldownMs:6000, icon:'🐍' }),
-    loba: Object.freeze({ id:'loba_howl', name:'Uivo da Matilha', cooldownMs:12000, durationMs:4000, multiplier:1.15, icon:'🌕', buff:'monkey' }),
+    loba: Object.freeze({ id:'loba_howl', name:'Uivo da Matilha', cooldownMs:12000, durationMs:4000, multiplier:1.15, icon:'🌕', buff:'ranged' }),
     harpia: Object.freeze({ id:'harpia_dive', name:'Rasante', damage:20, scalePerLevel:1.2, cooldownMs:10000, icon:'🦅' }),
     ursa: Object.freeze({ id:'ursa_smash', name:'Esmagamento', damage:24, scalePerLevel:1.5, cooldownMs:12000, icon:'🔨' }),
-    ogra: Object.freeze({ id:'ogra_fury', name:'Fúria da Ogra', cooldownMs:12000, durationMs:5000, multiplier:1.25, icon:'💥', buff:'monkey' }),
-    ciclopesa: Object.freeze({ id:'ciclopesa_veil', name:'Véu de Ossos', cooldownMs:14000, durationMs:4000, icon:'💀', buff:'rat' })
+    ogra: Object.freeze({ id:'ogra_fury', name:'Fúria da Ogra', cooldownMs:12000, durationMs:5000, multiplier:1.25, icon:'💥', buff:'ranged' }),
+    ciclopesa: Object.freeze({ id:'ciclopesa_veil', name:'Véu de Ossos', cooldownMs:14000, durationMs:4000, icon:'💀', buff:'immunity' })
   });
   // V146 — passivos por waifu equipada (tabela única; antes eram 3 ifs fixos).
   const PASSIVES = Object.freeze({
@@ -11326,9 +11057,13 @@ class WorldScene extends Phaser.Scene {
     harpia: { moveSpeed:0.15, penetration:0.5 }, ursa: { defense:1, maxHp:10 }, ogra: { attackSpeed:0.2, maxHp:5 }, ciclopesa: { defense:1, maxHp:15 }
   });
   // V80: buffs lidos pelo sistema de combate (alcance da Macaca, imunidade da Rata).
-  window.CONQUISTADOR_WAIFU_BUFFS = window.CONQUISTADOR_WAIFU_BUFFS || { monkeyRangedUntil:0, ratImmuneUntil:0 };
+  window.CONQUISTADOR_WAIFU_BUFFS = Object.assign({ rangedUntil:0, rangedDamageMultiplier:1, immuneUntil:0, monkeyRangedUntil:0, ratImmuneUntil:0 }, window.CONQUISTADOR_WAIFU_BUFFS || {});
+  const activeRangedBuff=()=>{const b=window.CONQUISTADOR_WAIFU_BUFFS, now=Date.now();return b&&now<(b.rangedUntil||b.monkeyRangedUntil||0)?{until:b.rangedUntil||b.monkeyRangedUntil, multiplier:Math.max(1,Number(b.rangedDamageMultiplier)||1), range:120}:null;};
+  const playerIsImmune=()=>{const b=window.CONQUISTADOR_WAIFU_BUFFS,now=Date.now();return !!b&&now<(b.immuneUntil||b.ratImmuneUntil||0);};
+  window.CONQUISTADOR_WAIFU_HELPERS=Object.freeze({activeRangedBuff,playerIsImmune});
   let runtime=null, monsterSystem=null, hud=null, toast=null, buttons=[], nextCastAt=[0,0,0], pendingCast=[false,false,false], pendingSince=[0,0,0], autoTimer=null, refreshQueued=false, unsubscribers=[], bootTimer=null;
-  const PASSIVE_ID='waifu:slime:intimacy', PASSIVE_MONKEY='waifu:monkey:intimacy', PASSIVE_RAT='waifu:rat:intimacy', LEVEL_ID='player:level-scaling';
+  const LEVEL_ID='player:level-scaling';
+  const PASSIVE_MODIFIER_PREFIX='waifu:intimacy:';
   function equippedWaifus(){
     const data=runtime?.progress?.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped.slice(0,3):[];
     while(equipped.length<3)equipped.push(null);
@@ -11343,13 +11078,24 @@ class WorldScene extends Phaser.Scene {
   }
   function refreshPassives(){
     if(!runtime?.status||!runtime?.progress)return false;
-    const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped:[];
-    const has=id=>equipped.some(eid=>{const c=pool.find(x=>x&&x.instanceId===eid);return !!c&&String(c.waifuId||c.waifuType||c.id||'')===id;});
-    // V146 — passivos por waifu equipada, via tabela PASSIVES (todas as 10 waifus).
-    for (const id of Object.keys(PASSIVES)) {
-      const pid = 'waifu:' + id + ':intimacy';
-      if (has(id)) runtime.status.addModifier('player', { id: pid, stats: PASSIVES[id] });
-      else runtime.status.removeModifier('player', pid);
+    const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped.slice(0,3):[];
+    // Remove modifiers from the previous species-wide implementation and rebuild
+    // one modifier per equipped card, so duplicate species stack independently.
+    const snapshot=runtime.status.getEffectiveSnapshot?.('player')||runtime.status.snapshot?.('player');
+    for(const modifier of (snapshot?.modifiers||[])){
+      if(typeof modifier?.id==='string'&&(modifier.id.startsWith(PASSIVE_MODIFIER_PREFIX)||/^waifu:(slime|monkey|rat|goblina|lamia|loba|harpia|ursa|ogra|ciclopesa):intimacy$/.test(modifier.id))) runtime.status.removeModifier('player',modifier.id);
+    }
+    for(const instanceId of equipped){
+      if(!instanceId)continue;
+      const card=pool.find(c=>c&&c.instanceId===instanceId);if(!card)continue;
+      const species=String(card.waifuId||card.waifuType||card.id||'');const base=PASSIVES[species];if(!base)continue;
+      const legacy=data.intimacy&&data.intimacy[species];
+      const level=Math.max(1,Math.min(100,Math.floor(Number(card.intimacy?.level)||Number(legacy?.level)||1)));
+      // +1% por nível de intimidade acima do nível 1 (até +99%).
+      const scale=1+(level-1)*0.01;const stats={};
+      for(const [key,value] of Object.entries(base))stats[key]=Number(value)*scale;
+      const modifierId=PASSIVE_MODIFIER_PREFIX+String(card.instanceId);
+      runtime.status.addModifier('player',{id:modifierId,stats});
     }
     return true;
   }
@@ -11364,11 +11110,10 @@ class WorldScene extends Phaser.Scene {
       return game.scene.getScene('DungeonScene')||null;
     }catch(_){return null;}
   }
-  function inDungeon(){return !!dungeonSceneActive();}
   function dungeonTargetInRange(scene){
     if(!scene||!scene.player||!Array.isArray(scene.monsters))return null;
-    const buffs=window.CONQUISTADOR_WAIFU_BUFFS;
-    const range=(buffs&&Date.now()<(buffs.monkeyRangedUntil||0))?120:52;
+    const ranged=activeRangedBuff();
+    const range=ranged?120:52;
     const room=scene.roomKeyOfTile?scene.roomKeyOfTile(scene.playerBodyTile()):null;
     let nearest=null,nearestDist=Infinity;
     for(const m of scene.monsters){
@@ -11413,12 +11158,20 @@ class WorldScene extends Phaser.Scene {
     if(!skill||!monsterSystem?.active||!runtime?.status||pendingCast[slot])return false;
 
     const now=Date.now();if(now<nextCastAt[slot])return false;
-    // V80: habilidades de buff (Macaca / Rata) não precisam de alvo — ativam na hora.
+    // Habilidades de buff (Macaca/Loba/Ogra e Rata/Ciclopesa) ativam sem alvo.
     if(skill.buff){
-      nextCastAt[slot]=Date.now()+skill.cooldownMs;
-      if(skill.buff==='monkey'){ window.CONQUISTADOR_WAIFU_BUFFS.monkeyRangedUntil=Date.now()+skill.durationMs; notify((skill.icon||'🔔')+' '+skill.name+'! Ataque à distância por '+(skill.durationMs/1000)+'s.'); }
-      if(skill.buff==='rat'){ window.CONQUISTADOR_WAIFU_BUFFS.ratImmuneUntil=Date.now()+skill.durationMs; notify((skill.icon||'🧼')+' '+skill.name+'! Imune a dano por '+(skill.durationMs/1000)+'s.'); }
-      runtime.events.emit('waifu:skill-cast',{waifuId:waifu,skillId:skill.id,skillName:skill.name});
+      const buffs=window.CONQUISTADOR_WAIFU_BUFFS,until=Date.now()+skill.durationMs;
+      nextCastAt[slot]=until+Math.max(0,skill.cooldownMs-skill.durationMs);
+      if(skill.buff==='ranged'){
+        buffs.rangedUntil=until;buffs.rangedDamageMultiplier=Math.max(1,Number(skill.multiplier)||1);
+        // Aliases legados continuam sincronizados com o novo estado compartilhado.
+        buffs.monkeyRangedUntil=until;
+        notify((skill.icon||'✨')+' '+skill.name+'! Ataques à distância com '+buffs.rangedDamageMultiplier.toFixed(2)+'x de dano.');
+      } else if(skill.buff==='immunity'){
+        buffs.immuneUntil=until;buffs.ratImmuneUntil=until;
+        notify((skill.icon||'🛡️')+' '+skill.name+'! Imune a dano por '+(skill.durationMs/1000)+'s.');
+      }
+      runtime.events.emit('waifu:skill-cast',{waifuId:waifu,skillId:skill.id,skillName:skill.name,durationMs:skill.durationMs,multiplier:skill.multiplier||1});
       render(); return true;
     }
     const dungeonScene=dungeonSceneActive();
@@ -11430,18 +11183,15 @@ class WorldScene extends Phaser.Scene {
     const launched=launchAcid(target,()=>{
       pendingCast[slot]=false;
       if(!target.alive||!target.sprite?.active)return;
-      // Dano na dungeon: direto no registro do monstro (sem StatusSystem).
-      if(dungeonScene){
-        target.hp=Math.max(0,target.hp-skillDamage);
-        dungeonScene.damageNumber?.(target,skillDamage);
-        nextCastAt[slot]=Date.now()+skill.cooldownMs;
-        runtime.events.emit('combat:hit',{attackerId:'player',targetId:target.id,damage:skillDamage,remainingHp:target.hp,skillId:skill.id,skillName:skill.name});
-        if(target.hp<=0)dungeonScene.killMonster?.(target);
-        render(); return;
-      }
-      const result=runtime.combat?.applyFixedDamage('player',target.id,skillDamage,'waifu-skill');if(!result)return;
+      // HP tem uma única autoridade: CombatSystem/StatusSystem, no mundo e na Dungeon.
+      const result=runtime.combat?.applyFixedDamage('player',target.id,skillDamage,'waifu-skill',{skillId:skill.id,skillName:skill.name});if(!result)return;
       nextCastAt[slot]=Date.now()+skill.cooldownMs;
-      runtime.events.emit('combat:hit',{attackerId:'player',targetId:target.id,damage:skillDamage,remainingHp:result.hp,skillId:skill.id,skillName:skill.name});
+      if(dungeonScene){
+        target.hp=Math.max(0,result.hp);
+        dungeonScene.damageNumber?.(target,result.damage);
+        if(result.defeated)dungeonScene.killMonster?.(target);
+        render();return;
+      }
       if(result.defeated)monsterSystem.killMonster(target,'player');
       monsterSystem.refreshUI?.();render();
     },()=>{pendingCast[slot]=false;render();},dungeonScene,dungeonScene?{x:dungeonScene.player.x,y:dungeonScene.player.y}:null);
@@ -11452,7 +11202,7 @@ class WorldScene extends Phaser.Scene {
     if(!hud)return;const equipped=equippedWaifus(),now=Date.now();
     buttons.forEach((b,i)=>{const skill=SKILLS[equipped[i]],left=Math.max(0,nextCastAt[i]-now),pct=skill?Math.max(0,Math.min(100,100*(1-left/skill.cooldownMs))):0;
       b.disabled=!skill||left>0;b.dataset.skill=skill?.id||'';b.querySelector('.cw53-icon').textContent=skill?skill.icon:'·';
-      b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.damage} de dano`:'Espaço vazio';});
+      b.style.opacity=skill?(left>0?'.82':'1'):'.25';b.style.background=`conic-gradient(#a6ed73 ${pct}%, #242018 ${pct}% 100%)`;b.classList.toggle('cw53-ready',!!skill&&left===0);b.title=skill?`${skill.name} — ${skill.buff==='ranged'?'buff de alcance e dano':skill.buff==='immunity'?'imunidade':(skill.damage+' de dano')}`:'Espaço vazio';});
   }
   function styles(){if(document.getElementById('cw53-style'))return;const s=document.createElement('style');s.id='cw53-style';s.textContent=`
     #conquistador-active-skills-v53{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;width:38px;height:auto;pointer-events:none;overflow:visible;z-index:5}
@@ -11479,13 +11229,14 @@ class WorldScene extends Phaser.Scene {
     unsubscribers.push(api.events.on('level:changed',e=>{if(e?.entityId==='player')updateLevelScaling(e.level);}));
     ['progress:changed','progress:batch-changed','entity:removed','waifu:passives-updated'].forEach(name=>unsubscribers.push(api.events.on(name,refresh)));
     unsubscribers.push(api.events.on('status:changed',e=>{if(e?.entityId==='player')api.events.emit('player:status-ui-refresh',{status:api.status.getEffectiveSnapshot?.('player')||api.status.snapshot('player')});}));
-    autoTimer=setInterval(()=>{const ds=dungeonSceneActive();const target=ds?dungeonTargetInRange(ds):targetInRange();if(target){const eq=equippedWaifus();eq.forEach((w,i)=>{if(SKILLS[w]&&Date.now()>=nextCastAt[i])cast(i,false);});}render();},180);return true;
+    // As habilidades são acionadas pelos botões; o timer apenas atualiza recargas.
+    autoTimer=setInterval(render,180);return true;
   }
   let attempts=0;function boot(){if(attach())return;attempts++;if(attempts<120)bootTimer=setTimeout(boot,250);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V178'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V179'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
