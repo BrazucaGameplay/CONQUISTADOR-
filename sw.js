@@ -1,10 +1,9 @@
-// CONQUISTADOR DE WAIFU'S - service worker V145
-// V145: cache novo (v145) — limpa o cache v137/v144 e força baixar as artes
-// novas de slime/macaco/rato (mesmos caminhos, sprites novos) + os 33 frames
-// dos monstros e os 7 retratos das waifus novas.
+// CONQUISTADOR DE WAIFU'S - service worker V146
+// V146: cache novo (v146) — limpa o cache v145 e força baixar o ciclope,
+// os retratos goblina/ursa/ogra/ciclopesa e as 11 cartas do bestiário.
 // HTML/SW = network-first, assets locais = cache-first,
 // URLs externas = rede direta, sem SW.
-const CACHE = 'conquistador-v145';
+const CACHE = 'conquistador-v146';
 const FILES = [
   './',
   './index.html',
@@ -20,7 +19,7 @@ const FILES = [
   './assets/monsters/spider.png',
   './assets/monsters/bear.png',
   './assets/monsters/goblin.png',
-  './assets/monsters/orc.png',
+  './assets/monsters/cyclops.png',
   './assets/monsters/ogre.png',
   './assets/monsters/slime_walk.png',
   './assets/monsters/slime_attack.png',
@@ -49,22 +48,34 @@ const FILES = [
   './assets/monsters/goblin_walk.png',
   './assets/monsters/goblin_attack.png',
   './assets/monsters/goblin_death.png',
-  './assets/monsters/orc_walk.png',
-  './assets/monsters/orc_attack.png',
-  './assets/monsters/orc_death.png',
+  './assets/monsters/cyclops_walk.png',
+  './assets/monsters/cyclops_attack.png',
+  './assets/monsters/cyclops_death.png',
   './assets/monsters/ogre_walk.png',
   './assets/monsters/ogre_attack.png',
   './assets/monsters/ogre_death.png',
+  // V146 — cartas do bestiário.
+  './assets/bestiary/slime.jpg',
+  './assets/bestiary/monkey.jpg',
+  './assets/bestiary/rat.jpg',
+  './assets/bestiary/snake.jpg',
+  './assets/bestiary/wolf.jpg',
+  './assets/bestiary/eagle.jpg',
+  './assets/bestiary/spider.jpg',
+  './assets/bestiary/bear.jpg',
+  './assets/bestiary/goblin.jpg',
+  './assets/bestiary/cyclops.jpg',
+  './assets/bestiary/ogre.jpg',
   './assets/waifu/slime.jpg',
   './assets/waifu/monkey.jpg',
   './assets/waifu/rat.jpg',
-  './assets/waifus/goblin.png',
+  './assets/waifus/goblina.png',
   './assets/waifus/lamia.png',
   './assets/waifus/loba.png',
   './assets/waifus/harpia.png',
-  './assets/waifus/orc.png',
-  './assets/waifus/orc_carmesim.png',
-  './assets/waifus/orc_palida.png',
+  './assets/waifus/ursa.png',
+  './assets/waifus/ogra.png',
+  './assets/waifus/ciclopesa.png',
   './assets/boss/art.jpg',
   './assets/boss/sprite.png',
   './assets/world/mountain.png',
