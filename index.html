@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V139</title>
+<title>CONQUISTADOR DE WAIFU'S — V141</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,18 +27,18 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V139</div>
+  <div id="version-badge">V141</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
-\n  <script id="conquistador-data-v139">
+\n  <script id="conquistador-data-v141">
   (function (root) { 'use strict';
-    // V139 — dados canônicos de data/monsters.json + data/waifus.json,
+    // V140 — dados canônicos de data/monsters.json + data/waifus.json,
     // embutidos no build para o jogo não depender de fetch. Edite os JSONs
     // em data/ e regenere — nunca edite este bloco à mão.
     root.CONQUISTADOR_DATA = Object.freeze({
-      monsters: {"version":1,"source":"V139 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":30,"displayHeight":24,"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v2"},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":30,"displayHeight":32,"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v2"},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":32,"displayHeight":22,"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v2"}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
-      waifus: {"version":1,"source":"V139 WAIFU_DEFINITIONS + WAIFU_META + WAIFU_SKILLS + QUALITY","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]}}}
+      monsters: {"version":1,"source":"V140 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":30,"displayHeight":24,"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v2"},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":30,"displayHeight":32,"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v2"},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":32,"displayHeight":22,"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v2"}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
+      waifus: {"version":1,"source":"V140 WAIFU_DEFINITIONS + WAIFU_META + WAIFU_SKILLS + QUALITY","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]}}}
     });
   })(window);
   </script>
@@ -635,6 +635,21 @@
         this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 10));
         this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
         this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
+        // V140 — POOL DE MONSTROS: visuais (sprite + rótulo + barra HP) são
+        // criados uma vez e reutilizados. Antes cada spawn criava 4 objetos
+        // novos e cada morte destruía tudo (GC + queda de FPS no celular).
+        // Pool cresce sob demanda, mas devolve ao pool em vez de destruir.
+        this.monsterVisualPool = { slime: [], monkey: [], rat: [] };
+        this.monsterVisualPoolMax = 30;
+        // V141 — CULLING: monstro fora da câmera dorme. Sem movimento,
+        // sem buscar jogador, sem ataque, sem pathfinding, sem rótulo.
+        // Margem de 96px (~3 tiles) evita piscar na borda da tela.
+        // Acorda sozinho quando a câmera chega perto: o teste é por
+        // frame, sem estado travado — nenhum reset manual é preciso.
+        this.cullMarginPx = 96;
+        // V140 — POOL DE EFEITOS DE HIT: os 4 círculos do impacto também
+        // são reutilizados em vez de criar/destruir a cada golpe.
+        this.hitEffectPool = [];
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
@@ -1008,6 +1023,96 @@
         }
       }
 
+      // V140 — POOL: pega um conjunto visual pronto ou cria um novo.
+      acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight) {
+        const pool = this.monsterVisualPool[monsterId];
+        if (pool && pool.length) {
+          const v = pool.pop();
+          const sprite = v.sprite;
+          sprite.setTexture(this.monsterTextureKeys[monsterId]);
+          sprite.setDisplaySize(displayWidth, displayHeight);
+          sprite.setOrigin(0.5, 0.86);
+          sprite.setPosition(x, y);
+          sprite.setDepth(y + 10);
+          sprite.setAlpha(1); sprite.setAngle(0); sprite.clearTint();
+          sprite.setScale(1, 1);
+          sprite.setVisible(true);
+          const levelLabel = v.levelLabel;
+          levelLabel.setText(String(level));
+          levelLabel.setPosition(x, y - displayHeight * 0.86 - 4);
+          levelLabel.setDepth(sprite.depth + 20);
+          levelLabel.setVisible(true);
+          const hpBarWidth = Math.max(30, displayWidth + 6);
+          const hpBarBg = v.hpBarBg;
+          hpBarBg.setPosition(x, y + 6);
+          hpBarBg.setDepth(sprite.depth + 21);
+          hpBarBg.setVisible(true);
+          const hpBarFill = v.hpBarFill;
+          hpBarFill.setPosition(x - hpBarWidth / 2, y + 6);
+          hpBarFill.setDepth(sprite.depth + 22);
+          hpBarFill.setVisible(true);
+          return { sprite, levelLabel, hpBarBg, hpBarFill, hpBarWidth };
+        }
+        const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
+        sprite.setDisplaySize(displayWidth, displayHeight);
+        sprite.setOrigin(0.5, 0.86);
+        sprite.setDepth(y + 10);
+        const levelLabel = this.scene.add.text(x, y - displayHeight * 0.86 - 4, String(level), {
+          fontFamily: 'system-ui, sans-serif', fontSize: '8px', fontStyle: 'normal',
+          color: '#f1f4ed', stroke: '#17251b', strokeThickness: 2, align: 'center'
+        });
+        levelLabel.setOrigin(0.5, 1);
+        levelLabel.setDepth(sprite.depth + 20);
+        const hpBarWidth = Math.max(30, displayWidth + 6);
+        const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
+        hpBarBg.setDepth(sprite.depth + 21);
+        hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
+        const hpBarFill = this.scene.add.rectangle(x - hpBarWidth / 2, y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
+        hpBarFill.setOrigin(0, 0.5);
+        hpBarFill.setDepth(sprite.depth + 22);
+        return { sprite, levelLabel, hpBarBg, hpBarFill, hpBarWidth };
+      }
+
+      // V140 — POOL: devolve o visual ao pool em vez de destruir.
+      releaseMonsterVisual(monsterId, visual) {
+        if (!visual || !visual.sprite) return;
+        const pool = this.monsterVisualPool[monsterId];
+        if (!pool) { if (visual.sprite.destroy) visual.sprite.destroy(); return; }
+        if (pool.length >= this.monsterVisualPoolMax) {
+          if (visual.sprite.destroy) visual.sprite.destroy();
+          if (visual.levelLabel && visual.levelLabel.destroy) visual.levelLabel.destroy();
+          if (visual.hpBarBg && visual.hpBarBg.destroy) visual.hpBarBg.destroy();
+          if (visual.hpBarFill && visual.hpBarFill.destroy) visual.hpBarFill.destroy();
+          return;
+        }
+        const s = visual.sprite;
+        s.setAlpha(1); s.setAngle(0); s.clearTint(); s.setScale(1, 1); s.setVisible(false);
+        if (visual.levelLabel) visual.levelLabel.setVisible(false);
+        if (visual.hpBarBg) visual.hpBarBg.setVisible(false);
+        if (visual.hpBarFill) visual.hpBarFill.setVisible(false);
+        pool.push(visual);
+      }
+
+      // V140 — POOL de efeitos: pega um círculo pronto ou cria novo.
+      acquireHitCircle(x, y, radius, color, alpha, depth) {
+        let c = null;
+        if (this.hitEffectPool.length) {
+          c = this.hitEffectPool.pop();
+          c.setPosition(x, y); c.setRadius(radius); c.setFillStyle(color, alpha);
+          c.setDepth(depth); c.setAlpha(alpha); c.setScale(1, 1); c.setVisible(true);
+        } else {
+          c = this.scene.add.circle(x, y, radius, color, alpha);
+          c.setDepth(depth);
+        }
+        return c;
+      }
+      releaseHitCircle(c) {
+        if (!c) return;
+        if (this.hitEffectPool.length >= 24) { if (c.destroy) c.destroy(); return; }
+        c.setVisible(false); c.setAlpha(0);
+        this.hitEffectPool.push(c);
+      }
+
       spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         const definition = this.data.MONSTERS[monsterId];
@@ -1063,29 +1168,14 @@
 
         const displayWidth = definition.displayWidth || 30;
         const displayHeight = definition.displayHeight || 24;
-        const sprite = this.scene.add.image(x, y, this.monsterTextureKeys[monsterId]);
-        sprite.setDisplaySize(displayWidth, displayHeight);
-        sprite.setOrigin(0.5, 0.86);
-        sprite.setDepth(y + 10);
-        const levelLabel = this.scene.add.text(x, y - displayHeight * 0.86 - 4, String(level), {
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: '8px',
-          fontStyle: 'normal',
-          color: '#f1f4ed',
-          stroke: '#17251b',
-          strokeThickness: 2,
-          align: 'center'
-        });
-        levelLabel.setOrigin(0.5, 1);
-        levelLabel.setDepth(sprite.depth + 20);
+        // V140 — POOL: reusa sprite + rótulo + barra em vez de criar 4 novos.
+        const _visual = this.acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight);
+        const sprite = _visual.sprite;
+        const levelLabel = _visual.levelLabel;
         // V77: barra de HP embaixo do monstro, proporcional ao tamanho do sprite.
-        const hpBarWidth = Math.max(30, displayWidth + 6);
-        const hpBarBg = this.scene.add.rectangle(x, y + 6, hpBarWidth, 5, 0x1a0f0f, 1);
-        hpBarBg.setDepth(sprite.depth + 21);
-        hpBarBg.setStrokeStyle(1, 0x000000, 0.85);
-        const hpBarFill = this.scene.add.rectangle(x - hpBarWidth / 2, y + 6, hpBarWidth, 3, 0x3ddc5f, 1);
-        hpBarFill.setOrigin(0, 0.5);
-        hpBarFill.setDepth(sprite.depth + 22);
+        const hpBarWidth = _visual.hpBarWidth;
+        const hpBarBg = _visual.hpBarBg;
+        const hpBarFill = _visual.hpBarFill;
         const record = {
           id,
           monsterId,
@@ -1479,33 +1569,21 @@
 
         // Small, localized impact burst: three tiny red sparks and a brief
         // warm flash, visually contained within the monster's sprite bounds.
-        const burst = this.scene.add.circle(
-          sprite.x,
-          sprite.y - 5,
-          3,
-          0xffd18a,
-          0.9
-        );
-        burst.setDepth(sprite.depth + 5);
+        // V140 — POOL: círculo do impacto reutilizado.
+        const burst = this.acquireHitCircle(sprite.x, sprite.y - 5, 3, 0xffd18a, 0.9, sprite.depth + 5);
         this.scene.tweens.add({
           targets: burst,
           scale: 1.7,
           alpha: 0,
           duration: 115,
           ease: 'Quad.Out',
-          onComplete: () => burst.destroy()
+          onComplete: () => this.releaseHitCircle(burst)
         });
 
         for (let i = 0; i < 3; i += 1) {
           const angle = (-Math.PI * 0.8) + (i / 2) * (Math.PI * 0.6);
-          const particle = this.scene.add.circle(
-            sprite.x,
-            sprite.y - 5,
-            1.25,
-            i === 1 ? 0xf06a62 : 0xc83e42,
-            0.95
-          );
-          particle.setDepth(sprite.depth + 6);
+          // V140 — POOL: partícula reutilizada.
+          const particle = this.acquireHitCircle(sprite.x, sprite.y - 5, 1.25, i === 1 ? 0xf06a62 : 0xc83e42, 0.95, sprite.depth + 6);
           this.scene.tweens.add({
             targets: particle,
             x: sprite.x + Math.cos(angle) * 5,
@@ -1514,7 +1592,7 @@
             scale: 0.45,
             duration: 135,
             ease: 'Quad.Out',
-            onComplete: () => particle.destroy()
+            onComplete: () => this.releaseHitCircle(particle)
           });
         }
 
@@ -1562,11 +1640,15 @@
         this.createDrop(record);
         this.entities.remove(record.id); // StatusSystem cleans up this entity's status.
         this.monsters.delete(record.id);
-        if (record.levelLabel && record.levelLabel.active) record.levelLabel.destroy();
-        if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.destroy();
-        if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.destroy();
+        // V140 — POOL: esconde rótulo/barra na hora e devolve o conjunto
+        // ao pool ao fim da animação de morte, em vez de destruir tudo.
+        if (record.levelLabel) record.levelLabel.setVisible(false);
+        if (record.hpBarBg) record.hpBarBg.setVisible(false);
+        if (record.hpBarFill) record.hpBarFill.setVisible(false);
         if (record.sprite && record.sprite.active) {
           const deathSprite = record.sprite;
+          const deathVisual = { sprite: deathSprite, levelLabel: record.levelLabel, hpBarBg: record.hpBarBg, hpBarFill: record.hpBarFill, hpBarWidth: record.hpBarWidth };
+          const deathMonsterId = record.monsterId;
           this.scene.tweens.killTweensOf(deathSprite);
           this.scene.tweens.add({
             targets: deathSprite,
@@ -1576,7 +1658,7 @@
             angle: (deathSprite.x % 2 ? 12 : -12),
             duration: 260,
             ease: 'Back.In',
-            onComplete: () => deathSprite.destroy()
+            onComplete: () => this.releaseMonsterVisual(deathMonsterId, deathVisual)
           });
         }
         this.refreshUI();
@@ -1814,6 +1896,19 @@
         }
       }
 
+      // V141 — CULLING: fora da câmera + margem = dormindo. Retorna true
+      // e o update() pula TODO o trabalho do monstro (IA, path, rótulo).
+      // Sem câmera (teste / cena sem render) = nunca dorme, jogo igual.
+      isMonsterCulled(record) {
+        if (!record || !record.sprite) return false;
+        const cam = this.scene && this.scene.cameras && this.scene.cameras.main;
+        const view = cam && cam.worldView;
+        if (!view) return false;
+        const m = this.cullMarginPx || 96;
+        return record.sprite.x < view.x - m || record.sprite.x > view.x + view.width + m ||
+          record.sprite.y < view.y - m || record.sprite.y > view.y + view.height + m;
+      }
+
       update(time, delta) {
         if (!this.active) return;
         this.now = Number.isFinite(time) ? time : this.now + (Number(delta) || 0);
@@ -1824,6 +1919,14 @@
         const playerPoint = this.getPlayerPoint();
         if (playerPoint) {
           for (const record of Array.from(this.monsters.values())) {
+            // V141 — CULLING: dorme antes de qualquer custo. Limpa o
+            // caminho para não retomar rota velha ao acordar; animação
+            // idle só é aplicada 1x (evita re-setar anim todo frame).
+            if (this.isMonsterCulled(record)) {
+              if (record.path && record.path.length) { record.path = []; record.targetKey = null; }
+              if (!record.animation || record.animation.state !== 'idle') this.setMonsterAnimation(record, 'idle');
+              continue;
+            }
             this.updateMonster(record, playerPoint, this.now, Number(delta) || 0);
             this.updateMonsterLevelLabel(record);
           }
@@ -1855,6 +1958,18 @@
           if (record.sprite && record.sprite.destroy) record.sprite.destroy();
           this.entities.remove(record.id);
         }
+        // V140 — POOL: destrói também os visuais guardados no pool.
+        for (const key of Object.keys(this.monsterVisualPool || {})) {
+          for (const v of this.monsterVisualPool[key]) {
+            if (v.sprite && v.sprite.destroy) v.sprite.destroy();
+            if (v.levelLabel && v.levelLabel.destroy) v.levelLabel.destroy();
+            if (v.hpBarBg && v.hpBarBg.destroy) v.hpBarBg.destroy();
+            if (v.hpBarFill && v.hpBarFill.destroy) v.hpBarFill.destroy();
+          }
+          this.monsterVisualPool[key] = [];
+        }
+        for (const c of this.hitEffectPool || []) { if (c && c.destroy) c.destroy(); }
+        this.hitEffectPool = [];
         for (const drop of this.drops.values()) if (drop.sprite && drop.sprite.destroy) drop.sprite.destroy();
         this.monsters.clear();
         this.drops.clear();
@@ -1866,9 +1981,9 @@
     }
 
     const GameData = Object.freeze({
-      // V139 — MONSTERS vem de data/monsters.json (window.CONQUISTADOR_DATA).
+      // V140 — MONSTERS vem de data/monsters.json (window.CONQUISTADOR_DATA).
       // A cópia embutida abaixo é fallback: se data/ ainda não foi subida,
-      // o jogo usa estes valores idênticos aos da V139 e continua igual.
+      // o jogo usa estes valores idênticos aos da V140 e continua igual.
       MONSTERS: Object.freeze((function () {
         const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.monsters;
         const src = fromData || {
@@ -1883,7 +1998,7 @@
       PETS: Object.freeze({}),
       WAIFUS: Object.freeze({}),
       DUNGEONS: Object.freeze({}),
-      // V139 — ITEMS / LEVEL_CURVE também vêm de data/monsters.json, mesmo fallback V139.
+      // V140 — ITEMS / LEVEL_CURVE também vêm de data/monsters.json, mesmo fallback V140.
       ITEMS: Object.freeze((function () {
         const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.items;
         const src = fromData || {
@@ -3455,7 +3570,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 <script id="conquistador-waifu-collection-v2">
   (function (root) {
     'use strict';
-    // V139 — QUALITY vem de data/waifus.json, fallback = V139.
+    // V140 — QUALITY vem de data/waifus.json, fallback = V140.
     const QUALITY = (root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.qualities) || [
       { id: 'plebeia', name: 'Plebeia', chance: 0.90, color: '#a9a9a9' },
       { id: 'dama', name: 'Dama', chance: 0.04, color: '#55a8e8' },
@@ -3466,8 +3581,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 
     // Catálogo extensível: presentes, curva e habilidades ficam declarados por waifu.
     const WAIFU_DEFINITIONS = Object.freeze((function () {
-      // V139 — waifus vêm de data/waifus.json (window.CONQUISTADOR_DATA).
-      // Fallback embutido = valores idênticos aos da V139.
+      // V140 — waifus vêm de data/waifus.json (window.CONQUISTADOR_DATA).
+      // Fallback embutido = valores idênticos aos da V140.
       const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus;
       const src = fromData || {
         slime: { id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
@@ -5268,6 +5383,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       return [];
     }
 
+    // ============================================================
+    // V141 — FRONTEIRA CONGELADA (CORE / SCENE / SYSTEMS)
+    // 1. CORE só gera o mundo e diz o que é sólido (funções puras,
+    //    sem desenhar, sem input, sem guardar estado de cena).
+    // 2. WorldScene só desenha e recebe input. É a ÚNICA dona do
+    //    `blocked` do mundo principal (monta 1x via core e congela).
+    // 3. NENHUM sistema lê `blocked` direto. Pergunta via worldAPI:
+    //    world.isWalkable(x, y, profile) / world.findPath(start, goal).
+    //    MonsterSystem / Inventory / Waifu / Casa passam por aqui.
+    // 4. DungeonScene é a ÚNICA que escreve em `layout.blocked`,
+    //    só no portão de tronco e na trava da sala do boss.
+    //    Qualquer sistema novo que precisar abrir caminho PEDE para
+    //    a dona da grade — nunca escreve blocked[y][x] por conta própria.
+    // ============================================================
     root.CONQUISTADOR_CORE = {
       findPath,
       worldToTile,
@@ -5402,7 +5531,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const MOUNTAIN_GROUND_GID_3 = 10006;
     const TALL_GRASS_GID = 1001;
     const TALL_GRASS_GID_2 = 1002;
-    // V139 — GROUND_*_GIDS no mesmo escopo da cena (antes só dentro do núcleo):
+    // V140 — GROUND_*_GIDS no mesmo escopo da cena (antes só dentro do núcleo):
     // groundTextureForGid() usa aqui fora. Valores idênticos aos da V134.
     const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
     const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
@@ -5592,7 +5721,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     function buildDungeonLayout() {
       const W = DUNGEON_SCENE_CONFIG.width;
       const H = DUNGEON_SCENE_CONFIG.height;
-      // V139 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
+      // V140 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
       const rooms = DUNGEON_SCENE_CONFIG.rooms;
       const corridors = DUNGEON_SCENE_CONFIG.corridors;
       const inRect = (x, y, r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
@@ -5863,7 +5992,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           const ctx = tex.getContext();
           for (let y = 0; y < gh; y += 1) for (let x = 0; x < gw; x += 1) {
             const gid = this.layout.ground[y][x]; if (!gid) continue;
-            const tk = groundTextureForDungeonTile(gid, x, y); // V139 — mesma regra da V134, agora numa unica funcao.
+            const tk = groundTextureForDungeonTile(gid, x, y); // V140 — mesma regra da V134, agora numa unica funcao.
             const img = this.textures.get(tk).getSourceImage();
             ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
@@ -6270,6 +6399,24 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const playerDef = this.statusSystem.getStat('player', 'defense') ?? 0;
         for (const monster of this.monsters) {
           if (!monster.alive) continue;
+          // V141 — CULLING (dungeon): fora da câmera + margem = dorme
+          // ANTES de depth/rótulo/barra. Sala continua sendo território
+          // (cheque abaixo), mas monstro fora da tela nem custa rótulo.
+          // Boss com agro travado NÃO dorme: updateBossSlam() é separado
+          // e o agro da sala 3 continua valendo ao acordar.
+          {
+            const cam = this.cameras && this.cameras.main;
+            const view = cam && cam.worldView;
+            const m = 96;
+            const culled = Boolean(view) && monster.sprite &&
+              (monster.sprite.x < view.x - m || monster.sprite.x > view.x + view.width + m ||
+               monster.sprite.y < view.y - m || monster.sprite.y > view.y + view.height + m);
+            if (culled && !(monster.isBoss && monster.hasAggro)) {
+              if (monster._path && monster._path.length) monster._path = [];
+              monster.sprite.body.setVelocity(0, 0);
+              continue;
+            }
+          }
           // V114: agro do boss NAO solta mais. Pegou o agro (jogador na
           // sala 3) = persegue ate morrer. Antes, o tile do corpo do
           // jogador piscava pro corredor na beira da boca e o boss parava.
@@ -6464,6 +6611,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           });
         }
         if (gate.label && gate.label.active) gate.label.destroy();
+        // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (portão de tronco).
         for (const t of gate.tiles) this.layout.blocked[t.y][t.x] = 0;
         this.showToast('🪵 O tronco caiu! A passagem abriu.', 2600);
       }
@@ -6494,6 +6642,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           rect.setDepth(50);
           this.physics.add.existing(rect, true);
           bodies.push(rect);
+          // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (trava da sala do boss).
           this.layout.blocked[t.y][t.x] = 1;
         }
         this.physics.add.collider(this.player, bodies);
@@ -6518,6 +6667,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         this.bossGate = null;
         this.bossGateLocked = false;
         for (const body of g.bodies) if (body.active) body.destroy();
+        // V141 — FRONTEIRA: escrita legítima. DungeonScene é a ÚNICA que escreve em layout.blocked (destrava sala do boss).
         for (const t of g.tiles) this.layout.blocked[t.y][t.x] = 0;
         if (g.treeImage && g.treeImage.active) {
           this.tweens.add({
@@ -6685,6 +6835,10 @@ class WorldScene extends Phaser.Scene {
         this.statusSystem = GAME_RUNTIME.statusSystem;
         this.levelSystem = GAME_RUNTIME.levelSystem;
         this.saveSystem = GAME_RUNTIME.saveSystem;
+        // V141 — FRONTEIRA CONGELADA: worldAPI é a ÚNICA porta de
+        // entrada para colisão/navegação do mundo principal.
+        // Sistemas NUNCA leem this.blocked / scene.blocked direto.
+        // WorldScene é dona do `blocked`; core só gera; systems perguntam.
         this.worldAPI = Object.freeze({
           isWalkable: (tileX, tileY, profile = 'center') => {
             const grid = this.getNavigationGrid(profile === 'player' ? false : true);
@@ -10117,7 +10271,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V139';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V141';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
