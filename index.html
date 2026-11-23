@@ -35,7 +35,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V170</div>
+  <div id="version-badge">V171</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -1042,6 +1042,19 @@
         }
         this.boundUpdate = (time, delta) => this.update(time, delta);
         this.boundDestroy = () => this.destroy();
+        this.boundWake = () => {
+          if (!this.active) return;
+          for (const record of this.monsters.values()) {
+            if (!record || !record.alive || !record.sprite || !record.sprite.active) continue;
+            record.sprite.setVisible(true).setAlpha(1);
+            record.sprite.setDepth(record.sprite.y + 10);
+            if (record.levelLabel && record.levelLabel.active) record.levelLabel.setVisible(true);
+            if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.setVisible(true);
+            if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.setVisible(true);
+          }
+          this.refreshUI();
+        };
+        this.scene.events.on('wake', this.boundWake);
         this.scene.events.on('update', this.boundUpdate);
         this.scene.events.once('shutdown', this.boundDestroy);
         this.refreshUI();
@@ -1275,7 +1288,7 @@
             // V132 — respawn por regiao: nasce em floresta, transicao,
             // montanha e gelo. Cada chunk povoa com a regiao dos proprios
             // tiles, em vez de so a floresta povoar o mundo inteiro.
-            // Nunca nasce no rio, na ponte, nem na clareira da dungeon (90,82).
+            // Nunca nasce no rio, na ponte, nem no raio de segurança da entrada da dungeon.
             if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) continue;
             if (this.world.isRiverCell && this.world.isRiverCell(x, y)) continue;
             if (Math.max(Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x), Math.abs(y - DUNGEON_SCENE_CONFIG.entranceTile.y)) <= 4) continue;
@@ -2175,7 +2188,7 @@
             deathSprite.setDisplaySize(Math.max(1, Math.round(bodyLen)), Math.max(1, Math.round(bodyLen / deathAspect)));
           }
           this.scene.tweens.killTweensOf(deathSprite);
-          // V170: não animar scale no sprite de morte. O fade/rotação mantém
+          // V171: não animar scale no sprite de morte. O fade/rotação mantém
           // o tamanho lógico da folha e impede crescimento por escala herdada.
           this.scene.tweens.add({
             targets: deathSprite,
@@ -2410,6 +2423,7 @@
         this.unsubscribers = [];
         if (this.scene && this.scene.events) {
           this.scene.events.off('update', this.boundUpdate);
+        if (this.boundWake) this.scene.events.off('wake', this.boundWake);
           this.scene.events.off('shutdown', this.boundDestroy);
         }
         for (const record of this.monsters.values()) {
@@ -2941,7 +2955,8 @@
         const grid = this.el('div', { display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:'12px' });
         const groups = new Map();
         owned.forEach(card => {
-          const id = String(card.waifuId || card.waifuType || card.id || '');
+          const rawId = String(card.waifuId || card.waifuType || card.speciesId || card.monsterId || '');
+          const id = Object.prototype.hasOwnProperty.call(WAIFU_DEFINITIONS, rawId) ? rawId : 'unknown';
           const q = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
           const legacy = data.intimacy && data.intimacy[id] ? data.intimacy[id] : null;
           const level = Math.max(1, Math.floor(Number(card.intimacy && card.intimacy.level) || Number(legacy && legacy.level) || 1));
@@ -2955,7 +2970,7 @@
           const choice = this.el('button', { display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', padding:'10px 6px', border:'2px solid ' + qinfo.color, borderRadius:'12px', background:'linear-gradient(155deg,#352b3c,#120f18 65%,#302538)', color:qinfo.color, cursor:'pointer', touchAction:'manipulation' });
           choice.type = 'button';
           const art = this.el('div', { font:'34px/1 Georgia,serif', textAlign:'center' });
-          art.textContent = { slime: '🫧', monkey: '🐵', rat: '🐀' }[g.id] || '👧';
+          art.textContent = { slime: '🫧', monkey: '🐵', rat: '🐀', goblina: '👺', lamia: '🐍', loba: '🐺', harpia: '🦅', ciclopesa: '👁️', ogra: '👹', ursa: '🐻' }[g.id] || '❔';
           const nm = this.el('div', { font:'bold 12px Georgia,serif', color:'#ffebca', textAlign:'center' });
           nm.textContent = name;
           const meta = this.el('div', { font:'bold 11px Georgia,serif', textAlign:'center' });
@@ -4566,7 +4581,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           borderRadius: '0', background: 'transparent',
           border: 'none'
         });
-        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
+        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                  art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; };
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
           position: 'relative', flex: '0 0 auto', padding: '2px 4px',
@@ -5062,17 +5078,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // esta função, então se ajustam sozinhos. A largura é suavizada
     // com a média do ruído dos 3 vizinhos para não dar degrau de
     // 3 tiles entre uma coluna e a outra.
-    // V170 — exceção do rio na entrada central da dungeon (x=90):
+    // V171 — exceção do rio na entrada central da dungeon (x=90):
     // mantém uma faixa estreita para a ruína (x 88-92, y 77-81) e o acesso
     // (90,82), com rampa de 6 tiles em cada lado.
     function getRiverHalfWidth(x) {
       const smoothed = (stableNoise(x - 1, 0, 1234) + stableNoise(x, 0, 1234) + stableNoise(x + 1, 0, 1234)) / 3;
       const wide = smoothed < 0.6 ? 7 : 10;
       const narrow = smoothed < 0.6 ? 2 : 3;
-      const d = Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x);
-      if (d <= 4) return narrow;
-      if (d >= 10) return wide;
-      return Math.round(narrow + (wide - narrow) * ((d - 4) / 6));
+      return wide;
     }
 
     // V115 — Borda leste da floresta: a partir daqui começa a transição.
@@ -5228,7 +5241,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     function getGeneratedTreeId(generator, x, y, cliff, checkSeal = true) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
           isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
-      // V170 — clareira central da entrada (90,82): ruína em x 88-92,
+      // V171 — clareira central da entrada (90,82): ruína em x 88-92,
       // y 77-81; mantém livre a aproximação e o tile de acesso.
       if (x >= 87 && x <= 93 && y >= 76 && y <= 85) return 0;
       // V115 — árvore de folha só nasce na floresta. Na montanha nascem
@@ -6281,7 +6294,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V170',
+        version: 'V171',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6340,7 +6353,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       recommendedLevel: 5,
       width: 36,
       height: 30,
-      entranceTile: Object.freeze({ x: 90, y: 82 }), // entrada reposicionada para o centro do mapa.
+      entranceTile: Object.freeze({ x: 100, y: 62 }), // interior da floresta, longe do rio e da borda do mapa.
       arrivalTile: Object.freeze({ x: 8, y: 5 }),
       exitTile: Object.freeze({ x: 8, y: 3 }),
       bossTile: Object.freeze({ x: 18, y: 22 }),
@@ -8017,7 +8030,8 @@ class WorldScene extends Phaser.Scene {
                 }
                 const equippedIds = new Set((Array.isArray(data.equipped) ? data.equipped : []).map(v => String(v)));
                 for (const card of house) {
-                  const speciesId = String(card.waifuId || card.waifuType || card.id || 'slime');
+                  const rawSpecies = String(card.waifuId || card.waifuType || card.speciesId || card.monsterId || '');
+                  const speciesId = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[rawSpecies] ? rawSpecies : (Object.prototype.hasOwnProperty.call(SPECIES, rawSpecies) ? rawSpecies : 'unknown');
                   const quality = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
                   const qinfo = QUALITY_MAP[quality];
                   const level = cardLevel(card, data);
@@ -8041,7 +8055,8 @@ class WorldScene extends Phaser.Scene {
                   art.style.minHeight = '0';
                   art.style.width = '100%';
                   art.style.objectFit = 'contain';
-                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
+                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                  art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; };
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
                   foot.className = 'cg-foot';
@@ -8115,7 +8130,8 @@ class WorldScene extends Phaser.Scene {
               },
               showCardDetail(card) {
                 if (this.detailOverlay) this.detailOverlay.remove();
-                const speciesId = String(card.waifuId || card.waifuType || card.id || 'slime');
+                const rawSpecies = String(card.waifuId || card.waifuType || card.speciesId || card.monsterId || '');
+                  const speciesId = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[rawSpecies] ? rawSpecies : (Object.prototype.hasOwnProperty.call(SPECIES, rawSpecies) ? rawSpecies : 'unknown');
                 const quality = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
                 const qinfo = QUALITY_MAP[quality];
                 const level = cardLevel(card, getData());
@@ -8130,7 +8146,8 @@ class WorldScene extends Phaser.Scene {
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
                 const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15', border: '3px solid ' + qinfo.color, outline: '1px solid ' + qinfo.color, outlineOffset: '-6px' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
-                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '')); art.alt = 'Carta de ' + name;
+                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                  art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; }; art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
                 const descLabel = el('div', { margin: '14px 0 6px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
                 descLabel.textContent = 'DESCRIÇÃO';
@@ -10088,7 +10105,7 @@ class WorldScene extends Phaser.Scene {
       // 3 cones com brasa pulsante e erupções periódicas de partículas.
       // Os rios de lava são só desenho sobre o chão: dá para atravessar a
       // lava andando — ela nunca bloqueia um lugar, como pedido.
-      // ===== V170 — DUNGEON: entrada central na clareira da mata (90,82) =====
+      // ===== V171 — DUNGEON: entrada no interior da floresta (100,62) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
       // aberto muda: a dungeon vive na DungeonScene, cena separada.
       createDungeonEntrance() {
@@ -10105,12 +10122,12 @@ class WorldScene extends Phaser.Scene {
         this.createDungeonRuin();
       }
 
-      // ===== V170 — RUINA na entrada central da dungeon (90,82), no mundo =====
+      // ===== V171 — RUÍNA no interior da floresta (100,62), no mundo =====
       // Salao em ruinas ao redor da entrada: muros quebrados, pilares
       // caidos, entulho e mata invadindo. A entrada (23,88) fica livre
       // no meio — o jogador pisa nela e o texto/painel funcionam igual.
 
-      // ===== V170 — RUÍNA NOVA na entrada central da dungeon (90,82) =====
+      // ===== V171 — RUÍNA NOVA na entrada da floresta (100,62) =====
       // O asset aprovado (portal de pedra grandioso, musgo e trepadeiras)
       // substitui a fortaleza da V114, que renderizava quebrada no print
       // (quadrados laranja + quadrado preto). O sprite tem 5x5 tiles,
@@ -10227,7 +10244,7 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V170 — transição de cena determinística. O mundo dorme (não atualiza
+        // V171 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
@@ -11080,7 +11097,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V170'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V171'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
