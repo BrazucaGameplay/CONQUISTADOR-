@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- V175 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->\n<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
 <!-- V160 — Checkpoint seguro antes da entrada na dungeon: flush dos monstros e save V4 da posição do mundo. -->
@@ -35,14 +36,14 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V174</div>
+  <div id="version-badge">V175</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
-\n  <script id="conquistador-data-v141">
+  <script id="conquistador-data-v141">
   (function (root) { 'use strict';
     // V140 — dados canônicos de data/monsters.json + data/waifus.json,
     // embutidos no build para o jogo não depender de fetch. Edite os JSONs
@@ -463,7 +464,7 @@
       }
     }
 
-    // DungeonSystem V174: catálogo validado, execução idempotente e progresso protegido.
+    // DungeonSystem V175: catálogo validado, execução idempotente e progresso protegido.
     class DungeonSystem {
       constructor(api) {
         if (!api || !api.progress || !api.data) throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
@@ -2435,12 +2436,11 @@
           if (!tile) continue;
           const chunkId = this.getChunkId(Math.floor(tile.x / size), Math.floor(tile.y / size));
           const visible = active.has(chunkId);
-          if (record.sprite.visible !== visible) {
-            record.sprite.visible = visible;
-            if (record.levelLabel) record.levelLabel.visible = visible;
-            if (record.hpBarBg) record.hpBarBg.visible = visible;
-            if (record.hpBarFill) record.hpBarFill.visible = visible;
-          }
+          record.sprite.setVisible(visible);
+          if (record.levelLabel) record.levelLabel.setVisible(visible);
+          if (record.hpBarBg) record.hpBarBg.setVisible(visible);
+          if (record.hpBarFill) record.hpBarFill.setVisible(visible);
+          if (record.shadow) record.shadow.setVisible(visible);
         }
       }
 
@@ -5224,15 +5224,41 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     function isSouthernIceBankCell(generator, x, y) {
       if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
       if (isBridgeCell(generator, x, y)) return false;
-      const d = y - getSouthernCoastlineY(generator, x);
+      const distance = getRiverDistance(x + 0.5, y + 0.5);
       const half = getRiverHalfWidth(x);
-      return d >= half + 1 && d <= half + 2;
+      return distance > half && distance <= half + 2;
     }
 
+    // V175 — curso do rio em polilinha: segue para leste, curva para dentro
+    // da montanha e depois sobe em eixo vertical. A distância é calculada
+    // até cada segmento, mantendo largura contínua e margens sem ruído.
+    const RIVER_CENTERLINE = Object.freeze([
+      Object.freeze({ x: 0, y: 90 }),
+      Object.freeze({ x: 105, y: 90 }),
+      Object.freeze({ x: 119, y: 88 }),
+      Object.freeze({ x: 130, y: 80 }),
+      Object.freeze({ x: 138, y: 68 }),
+      Object.freeze({ x: 143, y: 54 }),
+      Object.freeze({ x: 145, y: 40 }),
+      Object.freeze({ x: 145, y: 0 })
+    ]);
+    function getRiverDistance(x, y) {
+      let best = Infinity;
+      for (let i = 0; i < RIVER_CENTERLINE.length - 1; i += 1) {
+        const a = RIVER_CENTERLINE[i], b = RIVER_CENTERLINE[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2));
+        const px = a.x + t * dx, py = a.y + t * dy;
+        best = Math.min(best, Math.hypot(x - px, y - py));
+      }
+      return best;
+    }
     function isOceanCell(generator, x, y) {
       if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
       if (isBridgeCell(generator, x, y)) return false;
-      return Math.abs(y - getSouthernCoastlineY(generator, x)) <= getRiverHalfWidth(x);
+      const halfWidth = getRiverHalfWidth(Math.max(0, Math.min(generator.worldTiles - 1, Math.round(x))));
+      return getRiverDistance(x + 0.5, y + 0.5) <= halfWidth;
     }
 
     // V144 — SEM tiles de margem: a arte dos tiles de margem do
@@ -5247,7 +5273,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     function getOceanTileId(generator, x, y) {
       const shorelineTile = getShorelineTileId(generator, x, y);
       if (shorelineTile) return shorelineTile;
-      const depth = Math.abs(y - getSouthernCoastlineY(generator, x));
+      const depth = getRiverDistance(x + 0.5, y + 0.5);
       const variation = stableNoise(x, y, 751);
       if (depth <= 1) return variation < 0.045 ? 298 : 311;
       return variation < 0.24 ? 311 : 316;
@@ -6377,7 +6403,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V174',
+        version: 'V175',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6757,6 +6783,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         // com launch(). Força também a visibilidade caso tenha sido reutilizada.
         this.scene.setVisible(true);
         this.scene.bringToTop();
+        // V175: pausa o mundo somente depois de a Dungeon estar pronta.
+        // O sinal é emitido após visuais, colisões, jogador, monstros e HUD.
+        this.scene.sleep('WorldScene');
+        this.game.events.emit('dungeon:ready', { floor: this.currentFloor });
       }
 
       hideOverworldHud() {
@@ -7894,6 +7924,8 @@ class WorldScene extends Phaser.Scene {
         this.load.image('v132-dirt', V132_ASSETS.groundDirt);
         this.load.image('v132-stone', V132_ASSETS.groundStone);
         this.load.image('v132-water', V132_ASSETS.groundWater);
+        // V175 — tile de água enviado ao repositório.
+        this.load.image('water-river', 'assets/ground/water-river.png');
         this.load.image('v132-tree-leaf', V132_ASSETS.treeLeaf);
         this.load.image('v132-tree-pine', V132_ASSETS.treePine);
         this.load.image('asset-mountain', CUSTOM_ASSETS.mountain);
@@ -9523,7 +9555,7 @@ class WorldScene extends Phaser.Scene {
         if (gid === 1001) return 'v132-tallgrass1'; // V132 — grama alta
         if (gid === 1002) return 'v132-tallgrass2';
         if (GROUND_DIRT_GIDS.has(gid)) return 'v132-dirt';
-        if (GROUND_WATER_GIDS.has(gid)) return 'v132-water';
+        if (GROUND_WATER_GIDS.has(gid)) return this.textures.exists('water-river') ? 'water-river' : 'v132-water';
         if (GROUND_STONE_GIDS.has(gid)) return 'v132-stone';
         if (this.cliffTileIds && this.cliffTileIds.has(gid)) return 'v132-stone';
         if (!gid) return 'v132-stone';
@@ -10358,11 +10390,12 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V174 — transição de cena determinística. O mundo dorme (não atualiza
+        // V175 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
-        this.scene.sleep('WorldScene');
+        // V175: manter o mundo ativo até a DungeonScene concluir create().
+        // Se a inicialização falhar, o jogador não fica preso numa tela vazia.
         this.scene.launch('DungeonScene');
       }
 
@@ -11211,7 +11244,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V174'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V175'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
