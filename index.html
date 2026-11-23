@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V177 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
+<!-- V178 — água multi-textura, população de monstros verificável e piso de floresta na Dungeon. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -37,7 +37,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V177</div>
+  <div id="version-badge">V178</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -465,7 +465,7 @@
       }
     }
 
-    // DungeonSystem V177: catálogo validado, execução idempotente e progresso protegido.
+    // DungeonSystem V178: catálogo validado, execução idempotente e progresso protegido.
     class DungeonSystem {
       constructor(api) {
         if (!api || !api.progress || !api.data) throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
@@ -1055,7 +1055,7 @@
         this.respawnDelayMs = Math.max(1000, Math.floor(options.respawnDelayMs || 5000));
         this.spawnRetryDelayMs = 5000;
         this.nextMonsterSequence = 1;
-        this.chunkRespawns = new Map(); // V177: legado inativo, mantido apenas para leitura de saves antigos.
+        this.chunkRespawns = new Map(); // V178: legado inativo, mantido apenas para leitura de saves antigos.
         this.chunkPopulation = new Map();
         this.respawnRecords = new Map();
         this.legacyUnclassified = [];
@@ -1141,81 +1141,90 @@
       }
 
       createMonsterTextures() {
-        // V146 — 11 monstros + 3 frames cada (andar/batalha/morte) + o chefe Brutamonte.
         const spriteSources = {
-          slime: "assets/monsters/slime.png",
-          monkey: "assets/monsters/monkey.png",
-          rat: "assets/monsters/rat.png",
-          snake: "assets/monsters/snake.png",
-          wolf: "assets/monsters/wolf.png",
-          eagle: "assets/monsters/eagle.png",
-          spider: "assets/monsters/spider.png",
-          bear: "assets/monsters/bear.png",
-          goblin: "assets/monsters/goblin.png",
-          cyclops: "assets/monsters/cyclops.png",
-          ogre: "assets/monsters/ogre.png",
-          brutamonte: root.CONQUISTADOR_BOSS_SPRITE || ''
+          slime: 'assets/monsters/slime.png', monkey: 'assets/monsters/monkey.png',
+          rat: 'assets/monsters/rat.png', snake: 'assets/monsters/snake.png',
+          wolf: 'assets/monsters/wolf.png', eagle: 'assets/monsters/eagle.png',
+          spider: 'assets/monsters/spider.png', bear: 'assets/monsters/bear.png',
+          goblin: 'assets/monsters/goblin.png', cyclops: 'assets/monsters/cyclops.png',
+          ogre: 'assets/monsters/ogre.png'
         };
-        root.CONQUISTADOR_MONSTER_ART = Object.freeze({ ...spriteSources });
-        const versionedKeys = {
-          slime: 'conquistador-monster-slime-v3',
-          monkey: 'conquistador-monster-monkey-v3',
-          rat: 'conquistador-monster-rat-v3',
-          snake: 'conquistador-monster-snake-v3',
-          wolf: 'conquistador-monster-wolf-v3',
-          eagle: 'conquistador-monster-eagle-v3',
-          spider: 'conquistador-monster-spider-v3',
-          bear: 'conquistador-monster-bear-v3',
-          goblin: 'conquistador-monster-goblin-v3',
-          cyclops: 'conquistador-monster-cyclops-v3',
-          ogre: 'conquistador-monster-ogre-v3',
-          brutamonte: 'conquistador-boss-brutamonte-v1'
-        };
-        this.monsterTextureKeys = Object.freeze(versionedKeys);
-        // Frames por estado: andar (idle/walk), batalha (attack), morte (death).
-        const frameKeys = {};
-        const toLoad = [];
-        for (const type of Object.keys(spriteSources)) {
-          toLoad.push({ type, key: versionedKeys[type], src: spriteSources[type] });
-        }
-        for (const type of ['slime', 'monkey', 'rat', 'snake', 'wolf', 'eagle', 'spider', 'bear', 'goblin', 'cyclops', 'ogre']) {
-          frameKeys[type] = {
-            walk: `conquistador-monster-${type}-v3-walk`,
-            attack: `conquistador-monster-${type}-v3-attack`,
-            death: `conquistador-monster-${type}-v3-death`
-          };
-          toLoad.push({ type, key: frameKeys[type].walk, src: `assets/monsters/${type}_walk.png` });
-          toLoad.push({ type, key: frameKeys[type].attack, src: `assets/monsters/${type}_attack.png` });
-          toLoad.push({ type, key: frameKeys[type].death, src: `assets/monsters/${type}_death.png` });
-        }
-        this.monsterFrameKeys = Object.freeze(frameKeys);
-        let loaded = 0;
-        const finish = () => {
-          loaded += 1;
-          if (loaded !== toLoad.length || !this.active) return;
-          this.texturesReady = true;
-          this.restoreOrPopulate();
-          this.refreshUI();
-        };
-        for (const entry of toLoad) {
-          const key = entry.key;
-          if (this.scene.textures && this.scene.textures.exists(key)) {
-            finish();
-            continue;
-          }
+        const versionedKeys = Object.freeze({
+          slime:'conquistador-monster-slime-v3', monkey:'conquistador-monster-monkey-v3',
+          rat:'conquistador-monster-rat-v3', snake:'conquistador-monster-snake-v3',
+          wolf:'conquistador-monster-wolf-v3', eagle:'conquistador-monster-eagle-v3',
+          spider:'conquistador-monster-spider-v3', bear:'conquistador-monster-bear-v3',
+          goblin:'conquistador-monster-goblin-v3', cyclops:'conquistador-monster-cyclops-v3',
+          ogre:'conquistador-monster-ogre-v3'
+        });
+        this.monsterTextureKeys = versionedKeys;
+        this.availableMonsterTypes = new Set();
+        this.monsterAssetStatus = Object.create(null);
+        this.monsterFrameKeys = Object.freeze(Object.fromEntries(Object.keys(spriteSources).map(type => [type, {
+          walk:`conquistador-monster-${type}-v3-walk`,
+          attack:`conquistador-monster-${type}-v3-attack`,
+          death:`conquistador-monster-${type}-v3-death`
+        }])));
+        root.CONQUISTADOR_MONSTER_ART = Object.freeze({ ...spriteSources, brutamonte: root.CONQUISTADOR_BOSS_SPRITE || '' });
+
+        const loadImage = (key, url, timeoutMs = 9000) => new Promise(resolve => {
+          if (this.scene.textures && this.scene.textures.exists(key)) { resolve(true); return; }
           const image = new Image();
-          image.onload = () => {
-            if (!this.active) return;
-            if (!this.scene.textures.exists(key)) this.scene.textures.addImage(key, image);
-            finish();
+          let settled = false;
+          const finish = ok => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            image.onload = image.onerror = null;
+            if (ok && this.active && !this.scene.textures.exists(key)) {
+              try { this.scene.textures.addImage(key, image); } catch (_) { ok = false; }
+            }
+            resolve(!!ok && this.scene.textures.exists(key));
           };
-          image.onerror = () => {
-            this.message = `Falha ao carregar visual: ${entry.type}`;
-            this.messageUntil = this.now + 5000;
-            finish();
-          };
-          image.src = entry.src;
-        }
+          const timer = setTimeout(() => finish(false), timeoutMs);
+          image.onload = () => finish(true);
+          image.onerror = () => finish(false);
+          image.src = url;
+        });
+
+        // Only base art gates population. Optional animation sheets never hold
+        // the world hostage and can fail independently without hiding entities.
+        const entries = Object.entries(spriteSources);
+        Promise.all(entries.map(async ([type, url]) => {
+          const ok = await loadImage(versionedKeys[type], url);
+          this.monsterAssetStatus[type] = ok ? 'ready' : 'missing-base';
+          if (ok) this.availableMonsterTypes.add(type);
+        })).then(() => {
+          if (!this.active) return;
+          this.texturesReady = true;
+          const available = Array.from(this.availableMonsterTypes);
+          root.CONQUISTADOR_MONSTER_ASSET_STATUS = Object.freeze({
+            ready: available.length > 0,
+            available,
+            missing: Object.keys(this.monsterAssetStatus).filter(type => this.monsterAssetStatus[type] !== 'ready')
+          });
+          if (available.length) {
+            this.restoreOrPopulate();
+            this.refreshUI();
+          } else {
+            this.message = 'Não foi possível carregar as imagens dos monstros.';
+            this.messageUntil = this.now + 15000;
+            this.refreshUI();
+          }
+
+          // Load optional action sheets after population has already started.
+          for (const [type] of entries) {
+            const keys = this.monsterFrameKeys[type];
+            for (const state of ['walk','attack','death']) {
+              const key = keys[state];
+              const url = `assets/monsters/${type}_${state}.png`;
+              loadImage(key, url, 7000).then(ok => {
+                if (ok) this.monsterAssetStatus[`${type}_${state}`] = 'ready';
+                else this.monsterAssetStatus[`${type}_${state}`] = 'optional-missing';
+              });
+            }
+          }
+        });
       }
       createUI() {
         const root = document.createElement('div');
@@ -1359,24 +1368,25 @@
         let endY = Math.min(startY + this.chunkGrid.chunkSize, this.chunkGrid.height);
         const playerTile = this.world.getPlayerBodyTile();
         const candidates = [];
+        const rejected = { unwalkable:0, bridge:0, river:0, dungeonSafety:0, region:0, playerProximity:0, occupied:0 };
 
         // Keep a one-tile margin inside chunk/world borders; the player-footprint
         // walkability API remains authoritative for every candidate.
         for (let y = startY + 1; y < endY - 1; y += 1) {
           for (let x = startX + 1; x < endX - 1; x += 1) {
-            if (!this.world.isWalkable(x, y, 'player')) continue;
+            if (!this.world.isWalkable(x, y, 'player')) { rejected.unwalkable++; continue; }
             // V132 — respawn por regiao: nasce em floresta, transicao,
             // montanha e gelo. Cada chunk povoa com a regiao dos proprios
             // tiles, em vez de so a floresta povoar o mundo inteiro.
             // Nunca nasce no rio, na ponte, nem no raio de segurança da entrada da dungeon.
-            if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) continue;
-            if (this.world.isRiverCell && this.world.isRiverCell(x, y)) continue;
-            if (Math.max(Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x), Math.abs(y - DUNGEON_SCENE_CONFIG.entranceTile.y)) <= 4) continue;
+            if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) { rejected.bridge++; continue; }
+            if (this.world.isRiverCell && this.world.isRiverCell(x, y)) { rejected.river++; continue; }
+            if (Math.max(Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x), Math.abs(y - DUNGEON_SCENE_CONFIG.entranceTile.y)) <= 4) { rejected.dungeonSafety++; continue; }
             if (this.world.getRegionAt) {
               const region = this.world.getRegionAt(x, y);
-              if (region !== 'forest' && region !== 'transition' && region !== 'mountain' && region !== 'ice') continue;
+              if (region !== 'forest' && region !== 'transition' && region !== 'mountain' && region !== 'ice') { rejected.region++; continue; }
             }
-            if (playerTile && Math.max(Math.abs(playerTile.x - x), Math.abs(playerTile.y - y)) < 4) continue;
+            if (playerTile && Math.max(Math.abs(playerTile.x - x), Math.abs(playerTile.y - y)) < 4) { rejected.playerProximity++; continue; }
 
             // Avoid overlapping newly spawned groups and existing monsters,
             // including monsters that have wandered in from another chunk.
@@ -1390,7 +1400,7 @@
                 break;
               }
             }
-            if (!tooClose) candidates.push({ x, y });
+            if (!tooClose) candidates.push({ x, y }); else rejected.occupied++;
           }
         }
 
@@ -1405,6 +1415,8 @@
           const j = Math.floor(random() * (i + 1));
           [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
+        this.spawnCandidateDiagnostics = this.spawnCandidateDiagnostics || Object.create(null);
+        this.spawnCandidateDiagnostics[`${chunkX}:${chunkY}`] = { candidates:candidates.length, rejected };
         return candidates;
       }
 
@@ -1587,7 +1599,7 @@
       spawnOneMonsterForChunk(chunkX, chunkY, monsterId, saved) {
         const chunkId = this.getChunkId(chunkX, chunkY);
         const definition = this.data.MONSTERS[monsterId];
-        if (!definition || !this.monsterTextureKeys[monsterId]) return false;
+        if (!definition || !this.monsterTextureKeys[monsterId] || !this.availableMonsterTypes || !this.availableMonsterTypes.has(monsterId) || !this.scene.textures.exists(this.monsterTextureKeys[monsterId])) return false;
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
         if (this.getAliveCountForChunk(chunkId, monsterId) >= ((this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType)) return false;
 
@@ -1941,7 +1953,7 @@
 
       scheduleChunkRespawn(record) {
         if (!record || !this.monsterTypes.includes(record.monsterId)) return false;
-        // V177 — compatibilidade com entidades antigas sem originChunkId:
+        // V178 — compatibilidade com entidades antigas sem originChunkId:
         // recupera o chunk a partir do tile atual em vez de descartar o respawn.
         let owner = null;
         if (record.originChunkId) {
@@ -2510,7 +2522,7 @@
         }
       }
 
-      // V177 — RespawnSystem: reservas individuais e idempotentes. A população
+      // V178 — RespawnSystem: reservas individuais e idempotentes. A população
       // inicial é gerida separadamente; nenhuma fila agregada por espécie.
       snapshotMonsters() {
         const list = [];
@@ -2627,24 +2639,42 @@
       }
 
       populateAllChunks() {
-        // PopulationManager: inicialização determinística, separada das mortes.
+        // PopulationManager: cada chunk e processado uma vez; somente especies
+        // com textura-base confirmada podem virar entidades visiveis.
+        this.populationDiagnostics = this.populationDiagnostics || Object.create(null);
         for (let y=0; y<this.chunkGrid.rows; y++) for (let x=0; x<this.chunkGrid.columns; x++) {
           const chunkId=this.getChunkId(x,y);
           let state=this.chunkPopulation.get(chunkId);
           if (!state) { state={ initialSpawnAttempted:false, initialFillPending:false, initialRetryAt:0 }; this.chunkPopulation.set(chunkId,state); }
           if (state.initialSpawnAttempted) continue;
           state.initialSpawnAttempted=true;
+          const candidates=this.getSpawnCandidates(x,y);
           const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
           const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
+          let spawned=0;
           for (const type of ordered) {
+            if (!this.availableMonsterTypes || !this.availableMonsterTypes.has(type)) continue;
             const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
             while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
               if (!this.spawnOneMonsterForChunk(x,y,type)) break;
+              spawned++;
             }
+            if (this.getAliveCountForChunk(chunkId)>=this.maxMonstersPerChunk) break;
           }
-          state.initialFillPending=this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk;
+          const alive=this.getAliveCountForChunk(chunkId);
+          state.initialFillPending=alive<this.maxMonstersPerChunk && candidates.length>0;
           state.initialRetryAt=this.now+this.spawnRetryDelayMs;
+          this.populationDiagnostics[chunkId]={
+            candidates:candidates.length, spawned, alive,
+            availableSpecies:Array.from(this.availableMonsterTypes || []),
+            status:candidates.length===0?'no-valid-spawn-tiles':alive===0?'no-monster-created':'populated'
+          };
         }
+        root.CONQUISTADOR_POPULATION_DIAGNOSTICS = Object.freeze({
+          chunks:Object.freeze({ ...this.populationDiagnostics }),
+          totalAlive:this.monsters.size,
+          grid:{ width:this.chunkGrid.width,height:this.chunkGrid.height,chunkSize:this.chunkGrid.chunkSize,columns:this.chunkGrid.columns,rows:this.chunkGrid.rows }
+        });
       }
 
       updateInitialChunkFill() {
@@ -2655,6 +2685,7 @@
           const rotation=(x+y*this.chunkGrid.columns)%this.monsterTypes.length;
           const ordered=this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0,rotation));
           for (const type of ordered) {
+            if (!this.availableMonsterTypes || !this.availableMonsterTypes.has(type)) continue;
             const limit=(this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType;
             while (this.getAliveCountForChunk(chunkId,type)<limit && this.getAliveCountForChunk(chunkId)<this.maxMonstersPerChunk) {
               if (!this.spawnOneMonsterForChunk(x,y,type)) break;
@@ -5398,12 +5429,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // V115 — Banco de gelo: 2 tiles ao SUL do rio.
     // É terra (andável), pintado de neve, sem árvores nem estruturas.
     function isSouthernIceBankCell(generator, x, y) {
-      // V177 — o rio nao recebe mais faixa branca/neve na margem.
+      // V178 — o rio nao recebe mais faixa branca/neve na margem.
       // A agua azul clara chega ate a margem; a faixa central e mais escura.
       return false;
     }
 
-    // V177 — curso do rio em polilinha: segue para leste, curva para dentro
+    // V178 — curso do rio em polilinha: segue para leste, curva para dentro
     // da montanha e depois sobe em eixo vertical. A distância é calculada
     // até cada segmento, mantendo largura contínua e margens sem ruído.
     const RIVER_CENTERLINE = Object.freeze([
@@ -6352,7 +6383,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       // V122 — chave do cache do mundo renderizado (IndexedDB). NÃO é o
       // worldId do save: o save valida por worldId e mudar apagaria os saves.
       // O cache muda quando as regras de geração mudam.
-      renderCacheKey: 'overworld-180x180-v144'
+      renderCacheKey: 'overworld-180x180-v178'
       // V133 — geração igual à V132: chave mantida para mundos V132 em
       // cache continuarem válidos e não forçarem nova busca do mapa-base.
     });
@@ -6578,7 +6609,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V177',
+        version: 'V178',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6691,7 +6722,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
 
     });
 
-    // V177 — tabelas de GIDs que faltavam na versão anterior.
+    // V178 — tabelas de GIDs que faltavam na versão anterior.
     // A ausência destas constantes interrompia buildDungeonLayout() antes
     // da cena terminar o create(), causando a entrada travada na Dungeon.
     const GRASS_GIDS = Object.freeze([1, 2, 3, 4]);
@@ -6967,7 +6998,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         // com launch(). Força também a visibilidade caso tenha sido reutilizada.
         this.scene.setVisible(true);
         this.scene.bringToTop();
-        // V177: pausa o mundo somente depois de a Dungeon estar pronta.
+        // V178: pausa o mundo somente depois de a Dungeon estar pronta.
         // O sinal é emitido após visuais, colisões, jogador, monstros e HUD.
         this.scene.sleep('WorldScene');
         this.game.events.emit('dungeon:ready', { floor: this.currentFloor });
@@ -7001,8 +7032,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
             const gid = this.layout.ground[y][x]; if (!gid) continue;
             // Usa somente texturas carregadas pelo preload da cena. O helper
             // groundTextureForDungeonTile nao existia e causava ReferenceError.
-            const tk = gid >= 100 ? 'v132-stone' : gid >= 5 ? 'v132-dirt' : 'v132-grass1';
-            const texture = this.textures.exists(tk) ? this.textures.get(tk) : this.textures.get('v132-grass1');
+            const forestVariant = ((x * 17 + y * 31 + x * y * 7) % 11) < 4 ? 'v132-grass1' : 'v132-grass2';
+            const tk = forestVariant;
+            const texture = this.textures.exists(tk) ? this.textures.get(tk) : this.textures.get('v132-grass2');
             const img = texture && texture.getSourceImage ? texture.getSourceImage() : null;
             if (img && img.width && img.height) {
               ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -8113,8 +8145,12 @@ class WorldScene extends Phaser.Scene {
         this.load.image('v132-dirt', V132_ASSETS.groundDirt);
         this.load.image('v132-stone', V132_ASSETS.groundStone);
         this.load.image('v132-water', V132_ASSETS.groundWater);
-        // V177 — tile de água enviado ao repositório.
+        // V178 — tile de água enviado ao repositório.
         this.load.image('water-river', 'assets/ground/water-river.png');
+        this.load.image('water-shallow', 'assets/ground/water-shallow.png');
+        this.load.image('water-deep', 'assets/ground/water-deep.png');
+        this.load.image('water-sand', 'assets/ground/water-sand.png');
+        this.load.image('water-foam', 'assets/ground/water-foam.png');
         this.load.image('v132-tree-leaf', V132_ASSETS.treeLeaf);
         this.load.image('v132-tree-pine', V132_ASSETS.treePine);
         this.load.image('asset-mountain', CUSTOM_ASSETS.mountain);
@@ -9725,7 +9761,22 @@ class WorldScene extends Phaser.Scene {
         const tex = this.textures.createCanvas('blank-tile', TILE_SIZE, TILE_SIZE);
         const ctx = tex.getContext(); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, TILE_SIZE, TILE_SIZE); tex.refresh();
       }
-      groundTextureForGid(gid, x, y) {
+      waterTextureForCell(data, x, y) {
+        const h=data.length, w=h?(data[0]||[]).length:0;
+        const isWater=(tx,ty)=>ty>=0&&ty<h&&tx>=0&&tx<w&&GROUND_WATER_GIDS.has(Number(data[ty][tx]));
+        const cardinal=[[0,-1],[1,0],[0,1],[-1,0]];
+        const waterNeighbors=cardinal.reduce((n,[dx,dy])=>n+(isWater(x+dx,y+dy)?1:0),0);
+        const pattern=(Math.imul(x+17,3)+Math.imul(y+31,7))>>>0;
+        // Margem mantém o azul corrente atual; não usa espuma branca na costa.
+        if (waterNeighbors<=2) return 'water-river';
+        // Variação rasa azul-esverdeada somente no lado interno da margem.
+        if (waterNeighbors===3) return pattern%5===0 ? 'water-shallow' : 'water-river';
+        // Bancos submersos e espuma são detalhes raros no centro do canal.
+        if (pattern%41===0) return 'water-sand';
+        if (pattern%29===0) return 'water-foam';
+        return 'water-deep';
+      }
+      groundTextureForGid(gid, x, y, data) {
         // V132 — cada variante de neve/montanha usa a sua textura.
         // Antes os 3 GIDs caiam na mesma textura, por isso o gelo e a
         // montanha ficavam lisos e chapados.
@@ -9744,7 +9795,7 @@ class WorldScene extends Phaser.Scene {
         if (gid === 1001) return 'v132-tallgrass1'; // V132 — grama alta
         if (gid === 1002) return 'v132-tallgrass2';
         if (GROUND_DIRT_GIDS.has(gid)) return 'v132-dirt';
-        if (GROUND_WATER_GIDS.has(gid)) return this.textures.exists('water-river') ? 'water-river' : 'v132-water';
+        if (GROUND_WATER_GIDS.has(gid)) { const waterKey=this.waterTextureForCell(data,x,y); return this.textures.exists(waterKey) ? waterKey : (this.textures.exists('water-river') ? 'water-river' : 'v132-water'); }
         if (GROUND_STONE_GIDS.has(gid)) return 'v132-stone';
         if (this.cliffTileIds && this.cliffTileIds.has(gid)) return 'v132-stone';
         if (!gid) return 'v132-stone';
@@ -9760,8 +9811,9 @@ class WorldScene extends Phaser.Scene {
         const ctx = tex.getContext();
         for (let y = 0; y < h; y += 1) {
           for (let x = 0; x < w; x += 1) {
-            const texKey = this.groundTextureForGid(data[y][x], x, y);
-            const srcImg = this.textures.get(texKey).getSourceImage();
+            const texKey = this.groundTextureForGid(data[y][x], x, y, data);
+            const texture = this.textures.exists(texKey) ? this.textures.get(texKey) : this.textures.get('v132-grass2');
+            const srcImg = texture && texture.getSourceImage ? texture.getSourceImage() : null;
             if (!srcImg) continue;
             if (srcImg.width <= TILE_SIZE) { ctx.drawImage(srcImg, x * TILE_SIZE, y * TILE_SIZE); }
             else { ctx.drawImage(srcImg, (x * TILE_SIZE) % srcImg.width, (y * TILE_SIZE) % srcImg.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }
@@ -10579,11 +10631,11 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V177 — transição de cena determinística. O mundo dorme (não atualiza
+        // V178 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
-        // V177: manter o mundo ativo até a DungeonScene concluir create().
+        // V178: manter o mundo ativo até a DungeonScene concluir create().
         // Se a inicialização falhar, o jogador não fica preso numa tela vazia.
         this.scene.launch('DungeonScene');
       }
@@ -11164,7 +11216,7 @@ class WorldScene extends Phaser.Scene {
         game,
         maxMonstersPerChunk: 10,
         respawnDelayMs: 5000,
-        chunkGrid: { width: 90, height: 120, chunkSize: 30, columns: 3, rows: 4 }
+        chunkGrid: { width: WORLD_WIDTH_TILES, height: WORLD_HEIGHT_TILES, chunkSize: CHUNK_TILES, columns: Math.ceil(WORLD_WIDTH_TILES / CHUNK_TILES), rows: Math.ceil(WORLD_HEIGHT_TILES / CHUNK_TILES) }
       });
       window.CONQUISTADOR_V19 = Object.freeze({
         version: 19,
@@ -11433,7 +11485,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V177'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V178'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
