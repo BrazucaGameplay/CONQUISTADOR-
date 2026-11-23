@@ -1,10 +1,10 @@
-// CONQUISTADOR DE WAIFU'S - service worker V137
-// V137 FIX do carregamento infinito: antes era cache-first para TUDO.
+// CONQUISTADOR DE WAIFU'S - service worker V138
+// V138 FIX do carregamento infinito: antes era cache-first para TUDO.
 // O navegador continuava servindo o index.html velho do cache e o SW
 // devolvia index.html no lugar do JSON do mapa-base externo.
 // Agora: HTML/SW = network-first, assets locais = cache-first,
 // URLs externas (jsDelivr / raw.githubusercontent) = rede direta, sem SW.
-const CACHE = 'conquistador-v137';
+const CACHE = 'conquistador-v138';
 const FILES = [
   './',
   './index.html',
