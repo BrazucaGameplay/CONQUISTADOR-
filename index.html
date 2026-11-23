@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
+<!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->\n<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
 <!-- V160 — Checkpoint seguro antes da entrada na dungeon: flush dos monstros e save V4 da posição do mundo. -->
 <!-- V159 — Restaurada a fachada WaifuSystem e o resolvedor de espécies; corrigido carregamento do mapa de arte por espécie; auditoria e diagnóstico do EventBus. -->
@@ -16,7 +16,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V160</title>
+<title>CONQUISTADOR DE WAIFU'S — V165</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -35,7 +35,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V159</div>
+  <div id="version-badge">V165</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -1492,6 +1492,11 @@
         if (this.getAliveCountForChunk(chunkId, monsterId) >= ((this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType)) return false;
 
         // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
+        const savedHp = saved && saved.hp != null ? Number(saved.hp) : NaN;
+        // V165 — null/ausente significa HP não persistido (restaura cheio); zero/negativo significa morto.
+        // Um snapshot só restaura entidades vivas. HP zero/negativo é um
+        // registro morto/corrompido e não pode voltar com 1 HP por clamp.
+        if (saved && Number.isFinite(savedHp) && savedHp <= 0) return false;
         const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y)
           ? { x: saved.tile.x, y: saved.tile.y } : null;
         const candidates = this.getSpawnCandidates(chunkX, chunkY);
@@ -1512,7 +1517,9 @@
         // Every new spawn, including respawns, rolls only level 1 or 2.
         // Level 2 is less common and gains durability, damage, defense and XP.
         // V76: restauracao usa o nivel salvo, sem re-rolar.
-        const level = saved && (saved.level === 1 || saved.level === 2) ? saved.level : (Math.random() < 0.30 ? 2 : 1);
+        const level = saved
+          ? (saved.level === 1 || saved.level === 2 ? saved.level : 1)
+          : (Math.random() < 0.30 ? 2 : 1);
         const levelMultiplier = level === 2 ? {
           hp: 1.5, attack: 1.25, defense: 1, xp: 1.5
         } : { hp: 1, attack: 1, defense: 0, xp: 1 };
@@ -1534,7 +1541,7 @@
           }
         });
         this.status.register(id, {
-          hp: saved && Number.isFinite(Number(saved.hp)) ? Math.max(1, Math.min(maxHp, Math.floor(Number(saved.hp)))) : maxHp, maxHp,
+          hp: saved && Number.isFinite(savedHp) ? Math.min(maxHp, Math.floor(savedHp)) : maxHp, maxHp,
           energy: 0, maxEnergy: 0,
           attack,
           defense,
@@ -1648,6 +1655,58 @@
           this.flushMonsterSnapshot('debounce');
         }, 800);
       }
+      restoreRespawnQueues(respawns) {
+        if (!Array.isArray(respawns)) return 0;
+        let restored = 0;
+        for (const savedQueue of respawns) {
+          if (!savedQueue || !Number.isInteger(savedQueue.chunkX) || !Number.isInteger(savedQueue.chunkY)) continue;
+          const chunkX = savedQueue.chunkX;
+          const chunkY = savedQueue.chunkY;
+          if (chunkX < 0 || chunkY < 0 || chunkX >= this.chunkGrid.columns || chunkY >= this.chunkGrid.rows) continue;
+
+          const rawPending = Math.floor(Number(savedQueue.pending));
+          if (!Number.isFinite(rawPending) || rawPending <= 0) continue;
+          const rawByType = savedQueue.pendingByMonster && typeof savedQueue.pendingByMonster === 'object'
+            ? savedQueue.pendingByMonster : {};
+          const normalized = Object.fromEntries(this.monsterTypes.map(type => [type, 0]));
+          let declaredTotal = 0;
+          for (const type of this.monsterTypes) {
+            const count = Math.floor(Number(rawByType[type]));
+            if (Number.isFinite(count) && count > 0) {
+              normalized[type] = count;
+              declaredTotal += count;
+            }
+          }
+
+          // Compatibilidade com snapshots antigos sem discriminação por espécie.
+          if (declaredTotal === 0) {
+            normalized.slime = rawPending;
+            declaredTotal = rawPending;
+          }
+
+          // Reconcile pending total, per-species caps and total chunk capacity
+          // against monsters already restored from the same snapshot.
+          let remaining = Math.min(rawPending, declaredTotal,
+            Math.max(0, this.maxMonstersPerChunk - this.getAliveCountForChunk(this.getChunkId(chunkX, chunkY))));
+          for (const type of this.monsterTypes) {
+            const perTypeRoom = Math.max(0, ((this.maxPerType && this.maxPerType[type]) || this.maxPerMonsterType) -
+              this.getAliveCountForChunk(this.getChunkId(chunkX, chunkY), type));
+            const accepted = Math.min(normalized[type], perTypeRoom, remaining);
+            normalized[type] = accepted;
+            remaining -= accepted;
+          }
+          const pending = this.monsterTypes.reduce((sum, type) => sum + normalized[type], 0);
+          if (!pending) continue;
+          const chunkId = this.getChunkId(chunkX, chunkY);
+          this.chunkRespawns.set(chunkId, {
+            chunkX, chunkY, pending, pendingByMonster: normalized,
+            nextAt: this.now + this.respawnDelayMs
+          });
+          restored += pending;
+        }
+        return restored;
+      }
+
       restoreOrPopulate() {
         let saved = null;
         try { saved = this.progress ? this.progress.get('monsters') : null; } catch (e) { saved = null; }
@@ -1655,19 +1714,28 @@
         if (list.length) {
           // Restaura monstros salvos nas posicoes exatas, sem re-rolar nivel/HP.
           for (const m of list) {
-            const fallback = (m.tile && this.getChunkForTile(m.tile)) || { chunkX: 0, chunkY: 0 };
-            const cx = Number.isInteger(m.originChunkX) ? m.originChunkX : fallback.chunkX;
-            const cy = Number.isInteger(m.originChunkY) ? m.originChunkY : fallback.chunkY;
-            this.spawnOneMonsterForChunk(cx, cy, m.monsterId, m);
+            // HP zero significa entidade morta: não restaurar nem convertê-la
+            // em um monstro vivo. O preenchimento inicial abaixo recompõe
+            // apenas a população necessária do chunk.
+            const savedHp = m.hp != null ? Number(m.hp) : NaN;
+            if (Number.isFinite(savedHp) && savedHp <= 0) continue;
+
+            const tileChunk = m.tile && this.getChunkForTile(m.tile);
+            const originIsValid =
+              Number.isInteger(m.originChunkX) && Number.isInteger(m.originChunkY) &&
+              m.originChunkX >= 0 && m.originChunkY >= 0 &&
+              m.originChunkX < this.chunkGrid.columns && m.originChunkY < this.chunkGrid.rows;
+            // O chunk de origem é a propriedade imutável que controla o
+            // respawn. Preserva-o quando válido, mesmo se o monstro migrou;
+            // usa o chunk do tile apenas para metadados ausentes/corrompidos.
+            const ownerChunk = originIsValid
+              ? { chunkX: m.originChunkX, chunkY: m.originChunkY }
+              : tileChunk;
+            if (!ownerChunk) continue;
+            this.spawnOneMonsterForChunk(ownerChunk.chunkX, ownerChunk.chunkY, m.monsterId, m);
           }
-          // Respawns pendentes: recria a fila (timer recomeça em 5s, posicao/tipo preservados).
-          if (Array.isArray(saved.respawns)) {
-            for (const r of saved.respawns) {
-              if (!r || !Number.isInteger(r.pending) || r.pending <= 0) continue;
-              const q = { chunkX: r.chunkX, chunkY: r.chunkY, pending: r.pending, pendingByMonster: { slime: 0, monkey: 0, rat: 0, ...(r.pendingByMonster || {}) }, nextAt: this.now + this.respawnDelayMs };
-              this.chunkRespawns.set(r.chunkId || this.getChunkId(r.chunkX, r.chunkY), q);
-            }
-          }
+          // Respawns pendentes: valida coordenadas, espécies e limites do chunk.
+          this.restoreRespawnQueues(saved.respawns);
           // Completa chunks que ficaram abaixo do minimo (ex.: monstro morto sem respawn salvo).
           this.populateAllChunks();
           return;
@@ -1682,16 +1750,22 @@
             const population = this.getChunkPopulationState(chunkId);
             if (population.initialSpawnAttempted) continue;
             population.initialSpawnAttempted = true;
+            const queue = this.chunkRespawns.get(chunkId);
             // V145 — rodízio por chunk: a ordem de spawn gira com o chunk, senão
             // as 5 primeiras espécies lotariam o chunk (teto 10) e as outras nunca nasceriam.
             const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
             const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
             for (const monsterId of orderedTypes) {
-              for (let count = 0; count < this.maxPerMonsterType; count += 1) {
+              const queuedForType = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
+              let available = this.maxPerType && this.maxPerType[monsterId] || this.maxPerMonsterType;
+              available -= this.getAliveCountForChunk(chunkId, monsterId) + queuedForType;
+              while (available > 0 &&
+                this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
                 if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
+                available -= 1;
               }
             }
-            if (this.getAliveCountForChunk(chunkId) < this.maxMonstersPerChunk) {
+            if (this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
               population.initialFillPending = true;
               population.initialRetryAt = this.now + this.spawnRetryDelayMs;
             }
@@ -1710,9 +1784,11 @@
           const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
           for (const monsterId of orderedTypes) {
             const queued = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
-            let available = this.maxPerMonsterType -
+            const typeLimit = (this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType;
+            let available = typeLimit -
               this.getAliveCountForChunk(chunkId, monsterId) - queued;
-            while (available > 0) {
+            while (available > 0 &&
+              this.getAliveCountForChunk(chunkId) + (queue ? queue.pending : 0) < this.maxMonstersPerChunk) {
               if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) {
                 needsRetry = true;
                 break;
