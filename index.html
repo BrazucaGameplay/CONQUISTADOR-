@@ -2,28 +2,7 @@
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
-<head><style>
-@font-face {
-  font-family: "Optimistic";
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Optimistic Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
-}
-:where(html) {
-  font-family: "Optimistic", system-ui, sans-serif;
-}
-:where(code, pre, kbd, samp) {
-  font-family: "Optimistic Mono", ui-monospace, monospace;
-}
-</style>
+<head>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
@@ -444,7 +423,7 @@
         this.unreadable = false;
         this.replacementLocked = false;
         this.replacementAuthorized = false;
-        this.progressData = { pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] } };
+        this.progressData = { pets: [], waifus: { levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] } };
         this.lastLoadedData = null;
       }
       readPrimary() {
@@ -498,7 +477,7 @@
           player: { id: 'player', position: position ? { x: position.x, y: position.y } : null, tile: null },
           status: { player: null },
           level: { level: 1, xp: 0 },
-          pets: [], waifus: { unlocked: [], levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] }
+          pets: [], waifus: { levels: {}, equipped: [] }, flags: {}, dungeons: {}, items: [], monsters: { list: [], respawns: [] }
         };
       }
       normalizeV4(data) {
@@ -513,7 +492,7 @@
         normalized.level = data.level && typeof data.level === 'object' ? cloneData(data.level) : { level: 1, xp: 0 };
         normalized.pets = Array.isArray(data.pets) ? cloneData(data.pets) : [];
         normalized.waifus = data.waifus && typeof data.waifus === 'object' && !Array.isArray(data.waifus)
-          ? cloneData(data.waifus) : { unlocked: [], levels: {}, equipped: [] };
+          ? cloneData(data.waifus) : { levels: {}, equipped: [] };
         normalized.flags = data.flags && typeof data.flags === 'object' && !Array.isArray(data.flags) ? cloneData(data.flags) : {};
         normalized.dungeons = data.dungeons && typeof data.dungeons === 'object' && !Array.isArray(data.dungeons) ? cloneData(data.dungeons) : {};
         normalized.items = Array.isArray(data.items) ? cloneData(data.items) : [];
@@ -549,7 +528,7 @@
         data.status = parsed.status && typeof parsed.status === 'object' ? cloneData(parsed.status) : data.status;
         data.pets = Array.isArray(parsed.pets) ? cloneData(parsed.pets) : [];
         data.waifus = parsed.waifus && typeof parsed.waifus === 'object' && !Array.isArray(parsed.waifus)
-          ? cloneData(parsed.waifus) : { unlocked: [], levels: {}, equipped: [] };
+          ? cloneData(parsed.waifus) : { levels: {}, equipped: [] };
         data.flags = parsed.flags && typeof parsed.flags === 'object' ? cloneData(parsed.flags) : {};
         data.dungeons = parsed.dungeons && typeof parsed.dungeons === 'object' ? cloneData(parsed.dungeons) : {};
         data.items = Array.isArray(parsed.items) ? cloneData(parsed.items) : [];
@@ -2342,8 +2321,8 @@
         this.giftResultUnsub = this.api.events.on('waifu:gift-result', result => {
           if (!result) return;
           this.refresh();
-          const waifuName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[result.waifuId] || 'Donzela Slime';
-          const monsterName = { slime: 'Slimes', monkey: 'Macacos', rat: 'Ratos' }[result.waifuId] || 'Slimes';
+          const waifuName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata', goblina: 'Goblina', lamia: 'Lamia Púrpura', loba: 'Loba da Lua', harpia: 'Harpia Roxa', ciclopesa: 'Ciclopesa', ogra: 'Ogra', ursa: 'Ursa' }[result.waifuId] || 'Donzela Slime';
+          const monsterName = { slime: 'Slimes', monkey: 'Macacos', rat: 'Ratos', goblina: 'Goblins', lamia: 'Cobras', loba: 'Lobos', harpia: 'Águias', ciclopesa: 'Ciclopes', ogra: 'Ogros', ursa: 'Ursos' }[result.waifuId] || 'Slimes';
           if (result.success) {
             const msg = result.gainedLevels && result.gainedLevels.length
               ? `A ${waifuName} alcançou intimidade ${result.level}!`
@@ -2351,8 +2330,8 @@
             this.showGiftFeedback(msg);
           } else if (result.reason === 'max-level') {
             this.showGiftFeedback(`A intimidade da ${waifuName} já está no nível máximo.`);
-          } else if (result.reason === 'locked') {
-            this.showGiftFeedback(`Derrote 20 ${monsterName} para conquistar a ${waifuName}.`);
+          } else if (result.reason === 'not-owned') {
+            this.showGiftFeedback(`Você ainda não tem uma carta da ${waifuName}. Derrote ${monsterName} para conseguir uma.`);
           } else {
             this.showGiftFeedback('Não há Rosas disponíveis para presentear.');
           }
@@ -2543,9 +2522,9 @@
       openWaifuGiftPicker() {
         if (this.giftPicker) this.giftPicker.remove();
         const data = this.api.progress.get('waifus') || {};
+        // V147 — sem desbloqueio: toda carta na casa pode receber presente.
         const cards = Array.isArray(data.house) ? data.house : [];
-        const unlocked = Array.isArray(data.unlocked) ? data.unlocked : [];
-        const owned = cards.filter(card => card && unlocked.includes(card.waifuId || card.waifuType || card.id));
+        const owned = cards.filter(card => card && (card.waifuId || card.waifuType || card.id));
         if (!owned.length) {
           this.showGiftFeedback('Sua casa está vazia. Mande cartas da galeria para a casa antes de presenteá-las.');
           return;
@@ -3026,26 +3005,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           ...oldBestiary,
           monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
         };
-        // V146 — monstro -> waifu: o id desbloqueado é o DA WAIFU (antes era
-        // o do monstro; funcionava só porque os ids coincidiam).
-        const WAIFU_BY_MONSTER = { slime: { id: 'slime', name: 'Donzela Slime' }, monkey: { id: 'monkey', name: 'Donzela Macaca' }, rat: { id: 'rat', name: 'Donzela Rata' }, goblin: { id: 'goblina', name: 'Goblina' }, snake: { id: 'lamia', name: 'Lamia Púrpura' }, wolf: { id: 'loba', name: 'Loba da Lua' }, eagle: { id: 'harpia', name: 'Harpia Roxa' }, cyclops: { id: 'ciclopesa', name: 'Ciclopesa' }, ogre: { id: 'ogra', name: 'Ogra' }, bear: { id: 'ursa', name: 'Ursa' } };
-        const waifuUnlock = WAIFU_BY_MONSTER[event.monsterId];
-        if (waifuUnlock && this.killCounts[event.monsterId] >= 20) {
-          const currentWaifus = this.api.progress.get('waifus') || {};
-          const waifus = currentWaifus && typeof currentWaifus === 'object' ? { ...currentWaifus } : {};
-          const unlocked = Array.isArray(waifus.unlocked) ? waifus.unlocked.slice() : [];
-          if (!unlocked.includes(waifuUnlock.id)) {
-            unlocked.push(waifuUnlock.id);
-            waifus.unlocked = unlocked;
-            if (typeof this.api.progress.updateBatch === 'function') {
-              this.api.progress.updateBatch({ flags, waifus });
-              this.api.events.emit('waifu:unlocked', { waifuId: waifuUnlock.id, name: waifuUnlock.name });
-            } else {
-              this.api.progress.update('flags', flags);
-              this.api.progress.update('waifus', waifus);
-            }
-          } else this.api.progress.update('flags', flags);
-        } else this.api.progress.update('flags', flags);
+        // V147 — sem mecânica de desbloqueio por abates: cartas de waifu são
+        // só por drop, cada uma do monstro da sua espécie. Matar monstros só
+        // alimenta o contador do bestiário.
+        this.api.progress.update('flags', flags);
         this.refresh();
       }
 
@@ -3271,7 +3234,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           gap: '12px 9px', alignItems: 'stretch'
         });
         for (const entry of entries) {
-          const isWaifu = ['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name);
+          const isWaifu = entry.type === 'Waifu';
           const isBossArt = entry.id === 'brutamonte';
           const isMonsterCard = !!entry.fallbackImage;
           const card = this.el('button', {
@@ -3290,11 +3253,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           card.type = 'button';
           if (entry.image) {
             const art = this.el('img', {
-              display: 'block', width: '100%', height: (isWaifu || isBossArt || isMonsterCard) ? 'auto' : '96px',
-              // V112: o retrato do boss usa a mesma proporção das cartas das
-              // waifus (2/3 + contain). Antes era 1/1 + cover: o retrato
-              // vertical era espremido num quadrado e cortava em cima/embaixo.
-              aspectRatio: (isWaifu || isBossArt || isMonsterCard) ? '0.68' : '1 / 1', objectFit: (isWaifu || isBossArt || isMonsterCard) ? 'contain' : 'cover',
+              display: 'block', width: '100%', height: '100%',
+              // V147: a arte preenche a janela 2/3 com contain — nunca renderiza
+              // na proporção do arquivo nem escapa da célula (o print da V146).
+              objectFit: 'contain',
               objectPosition: 'center',
               borderRadius: isWaifu ? '0' : '5px',
               filter: entry.known ? 'none' : 'grayscale(1) brightness(.48)'
@@ -3302,18 +3264,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             art.src = entry.image; art.alt = entry.name || 'Registro desconhecido';
             // V146 — carta do bestiário: se a carta não foi subida, volta para o sprite do monstro.
             if (entry.fallbackImage) art.onerror = () => { if (!art.dataset.fallbackDone && entry.fallbackImage) { art.dataset.fallbackDone = '1'; art.src = entry.fallbackImage; } };
+            // V147: janela 2/3 fixa para toda arte do bestiário (waifu, monstro,
+            // boss). Antes a altura era 'auto' e o aspect-ratio do CSS era
+            // ignorado pelo <img> (a proporção intrínseca do arquivo vencia),
+            // então cada carta ficava com uma altura diferente.
+            const artWrap = this.el('div', { position: 'relative', width: '100%', aspectRatio: '2 / 3', overflow: 'hidden', borderRadius: '0' });
             if (isWaifu) {
-              // V86: moldura + placa de nome REAIS, iguais pras 3 waifus. Antes, Macaca e
-              // Rata so PARECIAM ter moldura e nome porque isso vem desenhado dentro do
-              // JPEG delas; a Slime (PNG transparente) ficava sem nada. A placa cobre o
-              // rotulo embutido do JPEG — que ainda diz "Donzela Rato" errado — com o
-              // nome certo, "Donzela Rata".
-              const artWrap = this.el('div', { position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '0' });
+              // V86: placa de nome REAL. A placa cobre o rótulo embutido do
+              // JPEG — que ainda diz "Donzela Rato" errado — com o nome certo,
+              // "Donzela Rata".
               const plate = this.el('div', { position: 'absolute', left: '0', right: '0', bottom: '0', padding: '16px 2px 5px', background: 'linear-gradient(180deg, rgba(8,8,14,0) 0%, rgba(8,8,14,.95) 45%)', color: '#f4e8c8', font: 'bold 12px/1.2 Georgia,serif', textAlign: 'center', textShadow: '0 1px 3px #000' });
               plate.textContent = entry.name;
               artWrap.append(art, plate);
-              card.appendChild(artWrap);
-            } else card.appendChild(art);
+            } else artWrap.appendChild(art);
+            card.appendChild(artWrap);
           }
           if (!isWaifu) {
             const name = this.el('div', {
@@ -3409,7 +3373,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         titlePlate.textContent = entry.name || 'Waifu';
         // V91: waifu ja tem a barra de nome desenhada na arte — a placa duplicaria.
         // Monstro nao tem nome na arte: mantem a placa.
-        if (['Donzela Slime', 'Donzela Macaca', 'Donzela Rata'].includes(entry.name)) artFrame.appendChild(art);
+        if (entry.type === 'Waifu') artFrame.appendChild(art);
         else artFrame.append(art, titlePlate);
 
         const profileMeta = this.el('div', {
@@ -3564,6 +3528,30 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           cyclops: { icon: '👁️', home: 'Terras Baldias', description: 'Um ciclope de um olho só, com uma clava maior que você. Forte, teimoso e adora esmagar.' },
           ogre: { icon: '💀', home: 'Terras Baldias', description: 'Um ogro cinzento gigante. O monstro mais forte destas terras — fuja ou lute com tudo.' }
         };
+        // V147 — entradas das waifus a partir de data/waifus.json: as 10 espécies
+        // que caem por drop aparecem no bestiário. "Conhecida" = tem a carta da
+        // espécie, na galeria ou na casa. Antes eram só 3 fixas no código.
+        const WAIFU_ORDER = ['slime', 'monkey', 'rat', 'goblina', 'lamia', 'loba', 'harpia', 'ciclopesa', 'ogra', 'ursa'];
+        const WAIFU_MONSTER = { slime: 'slime', monkey: 'monkey', rat: 'rat', goblina: 'goblin', lamia: 'snake', loba: 'wolf', harpia: 'eagle', ciclopesa: 'cyclops', ogra: 'ogre', ursa: 'bear' };
+        const WAIFU_DEFS = (root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {};
+        const waifusProgress = this.api.progress.get('waifus') || {};
+        const ownedWaifuIds = new Set([...(waifusProgress.cards || []), ...(waifusProgress.house || [])].map(c => String(c && (c.waifuId || c.waifuType || c.id))));
+        const waifuArt = id => (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[id] || (id === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : id === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
+        const waifuEntries = WAIFU_ORDER.map(waifuId => {
+          const def = WAIFU_DEFS[waifuId] || {};
+          const skill = def.activeSkill || null;
+          const cooldown = skill && skill.cooldownMs ? ((skill.cooldownMs / 1000) + 's') : ((String((skill && skill.meta) || '').match(/Recarga\s*(\d+\s*s)/) || [])[1] || '');
+          return {
+            id: waifuId, name: def.name || waifuId, icon: '♥',
+            image: waifuArt(waifuId),
+            description: def.description || 'Descrição ainda não disponível.',
+            activeSkill: skill ? { icon: skill.icon || '', name: skill.name || '', damage: skill.damage || null, cooldown, description: skill.description || skill.desc || '' } : null,
+            bonuses: Array.isArray(def.bonuses) ? def.bonuses.slice() : [],
+            known: ownedWaifuIds.has(waifuId),
+            detail: true, type: 'Waifu', species: def.name || waifuId,
+            home: (BESTIARY_META[WAIFU_MONSTER[waifuId]] || {}).home || 'Este mundo'
+          };
+        });
         const configs = {
           monsters: {
             heading: 'MONSTROS',
@@ -3598,35 +3586,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             }] },
           waifus: {
             heading: 'WAIFUS',
-            entries: [
-              {
-                id: 'slime', name: 'Donzela Slime', icon: '♥',
-                image: root.CONQUISTADOR_WAIFU_ART || '',
-                description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.',
-                activeSkill: { icon: '🫧', name: 'Gosma Ácida', damage: 12, cooldown: '5s', description: 'Causa 12 + 1,5 de dano por nível do jogador.' },
-                bonuses: ['Pele de Gosma — Defesa', 'Corpo de Slime — Vida máxima'],
-                known: ((this.api.progress.get('waifus') || {}).cards || []).some(c => String(c && (c.waifuId || c.waifuType || c.id)) === 'slime'),
-                qualityColor: '#ff2e88', detail: true
-              },
-              {
-                id: 'monkey', name: 'Donzela Macaca', icon: '♥',
-                image: root.CONQUISTADOR_WAIFU_ART_MONKEY || '',
-                description: 'Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.',
-                activeSkill: { icon: '🔔', name: 'Chuva de Sinos', damage: null, cooldown: '10s', description: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' },
-                bonuses: ['Agilidade da Macaca — +0,2 Velocidade de ataque', 'Sino Perfurante — +0,5 Penetração'],
-                known: ((this.api.progress.get('waifus') || {}).cards || []).some(c => String(c && (c.waifuId || c.waifuType || c.id)) === 'monkey'),
-                qualityColor: '#e6b84f', detail: true
-              },
-              {
-                id: 'rat', name: 'Donzela Rata', icon: '♥',
-                image: root.CONQUISTADOR_WAIFU_ART_RAT || '',
-                description: 'Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.',
-                activeSkill: { icon: '🧼', name: 'Ensaboado', damage: null, cooldown: '10s', description: 'Imune a dano por 3 segundos.' },
-                bonuses: ['Patas Ligeiras — +0,1 Velocidade de movimento', 'Corpo de Rata — +10 HP máximo'],
-                known: ((this.api.progress.get('waifus') || {}).cards || []).some(c => String(c && (c.waifuId || c.waifuType || c.id)) === 'rat'),
-                qualityColor: '#b16ce2', detail: true
-              }
-            ]
+            entries: waifuEntries
           },
           titans: { heading: 'TITANS', entries: [] }
         };
@@ -3821,9 +3781,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         if (!this.active || !event) return false;
         const definition = this.getWaifuDefinition(event.waifuId);
         if (!definition || event.itemId !== definition.gift) return false;
+        // V147 — sem desbloqueio: o presente exige ter uma carta da espécie (drop).
         const currentWaifuData = this.api.progress.get('waifus') || {};
-        if (!Array.isArray(currentWaifuData.unlocked) || !currentWaifuData.unlocked.includes(definition.id)) {
-          this.api.events.emit('waifu:gift-result', { success: false, reason: 'locked', waifuId: definition.id });
+        const ownedForGift = [...(Array.isArray(currentWaifuData.cards) ? currentWaifuData.cards : []), ...(Array.isArray(currentWaifuData.house) ? currentWaifuData.house : [])];
+        if (!ownedForGift.some(card => String(card && (card.waifuId || card.waifuType || card.id)) === definition.id)) {
+          this.api.events.emit('waifu:gift-result', { success: false, reason: 'not-owned', waifuId: definition.id });
           return false;
         }
         const currentItems = this.api.progress.get('items');
@@ -4065,7 +4027,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           ((SPECIES_ORDER[a.speciesId] ?? 0) - (SPECIES_ORDER[b.speciesId] ?? 0)));
         for (const group of sortedGroups) {
           const quality = QUALITY.find(item => item.id === group.qualityId) || QUALITY[0];
-          const speciesName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[group.speciesId] || group.speciesId;
+          const speciesName = (WAIFU_DEFINITIONS[group.speciesId] || {}).name || group.speciesId;
           // V88: carta pequena e plana. Tres filhos, zero estilo inline:
           // arte, selo de quantidade e rodape. A qualidade viaja em --q.
           const stack = this.document.createElement('button');
@@ -4101,7 +4063,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const speciesId = parts[0] || 'slime';
         const level = Math.max(1, Math.floor(Number(parts[1]) || 1));
         const quality = QUALITY.find(item => item.id === parts[2]) || QUALITY[0];
-        const speciesName = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' }[speciesId] || speciesId;
+        const speciesName = (WAIFU_DEFINITIONS[speciesId] || {}).name || speciesId;
         const cardsData = this.api.progress.get('waifus') || {};
         const cards = Array.isArray(cardsData.cards) ? cardsData.cards : [];
         const matchingCards = cards.filter(card => {
@@ -4116,6 +4078,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           slime: { description: 'Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.', bonuses: ['Pele de Gosma — +1 Defesa', 'Corpo de Slime — +10 HP máximo'] },
           monkey: { description: 'Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.', bonuses: ['Agilidade da Macaca — +0,2 Velocidade de ataque', 'Sino Perfurante — +0,5 Penetração'] },
           rat: { description: 'Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.', bonuses: ['Patas Ligeiras — +0,1 Velocidade de movimento', 'Corpo de Rata — +10 HP máximo'] }
+        };
+        // V147: descrição/bônus das 10 waifus vindos de data/waifus.json.
+        for (const [id, def] of Object.entries(WAIFU_DEFINITIONS)) {
+          if (!WAIFU_META[id]) WAIFU_META[id] = {
+            description: def.description || 'Descrição ainda não disponível.',
+            bonuses: Array.isArray(def.bonuses) && def.bonuses.length ? def.bonuses : (def.passives || []).map(p => `${p.name} — ${p.description}`)
+          };
         };
         const description = (WAIFU_META[speciesId] || {}).description || 'Descrição ainda não disponível.';
         const bonuses = (WAIFU_META[speciesId] || {}).bonuses || [];
@@ -4274,6 +4243,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           slime: { icon: '🫧', name: 'Gosma Ácida', meta: '12 de dano  ·  Recarga 5s', desc: 'Causa 12 de dano fixo.' },
           monkey: { icon: '🔔', name: 'Chuva de Sinos', meta: 'Recarga 10s', desc: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' },
           rat: { icon: '🧼', name: 'Ensaboado', meta: 'Recarga 10s', desc: 'Imune a dano por 3 segundos.' }
+        };
+        // V147: skills das 10 waifus vindas de data/waifus.json.
+        for (const [id, def] of Object.entries(WAIFU_DEFINITIONS)) {
+          if (!WAIFU_SKILLS[id] && def.activeSkill) WAIFU_SKILLS[id] = { icon: def.activeSkill.icon || '✦', name: def.activeSkill.name, meta: def.activeSkill.meta || '', desc: def.activeSkill.desc || def.activeSkill.description || '' };
         };
         if (WAIFU_SKILLS[speciesId]) {
           const skillLabel = this.el('div', { margin: '22px 0 10px', color: '#e7c987', font: 'bold 15px Georgia,serif', letterSpacing: '.08em' });
@@ -7362,6 +7335,9 @@ class WorldScene extends Phaser.Scene {
             const MAX_SLOTS = 10;
             const QUALITY_MAP = { plebeia: { name: 'Plebeia', color: '#a9a9a9' }, dama: { name: 'Dama', color: '#55a8e8' }, condessa: { name: 'Condessa', color: '#b16ce2' }, duquesa: { name: 'Duquesa', color: '#e6b84f' }, rainha: { name: 'Rainha', color: '#ff2e88' } };
             const SPECIES = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' };
+            // V147: nomes das 10 waifus vindos de data/waifus.json (antes só 3
+            // fixas e o resto caía no id cru, ex. 'harpia').
+            for (const [id, def] of Object.entries((root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {})) { if (def && def.name) SPECIES[id] = def.name; };
             const ART = id => id === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : id === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
 
     
@@ -7370,10 +7346,18 @@ class WorldScene extends Phaser.Scene {
               monkey: { description: 'Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.', bonuses: ['Agilidade da Macaca — +0,2 Velocidade de ataque', 'Sino Perfurante — +0,5 Penetração'] },
               rat: { description: 'Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.', bonuses: ['Patas Ligeiras — +0,1 Velocidade de movimento', 'Corpo de Rata — +10 HP máximo'] }
             };
+            // V147: descrição/bônus das 10 waifus vindos de data/waifus.json.
+            for (const [id, def] of Object.entries((root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {})) {
+              if (def && !WAIFU_META[id]) WAIFU_META[id] = { description: def.description || 'Descrição ainda não disponível.', bonuses: Array.isArray(def.bonuses) ? def.bonuses : [] };
+            };
             const WAIFU_SKILLS = {
               slime: { icon: '🫧', name: 'Gosma Ácida', meta: '12 de dano  ·  Recarga 5s', desc: 'Causa 12 de dano fixo.' },
               monkey: { icon: '🔔', name: 'Chuva de Sinos', meta: 'Recarga 10s', desc: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' },
               rat: { icon: '🧼', name: 'Ensaboado', meta: 'Recarga 10s', desc: 'Imune a dano por 3 segundos.' }
+            };
+            // V147: skills das 10 waifus vindas de data/waifus.json.
+            for (const [id, def] of Object.entries((root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {})) {
+              if (def && def.activeSkill && !WAIFU_SKILLS[id]) WAIFU_SKILLS[id] = { icon: def.activeSkill.icon || '✦', name: def.activeSkill.name, meta: def.activeSkill.meta || '', desc: def.activeSkill.desc || def.activeSkill.description || '' };
             };
             const getData = () => api.progress.get('waifus') || {};
             const getHouse = () => { const d = getData(); return Array.isArray(d.house) ? d.house : []; };
@@ -10508,7 +10492,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V146';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V147';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -10653,5 +10637,5 @@ class WorldScene extends Phaser.Scene {
 })();
 </script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
-<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
+</body>
 </html>
