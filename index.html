@@ -5809,7 +5809,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         if (!this.textures.exists('blank-tile')) { const t = this.textures.createCanvas('blank-tile', TILE_SIZE, TILE_SIZE); const c = t.getContext(); c.fillStyle = '#ffffff'; c.fillRect(0, 0, TILE_SIZE, TILE_SIZE); t.refresh(); }
         const data = core.toCollisionLayer(this.layout.collision);
         const map = this.make.tilemap({ data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
-        const tile = map.addTileImage('blank', 'blank-tile', TILE_SIZE, TILE_SIZE, 0, 0);
+        const tile = map.addTilesetImage('blank', 'blank-tile', TILE_SIZE, TILE_SIZE, 0, 0);
         const layer = map.createLayer(0, tile, 0, 0);
         layer.setAlpha(0); layer.setDepth(10000);
         map.setCollision(1, true, true, layer, true);
@@ -8368,7 +8368,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
         this.ensureBlankTile();
         const data = core.toCollisionLayer(blocked);
         const map = this.make.tilemap({ data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, insertNull: true });
-        const tile = map.addTileImage('blank', 'blank-tile', TILE_SIZE, TILE_SIZE, 0, 0);
+        const tile = map.addTilesetImage('blank', 'blank-tile', TILE_SIZE, TILE_SIZE, 0, 0);
         const layer = map.createLayer(0, tile, 0, 0);
         layer.setDepth(depth); layer.setAlpha(0);
         map.setCollision(1, true, true, layer, true);
