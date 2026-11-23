@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "source": "V138 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE",
+  "monsters": {
+    "slime": {
+      "id": "slime",
+      "name": "Slime",
+      "hp": 30,
+      "damage": 5,
+      "defense": 0,
+      "xp": 12,
+      "speed": 50,
+      "dropId": "slime_gel",
+      "displayWidth": 30,
+      "displayHeight": 24,
+      "sprite": "assets/monsters/slime.png",
+      "textureKey": "conquistador-monster-slime-v2"
+    },
+    "monkey": {
+      "id": "monkey",
+      "name": "Macaco",
+      "hp": 45,
+      "damage": 5,
+      "defense": 1,
+      "xp": 25,
+      "speed": 65,
+      "attackSpeed": 0.8,
+      "dropId": "monkey_fur",
+      "displayWidth": 30,
+      "displayHeight": 32,
+      "sprite": "assets/monsters/monkey.png",
+      "textureKey": "conquistador-monster-monkey-v2"
+    },
+    "rat": {
+      "id": "rat",
+      "name": "Rato",
+      "hp": 20,
+      "damage": 4,
+      "defense": 0,
+      "xp": 8,
+      "speed": 75,
+      "dropId": "rat_tail",
+      "displayWidth": 32,
+      "displayHeight": 22,
+      "sprite": "assets/monsters/rat.png",
+      "textureKey": "conquistador-monster-rat-v2"
+    }
+  },
+  "items": {
+    "slime_gel": {
+      "id": "slime_gel",
+      "name": "Gel de Slime",
+      "category": "material"
+    },
+    "monkey_fur": {
+      "id": "monkey_fur",
+      "name": "Pelo de Macaco",
+      "category": "material"
+    },
+    "rat_tail": {
+      "id": "rat_tail",
+      "name": "Cauda de Rato",
+      "category": "material"
+    },
+    "rose": {
+      "id": "rose",
+      "name": "Rosa",
+      "category": "presente"
+    }
+  },
+  "levelCurve": {
+    "baseXp": 60,
+    "exponent": 1.25
+  }
+}

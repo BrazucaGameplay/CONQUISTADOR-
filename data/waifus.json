@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "source": "V138 WAIFU_DEFINITIONS + WAIFU_META + WAIFU_SKILLS + QUALITY",
+  "qualities": [
+    {
+      "id": "plebeia",
+      "name": "Plebeia",
+      "chance": 0.9,
+      "color": "#a9a9a9"
+    },
+    {
+      "id": "dama",
+      "name": "Dama",
+      "chance": 0.04,
+      "color": "#55a8e8"
+    },
+    {
+      "id": "condessa",
+      "name": "Condessa",
+      "chance": 0.03,
+      "color": "#b16ce2"
+    },
+    {
+      "id": "duquesa",
+      "name": "Duquesa",
+      "chance": 0.02,
+      "color": "#e6b84f"
+    },
+    {
+      "id": "rainha",
+      "name": "Rainha",
+      "chance": 0.01,
+      "color": "#ff2e88"
+    }
+  ],
+  "waifus": {
+    "slime": {
+      "id": "slime",
+      "name": "Donzela Slime",
+      "gift": "rose",
+      "xpPerGift": 10,
+      "description": "Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.",
+      "bonuses": [
+        "Pele de Gosma — +1 Defesa",
+        "Corpo de Slime — +10 HP máximo"
+      ],
+      "activeSkill": {
+        "id": "acid_slime",
+        "name": "Gosma Ácida",
+        "damage": 12,
+        "description": "Causa 12 + 1,5 de dano por nível do jogador.",
+        "icon": "🫧",
+        "meta": "12 de dano  ·  Recarga 5s",
+        "desc": "Causa 12 de dano fixo."
+      },
+      "passives": [
+        {
+          "id": "slime_skin",
+          "name": "Pele de Gosma",
+          "description": "+1 Defesa",
+          "stats": {
+            "defense": 1
+          }
+        },
+        {
+          "id": "slime_body",
+          "name": "Corpo de Slime",
+          "description": "+10 HP máximo",
+          "stats": {
+            "maxHp": 10
+          }
+        }
+      ]
+    },
+    "monkey": {
+      "id": "monkey",
+      "name": "Donzela Macaca",
+      "gift": "rose",
+      "xpPerGift": 10,
+      "description": "Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.",
+      "bonuses": [
+        "Agilidade da Macaca — +0,2 Velocidade de ataque",
+        "Sino Perfurante — +0,5 Penetração"
+      ],
+      "activeSkill": {
+        "id": "monkey_ranged",
+        "name": "Chuva de Sinos",
+        "durationMs": 5000,
+        "cooldownMs": 10000,
+        "multiplier": 1.1,
+        "description": "Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.",
+        "icon": "🔔",
+        "meta": "Recarga 10s",
+        "desc": "Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."
+      },
+      "passives": [
+        {
+          "id": "monkey_swift",
+          "name": "Agilidade da Macaca",
+          "description": "+0,2 Velocidade de ataque",
+          "stats": {
+            "attackSpeed": 0.2
+          }
+        },
+        {
+          "id": "monkey_pierce",
+          "name": "Sino Perfurante",
+          "description": "+0,5 Penetração",
+          "stats": {
+            "penetration": 0.5
+          }
+        }
+      ]
+    },
+    "rat": {
+      "id": "rat",
+      "name": "Donzela Rata",
+      "gift": "rose",
+      "xpPerGift": 10,
+      "description": "Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.",
+      "bonuses": [
+        "Patas Ligeiras — +0,1 Velocidade de movimento",
+        "Corpo de Rata — +10 HP máximo"
+      ],
+      "activeSkill": {
+        "id": "rat_soap",
+        "name": "Ensaboado",
+        "durationMs": 3000,
+        "cooldownMs": 10000,
+        "description": "Imune a dano por 3 segundos.",
+        "icon": "🧼",
+        "meta": "Recarga 10s",
+        "desc": "Imune a dano por 3 segundos."
+      },
+      "passives": [
+        {
+          "id": "rat_quick",
+          "name": "Patas Ligeiras",
+          "description": "+0,1 Velocidade de movimento",
+          "stats": {
+            "moveSpeed": 0.1
+          }
+        },
+        {
+          "id": "rat_body",
+          "name": "Corpo de Rata",
+          "description": "+10 HP máximo",
+          "stats": {
+            "maxHp": 10
+          }
+        }
+      ]
+    }
+  }
+}
