@@ -1,10 +1,10 @@
-// CONQUISTADOR DE WAIFU'S - service worker V144
-// V140 FIX do carregamento infinito (mantido na V144): antes era cache-first para TUDO.
-// O navegador continuava servindo o index.html velho do cache e o SW
-// devolvia index.html no lugar do JSON do mapa-base externo.
-// Agora: HTML/SW = network-first, assets locais = cache-first,
-// URLs externas (jsDelivr / raw.githubusercontent) = rede direta, sem SW.
-const CACHE = 'conquistador-v144';
+// CONQUISTADOR DE WAIFU'S - service worker V145
+// V145: cache novo (v145) — limpa o cache v137/v144 e força baixar as artes
+// novas de slime/macaco/rato (mesmos caminhos, sprites novos) + os 33 frames
+// dos monstros e os 7 retratos das waifus novas.
+// HTML/SW = network-first, assets locais = cache-first,
+// URLs externas = rede direta, sem SW.
+const CACHE = 'conquistador-v145';
 const FILES = [
   './',
   './index.html',
@@ -14,9 +14,57 @@ const FILES = [
   './assets/monsters/slime.png',
   './assets/monsters/monkey.png',
   './assets/monsters/rat.png',
+  './assets/monsters/snake.png',
+  './assets/monsters/wolf.png',
+  './assets/monsters/eagle.png',
+  './assets/monsters/spider.png',
+  './assets/monsters/bear.png',
+  './assets/monsters/goblin.png',
+  './assets/monsters/orc.png',
+  './assets/monsters/ogre.png',
+  './assets/monsters/slime_walk.png',
+  './assets/monsters/slime_attack.png',
+  './assets/monsters/slime_death.png',
+  './assets/monsters/monkey_walk.png',
+  './assets/monsters/monkey_attack.png',
+  './assets/monsters/monkey_death.png',
+  './assets/monsters/rat_walk.png',
+  './assets/monsters/rat_attack.png',
+  './assets/monsters/rat_death.png',
+  './assets/monsters/snake_walk.png',
+  './assets/monsters/snake_attack.png',
+  './assets/monsters/snake_death.png',
+  './assets/monsters/wolf_walk.png',
+  './assets/monsters/wolf_attack.png',
+  './assets/monsters/wolf_death.png',
+  './assets/monsters/eagle_walk.png',
+  './assets/monsters/eagle_attack.png',
+  './assets/monsters/eagle_death.png',
+  './assets/monsters/spider_walk.png',
+  './assets/monsters/spider_attack.png',
+  './assets/monsters/spider_death.png',
+  './assets/monsters/bear_walk.png',
+  './assets/monsters/bear_attack.png',
+  './assets/monsters/bear_death.png',
+  './assets/monsters/goblin_walk.png',
+  './assets/monsters/goblin_attack.png',
+  './assets/monsters/goblin_death.png',
+  './assets/monsters/orc_walk.png',
+  './assets/monsters/orc_attack.png',
+  './assets/monsters/orc_death.png',
+  './assets/monsters/ogre_walk.png',
+  './assets/monsters/ogre_attack.png',
+  './assets/monsters/ogre_death.png',
   './assets/waifu/slime.jpg',
   './assets/waifu/monkey.jpg',
   './assets/waifu/rat.jpg',
+  './assets/waifus/goblin.png',
+  './assets/waifus/lamia.png',
+  './assets/waifus/loba.png',
+  './assets/waifus/harpia.png',
+  './assets/waifus/orc.png',
+  './assets/waifus/orc_carmesim.png',
+  './assets/waifus/orc_palida.png',
   './assets/boss/art.jpg',
   './assets/boss/sprite.png',
   './assets/world/mountain.png',
@@ -26,18 +74,6 @@ const FILES = [
   './assets/ground/snow-1.png',
   './assets/ground/snow-2.png',
   './assets/ground/snow-3.png',
-  './assets/ground/snow-4-neve-azulada.png',
-  './assets/ground/snow-5-gelo-rachado.png',
-  './assets/ground/snow-6-geada-escura.png',
-  './assets/ground/snow-7-neve-pocas-gelo.png',
-  './assets/ground/snow-8-branca.png',
-  './assets/trees/frozen-pine-2.png',
-  './assets/world/ice-peak-2.png',
-  './assets/world/ice-crystal.png',
-  './assets/world/ice-rock.png',
-  './assets/world/snow-bush.png',
-  './assets/world/frozen-stump.png',
-  './assets/world/bridge.png',
   './assets/ground/mountain-1.png',
   './assets/ground/mountain-2.png',
   './assets/ground/mountain-3.png',
@@ -51,8 +87,6 @@ const FILES = [
   './assets/ground/water.jpg',
   './assets/trees/leaf.png',
   './assets/trees/pine-big.png',
-  './data/monsters.json',
-  './data/waifus.json',
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => Promise.all(FILES.map(url => cache.add(url).catch(() => null)))).then(() => self.skipWaiting()));
@@ -63,10 +97,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  // Externo: nao intercepta — deixa o fetch normal (com timeout no jogo).
-  // Antes o SW devolvia index.html no lugar do JSON e o preload travava.
   if (url.origin !== location.origin) return;
-  // HTML / SW: network-first — senao o navegador nunca ve a versao nova.
   const isHTML = url.pathname.endsWith('/') || url.pathname.endsWith('index.html') || url.pathname.endsWith('sw.js');
   if (isHTML) {
     event.respondWith(fetch(event.request).then(response => {
@@ -75,12 +106,11 @@ self.addEventListener('fetch', event => {
     }).catch(() => caches.match(event.request).then(c => c || caches.match('./index.html'))));
     return;
   }
-  // Assets locais: cache-first.
   event.respondWith(caches.match(event.request).then(cached => {
     if (cached) return cached;
     return fetch(event.request).then(response => {
       if (response && response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
       return response;
-    }).catch(() => caches.match('./index.html'));
+    });
   }));
 });

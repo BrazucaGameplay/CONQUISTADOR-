@@ -2,34 +2,13 @@
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
-<head><style>
-@font-face {
-  font-family: "Optimistic";
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Optimistic Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
-}
-:where(html) {
-  font-family: "Optimistic", system-ui, sans-serif;
-}
-:where(code, pre, kbd, samp) {
-  font-family: "Optimistic Mono", ui-monospace, monospace;
-}
-</style>
+<head>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V144</title>
+<title>CONQUISTADOR DE WAIFU'S — V145</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -48,7 +27,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V144</div>
+  <div id="version-badge">V145</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -61,8 +40,8 @@
     // embutidos no build para o jogo não depender de fetch. Edite os JSONs
     // em data/ e regenere — nunca edite este bloco à mão.
     root.CONQUISTADOR_DATA = Object.freeze({
-      monsters: {"version":1,"source":"V140 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":30,"displayHeight":24,"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v2"},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":30,"displayHeight":32,"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v2"},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":32,"displayHeight":22,"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v2"}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
-      waifus: {"version":1,"source":"V140 WAIFU_DEFINITIONS + WAIFU_META + WAIFU_SKILLS + QUALITY","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]}}}
+      monsters: {"version":1,"source":"V145 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":30,"displayHeight":24,"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v3","frames":{"walk":{"sprite":"assets/monsters/slime_walk.png","textureKey":"conquistador-monster-slime-v3-walk"},"attack":{"sprite":"assets/monsters/slime_attack.png","textureKey":"conquistador-monster-slime-v3-attack"},"death":{"sprite":"assets/monsters/slime_death.png","textureKey":"conquistador-monster-slime-v3-death"}}},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":30,"displayHeight":32,"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v3","frames":{"walk":{"sprite":"assets/monsters/monkey_walk.png","textureKey":"conquistador-monster-monkey-v3-walk"},"attack":{"sprite":"assets/monsters/monkey_attack.png","textureKey":"conquistador-monster-monkey-v3-attack"},"death":{"sprite":"assets/monsters/monkey_death.png","textureKey":"conquistador-monster-monkey-v3-death"}}},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":32,"displayHeight":22,"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v3","frames":{"walk":{"sprite":"assets/monsters/rat_walk.png","textureKey":"conquistador-monster-rat-v3-walk"},"attack":{"sprite":"assets/monsters/rat_attack.png","textureKey":"conquistador-monster-rat-v3-attack"},"death":{"sprite":"assets/monsters/rat_death.png","textureKey":"conquistador-monster-rat-v3-death"}}},"snake":{"id":"snake","name":"Cobra","hp":40,"damage":7,"defense":0,"xp":22,"speed":70,"dropId":"snake_scale","displayWidth":34,"displayHeight":22,"sprite":"assets/monsters/snake.png","textureKey":"conquistador-monster-snake-v3","frames":{"walk":{"sprite":"assets/monsters/snake_walk.png","textureKey":"conquistador-monster-snake-v3-walk"},"attack":{"sprite":"assets/monsters/snake_attack.png","textureKey":"conquistador-monster-snake-v3-attack"},"death":{"sprite":"assets/monsters/snake_death.png","textureKey":"conquistador-monster-snake-v3-death"}}},"wolf":{"id":"wolf","name":"Lobo","hp":60,"damage":8,"defense":1,"xp":35,"speed":80,"dropId":"wolf_fang","displayWidth":36,"displayHeight":28,"sprite":"assets/monsters/wolf.png","textureKey":"conquistador-monster-wolf-v3","frames":{"walk":{"sprite":"assets/monsters/wolf_walk.png","textureKey":"conquistador-monster-wolf-v3-walk"},"attack":{"sprite":"assets/monsters/wolf_attack.png","textureKey":"conquistador-monster-wolf-v3-attack"},"death":{"sprite":"assets/monsters/wolf_death.png","textureKey":"conquistador-monster-wolf-v3-death"}}},"eagle":{"id":"eagle","name":"Águia","hp":50,"damage":9,"defense":0,"xp":32,"speed":90,"dropId":"eagle_feather","displayWidth":34,"displayHeight":26,"sprite":"assets/monsters/eagle.png","textureKey":"conquistador-monster-eagle-v3","frames":{"walk":{"sprite":"assets/monsters/eagle_walk.png","textureKey":"conquistador-monster-eagle-v3-walk"},"attack":{"sprite":"assets/monsters/eagle_attack.png","textureKey":"conquistador-monster-eagle-v3-attack"},"death":{"sprite":"assets/monsters/eagle_death.png","textureKey":"conquistador-monster-eagle-v3-death"}}},"spider":{"id":"spider","name":"Aranha","hp":55,"damage":8,"defense":1,"xp":30,"speed":70,"dropId":"spider_silk","displayWidth":36,"displayHeight":28,"sprite":"assets/monsters/spider.png","textureKey":"conquistador-monster-spider-v3","frames":{"walk":{"sprite":"assets/monsters/spider_walk.png","textureKey":"conquistador-monster-spider-v3-walk"},"attack":{"sprite":"assets/monsters/spider_attack.png","textureKey":"conquistador-monster-spider-v3-attack"},"death":{"sprite":"assets/monsters/spider_death.png","textureKey":"conquistador-monster-spider-v3-death"}}},"bear":{"id":"bear","name":"Urso","hp":110,"damage":12,"defense":2,"xp":55,"speed":45,"dropId":"bear_claw","displayWidth":40,"displayHeight":34,"sprite":"assets/monsters/bear.png","textureKey":"conquistador-monster-bear-v3","frames":{"walk":{"sprite":"assets/monsters/bear_walk.png","textureKey":"conquistador-monster-bear-v3-walk"},"attack":{"sprite":"assets/monsters/bear_attack.png","textureKey":"conquistador-monster-bear-v3-attack"},"death":{"sprite":"assets/monsters/bear_death.png","textureKey":"conquistador-monster-bear-v3-death"}}},"goblin":{"id":"goblin","name":"Goblin","hp":70,"damage":10,"defense":1,"xp":40,"speed":70,"dropId":"goblin_ear","displayWidth":32,"displayHeight":34,"sprite":"assets/monsters/goblin.png","textureKey":"conquistador-monster-goblin-v3","frames":{"walk":{"sprite":"assets/monsters/goblin_walk.png","textureKey":"conquistador-monster-goblin-v3-walk"},"attack":{"sprite":"assets/monsters/goblin_attack.png","textureKey":"conquistador-monster-goblin-v3-attack"},"death":{"sprite":"assets/monsters/goblin_death.png","textureKey":"conquistador-monster-goblin-v3-death"}}},"orc":{"id":"orc","name":"Orc","hp":130,"damage":14,"defense":2,"xp":70,"speed":55,"dropId":"orc_tusk","displayWidth":38,"displayHeight":38,"sprite":"assets/monsters/orc.png","textureKey":"conquistador-monster-orc-v3","frames":{"walk":{"sprite":"assets/monsters/orc_walk.png","textureKey":"conquistador-monster-orc-v3-walk"},"attack":{"sprite":"assets/monsters/orc_attack.png","textureKey":"conquistador-monster-orc-v3-attack"},"death":{"sprite":"assets/monsters/orc_death.png","textureKey":"conquistador-monster-orc-v3-death"}}},"ogre":{"id":"ogre","name":"Ogro","hp":180,"damage":18,"defense":3,"xp":100,"speed":40,"dropId":"ogre_bone","displayWidth":44,"displayHeight":42,"sprite":"assets/monsters/ogre.png","textureKey":"conquistador-monster-ogre-v3","frames":{"walk":{"sprite":"assets/monsters/ogre_walk.png","textureKey":"conquistador-monster-ogre-v3-walk"},"attack":{"sprite":"assets/monsters/ogre_attack.png","textureKey":"conquistador-monster-ogre-v3-attack"},"death":{"sprite":"assets/monsters/ogre_death.png","textureKey":"conquistador-monster-ogre-v3-death"}}}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"},"snake_scale":{"id":"snake_scale","name":"Escama de Cobra","category":"material"},"wolf_fang":{"id":"wolf_fang","name":"Presa de Lobo","category":"material"},"eagle_feather":{"id":"eagle_feather","name":"Pena de Águia","category":"material"},"spider_silk":{"id":"spider_silk","name":"Seda de Aranha","category":"material"},"bear_claw":{"id":"bear_claw","name":"Garra de Urso","category":"material"},"goblin_ear":{"id":"goblin_ear","name":"Orelha de Goblin","category":"material"},"orc_tusk":{"id":"orc_tusk","name":"Presa de Orc","category":"material"},"ogre_bone":{"id":"ogre_bone","name":"Osso de Ogro","category":"material"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
+      waifus: {"version":1,"source":"V145 WAIFUS","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]},"goblin":{"id":"goblin","name":"Donzela Goblin","gift":"rose","xpPerGift":10,"description":"Uma goblin esperta que trocou a espada pela sua companhia. Pequena, rápida e sempre com um plano.","bonuses":["Lâmina Rápida — +0,15 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"portrait":"assets/waifus/goblin.png","activeSkill":{"id":"goblin_dagger","name":"Punhalada","damage":16,"scalePerLevel":1.2,"cooldownMs":8000,"description":"Causa 16 + 1,2 de dano por nível do jogador.","icon":"🗡️","meta":"16 de dano · Recarga 8s","desc":"Causa 16 de dano."},"passives":[{"id":"goblin_swift","name":"Lâmina Rápida","description":"+0,15 Velocidade de ataque","stats":{"attackSpeed":0.15}},{"id":"goblin_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"lamia":{"id":"lamia","name":"Lamia Púrpura","gift":"rose","xpPerGift":10,"description":"Uma lamia das cavernas roxas, de escamas cintilantes e olhar hipnótico. Enrola-se ao seu lado como se fosse seu trono.","bonuses":["Escama Dura — +1 Defesa","Corpo de Serpente — +0,1 Velocidade de movimento"],"portrait":"assets/waifus/lamia.png","activeSkill":{"id":"lamia_bite","name":"Mordida Venenosa","damage":10,"scalePerLevel":1.0,"cooldownMs":6000,"description":"Causa 10 + 1 de dano por nível do jogador.","icon":"🐍","meta":"10 de dano · Recarga 6s","desc":"Causa 10 de dano."},"passives":[{"id":"lamia_scale","name":"Escama Dura","description":"+1 Defesa","stats":{"defense":1}},{"id":"lamia_body","name":"Corpo de Serpente","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}}]},"loba":{"id":"loba","name":"Loba da Lua","gift":"rose","xpPerGift":10,"description":"Uma loba de olhar prateado que uiva para a lua cheia. Feroz com os monstros, mansa com você.","bonuses":["Uivo Veloz — +0,2 Velocidade de ataque","Pele de Loba — +5 HP máximo"],"portrait":"assets/waifus/loba.png","activeSkill":{"id":"loba_howl","name":"Uivo da Matilha","durationMs":4000,"cooldownMs":12000,"multiplier":1.15,"description":"Por 4 segundos, o ataque básico vira à distância e causa 1,15x do dano de ataque.","icon":"🌕","meta":"Recarga 12s","desc":"Por 4 segundos, o ataque básico vira à distância e causa 1,15x do dano de ataque."},"passives":[{"id":"loba_swift","name":"Uivo Veloz","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"loba_body","name":"Pele de Loba","description":"+5 HP máximo","stats":{"maxHp":5}}]},"harpia":{"id":"harpia","name":"Harpia Roxa","gift":"rose","xpPerGift":10,"description":"Uma harpia de penas roxas que desceu do céu para caçar ao seu lado. Voa alto, ataca rápido e nunca erra o alvo.","bonuses":["Asas Ligeiras — +0,15 Velocidade de movimento","Garra Afiada — +0,5 Penetração"],"portrait":"assets/waifus/harpia.png","activeSkill":{"id":"harpia_dive","name":"Rasante","damage":20,"scalePerLevel":1.2,"cooldownMs":10000,"description":"Causa 20 + 1,2 de dano por nível do jogador.","icon":"🦅","meta":"20 de dano · Recarga 10s","desc":"Causa 20 de dano."},"passives":[{"id":"harpia_wings","name":"Asas Ligeiras","description":"+0,15 Velocidade de movimento","stats":{"moveSpeed":0.15}},{"id":"harpia_claw","name":"Garra Afiada","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"orc":{"id":"orc","name":"Orc da Clava","gift":"rose","xpPerGift":10,"description":"Uma orc guerreira de cabelos vermelhos que carrega uma clava maior que você. Bate primeiro, pergunta depois.","bonuses":["Pele de Orc — +1 Defesa","Corpo de Orc — +10 HP máximo"],"portrait":"assets/waifus/orc.png","activeSkill":{"id":"orc_smash","name":"Esmagamento","damage":24,"scalePerLevel":1.5,"cooldownMs":12000,"description":"Causa 24 + 1,5 de dano por nível do jogador.","icon":"🔨","meta":"24 de dano · Recarga 12s","desc":"Causa 24 de dano."},"passives":[{"id":"orc_skin","name":"Pele de Orc","description":"+1 Defesa","stats":{"defense":1}},{"id":"orc_body","name":"Corpo de Orc","description":"+10 HP máximo","stats":{"maxHp":10}}]},"orc_carmesim":{"id":"orc_carmesim","name":"Orc Carmesim","gift":"rose","xpPerGift":10,"description":"Uma orc carmesim que luta com fúria e ri no meio da batalha. Sua clava nunca erra duas vezes o mesmo monstro.","bonuses":["Fúria — +0,2 Velocidade de ataque","Pele de Orc — +5 HP máximo"],"portrait":"assets/waifus/orc_carmesim.png","activeSkill":{"id":"orc_fury","name":"Fúria Carmesim","durationMs":5000,"cooldownMs":12000,"multiplier":1.25,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,25x do dano de ataque.","icon":"💥","meta":"Recarga 12s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,25x do dano de ataque."},"passives":[{"id":"orc_carmesim_fury","name":"Fúria","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"orc_carmesim_body","name":"Pele de Orc","description":"+5 HP máximo","stats":{"maxHp":5}}]},"orc_palida":{"id":"orc_palida","name":"Orc Pálida","gift":"rose","xpPerGift":10,"description":"Uma orc pálida de cabelos brancos, silenciosa e paciente. Onde ela passa, os monstros hesitam em atacar.","bonuses":["Véu de Ossos — +1 Defesa","Corpo de Orc — +15 HP máximo"],"portrait":"assets/waifus/orc_palida.png","activeSkill":{"id":"orc_veil","name":"Véu de Ossos","durationMs":4000,"cooldownMs":14000,"description":"Imune a dano por 4 segundos.","icon":"💀","meta":"Recarga 14s","desc":"Imune a dano por 4 segundos."},"passives":[{"id":"orc_palida_veil","name":"Véu de Ossos","description":"+1 Defesa","stats":{"defense":1}},{"id":"orc_palida_body","name":"Corpo de Orc","description":"+15 HP máximo","stats":{"maxHp":15}}]}}}
     });
   })(window);
   </script>
@@ -658,12 +637,14 @@
         });
         this.maxMonstersPerChunk = Math.max(1, Math.floor(options.maxMonstersPerChunk || 10));
         this.maxPerMonsterType = Math.max(1, Math.floor(options.maxPerMonsterType || 2));
-        this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat']);
+        this.monsterTypes = Object.freeze(['slime', 'monkey', 'rat', 'snake', 'wolf', 'eagle', 'spider', 'bear', 'goblin', 'orc', 'ogre']);
         // V140 — POOL DE MONSTROS: visuais (sprite + rótulo + barra HP) são
         // criados uma vez e reutilizados. Antes cada spawn criava 4 objetos
         // novos e cada morte destruía tudo (GC + queda de FPS no celular).
         // Pool cresce sob demanda, mas devolve ao pool em vez de destruir.
-        this.monsterVisualPool = { slime: [], monkey: [], rat: [] };
+        this.monsterVisualPool = { slime: [], monkey: [], rat: [], snake: [], wolf: [], eagle: [], spider: [], bear: [], goblin: [], orc: [], ogre: [] };
+        // V145 — teto por espécie: ogro, orc e urso são raros (1 por chunk).
+        this.maxPerType = Object.freeze({ ogre: 1, orc: 1, bear: 1 });
         this.monsterVisualPoolMax = 30;
         // V141 — CULLING: monstro fora da câmera dorme. Sem movimento,
         // sem buscar jogador, sem ataque, sem pathfinding, sem rótulo.
@@ -747,32 +728,64 @@
       }
 
       createMonsterTextures() {
+        // V145 — 11 monstros + 3 frames cada (andar/batalha/morte) + o chefe Brutamonte.
         const spriteSources = {
           slime: "assets/monsters/slime.png",
           monkey: "assets/monsters/monkey.png",
-          brutamonte: root.CONQUISTADOR_BOSS_SPRITE || '',
-          rat: "assets/monsters/rat.png"
+          rat: "assets/monsters/rat.png",
+          snake: "assets/monsters/snake.png",
+          wolf: "assets/monsters/wolf.png",
+          eagle: "assets/monsters/eagle.png",
+          spider: "assets/monsters/spider.png",
+          bear: "assets/monsters/bear.png",
+          goblin: "assets/monsters/goblin.png",
+          orc: "assets/monsters/orc.png",
+          ogre: "assets/monsters/ogre.png",
+          brutamonte: root.CONQUISTADOR_BOSS_SPRITE || ''
         };
         root.CONQUISTADOR_MONSTER_ART = Object.freeze({ ...spriteSources });
         const versionedKeys = {
-          slime: 'conquistador-monster-slime-v2',
-          monkey: 'conquistador-monster-monkey-v2',
-          rat: 'conquistador-monster-rat-v2',
+          slime: 'conquistador-monster-slime-v3',
+          monkey: 'conquistador-monster-monkey-v3',
+          rat: 'conquistador-monster-rat-v3',
+          snake: 'conquistador-monster-snake-v3',
+          wolf: 'conquistador-monster-wolf-v3',
+          eagle: 'conquistador-monster-eagle-v3',
+          spider: 'conquistador-monster-spider-v3',
+          bear: 'conquistador-monster-bear-v3',
+          goblin: 'conquistador-monster-goblin-v3',
+          orc: 'conquistador-monster-orc-v3',
+          ogre: 'conquistador-monster-ogre-v3',
           brutamonte: 'conquistador-boss-brutamonte-v1'
         };
         this.monsterTextureKeys = Object.freeze(versionedKeys);
-        const types = Object.keys(spriteSources);
+        // Frames por estado: andar (idle/walk), batalha (attack), morte (death).
+        const frameKeys = {};
+        const toLoad = [];
+        for (const type of Object.keys(spriteSources)) {
+          toLoad.push({ type, key: versionedKeys[type], src: spriteSources[type] });
+        }
+        for (const type of ['slime', 'monkey', 'rat', 'snake', 'wolf', 'eagle', 'spider', 'bear', 'goblin', 'orc', 'ogre']) {
+          frameKeys[type] = {
+            walk: `conquistador-monster-${type}-v3-walk`,
+            attack: `conquistador-monster-${type}-v3-attack`,
+            death: `conquistador-monster-${type}-v3-death`
+          };
+          toLoad.push({ type, key: frameKeys[type].walk, src: `assets/monsters/${type}_walk.png` });
+          toLoad.push({ type, key: frameKeys[type].attack, src: `assets/monsters/${type}_attack.png` });
+          toLoad.push({ type, key: frameKeys[type].death, src: `assets/monsters/${type}_death.png` });
+        }
+        this.monsterFrameKeys = Object.freeze(frameKeys);
         let loaded = 0;
         const finish = () => {
           loaded += 1;
-          if (loaded !== types.length || !this.active) return;
+          if (loaded !== toLoad.length || !this.active) return;
           this.texturesReady = true;
           this.restoreOrPopulate();
           this.refreshUI();
         };
-
-        for (const type of types) {
-          const key = versionedKeys[type];
+        for (const entry of toLoad) {
+          const key = entry.key;
           if (this.scene.textures && this.scene.textures.exists(key)) {
             finish();
             continue;
@@ -784,14 +797,13 @@
             finish();
           };
           image.onerror = () => {
-            this.message = `Falha ao carregar visual: ${type}`;
+            this.message = `Falha ao carregar visual: ${entry.type}`;
             this.messageUntil = this.now + 5000;
             finish();
           };
-          image.src = spriteSources[type];
+          image.src = entry.src;
         }
       }
-
       createUI() {
         const root = document.createElement('div');
         root.setAttribute('aria-label', 'Interface de combate');
@@ -1007,6 +1019,17 @@
         if (animation.tween && animation.tween.isPlaying()) animation.tween.stop();
         animation.tween = null;
         animation.state = state;
+        // V145 — frame por estado (andar/batalha). A morte troca no killMonster.
+        // Tamanho de exibição preservado: os frames têm dimensões diferentes.
+        const frameKeys = this.monsterFrameKeys && this.monsterFrameKeys[record.monsterId];
+        if (frameKeys && sprite && this.scene.textures) {
+          const frameKey = state === 'attack' ? frameKeys.attack : frameKeys.walk;
+          if (frameKey && this.scene.textures.exists(frameKey)) {
+            const dw = sprite.displayWidth, dh = sprite.displayHeight;
+            sprite.setTexture(frameKey);
+            sprite.setDisplaySize(dw, dh);
+          }
+        }
         const baseX = animation.baseScaleX;
         const baseY = animation.baseScaleY;
         sprite.setScale(baseX, baseY);
@@ -1142,7 +1165,7 @@
         const definition = this.data.MONSTERS[monsterId];
         if (!definition || !this.monsterTextureKeys[monsterId]) return false;
         if (this.getAliveCountForChunk(chunkId) >= this.maxMonstersPerChunk) return false;
-        if (this.getAliveCountForChunk(chunkId, monsterId) >= this.maxPerMonsterType) return false;
+        if (this.getAliveCountForChunk(chunkId, monsterId) >= ((this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType)) return false;
 
         // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
         const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y) ? { x: saved.tile.x, y: saved.tile.y } : null;
@@ -1309,7 +1332,11 @@
             const population = this.getChunkPopulationState(chunkId);
             if (population.initialSpawnAttempted) continue;
             population.initialSpawnAttempted = true;
-            for (const monsterId of this.monsterTypes) {
+            // V145 — rodízio por chunk: a ordem de spawn gira com o chunk, senão
+            // as 5 primeiras espécies lotariam o chunk (teto 10) e as outras nunca nasceriam.
+            const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
+            const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
+            for (const monsterId of orderedTypes) {
               for (let count = 0; count < this.maxPerMonsterType; count += 1) {
                 if (!this.spawnOneMonsterForChunk(chunkX, chunkY, monsterId)) break;
               }
@@ -1329,7 +1356,9 @@
           const queue = this.chunkRespawns.get(chunkId);
           let needsRetry = false;
 
-          for (const monsterId of this.monsterTypes) {
+          const rotation = (chunkX + chunkY * this.chunkGrid.columns) % this.monsterTypes.length;
+          const orderedTypes = this.monsterTypes.slice(rotation).concat(this.monsterTypes.slice(0, rotation));
+          for (const monsterId of orderedTypes) {
             const queued = queue && queue.pendingByMonster ? (queue.pendingByMonster[monsterId] || 0) : 0;
             let available = this.maxPerMonsterType -
               this.getAliveCountForChunk(chunkId, monsterId) - queued;
@@ -1673,6 +1702,13 @@
           const deathSprite = record.sprite;
           const deathVisual = { sprite: deathSprite, levelLabel: record.levelLabel, hpBarBg: record.hpBarBg, hpBarFill: record.hpBarFill, hpBarWidth: record.hpBarWidth };
           const deathMonsterId = record.monsterId;
+          // V145 — frame de morte antes do fade.
+          const deathKeys = this.monsterFrameKeys && this.monsterFrameKeys[deathMonsterId];
+          if (deathKeys && this.scene.textures && this.scene.textures.exists(deathKeys.death)) {
+            const dw = deathSprite.displayWidth, dh = deathSprite.displayHeight;
+            deathSprite.setTexture(deathKeys.death);
+            deathSprite.setDisplaySize(dw, dh);
+          }
           this.scene.tweens.killTweensOf(deathSprite);
           this.scene.tweens.add({
             targets: deathSprite,
@@ -2877,6 +2913,7 @@
   window.CONQUISTADOR_WAIFU_ART = "assets/waifu/slime.jpg";
   window.CONQUISTADOR_WAIFU_ART_MONKEY = "assets/waifu/monkey.jpg";
   window.CONQUISTADOR_WAIFU_ART_RAT = "assets/waifu/rat.jpg";
+   window.CONQUISTADOR_WAIFU_ART_BY_ID = { slime: "assets/waifu/slime.jpg", monkey: "assets/waifu/monkey.jpg", rat: "assets/waifu/rat.jpg", goblin: "assets/waifus/goblin.png", lamia: "assets/waifus/lamia.png", loba: "assets/waifus/loba.png", harpia: "assets/waifus/harpia.png", orc: "assets/waifus/orc.png", orc_carmesim: "assets/waifus/orc_carmesim.png", orc_palida: "assets/waifus/orc_palida.png" };
 window.CONQUISTADOR_BOSS_ART = "assets/boss/art.jpg";
 window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 
@@ -2960,7 +2997,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           ...oldBestiary,
           monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
         };
-        const WAIFU_BY_MONSTER = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata' };
+        const WAIFU_BY_MONSTER = { slime: 'Donzela Slime', monkey: 'Donzela Macaca', rat: 'Donzela Rata', goblin: 'Donzela Goblin', snake: 'Lamia Púrpura', wolf: 'Loba da Lua', eagle: 'Harpia Roxa', orc: 'Orc da Clava' };
         if (WAIFU_BY_MONSTER[event.monsterId] && this.killCounts[event.monsterId] >= 20) {
           const currentWaifus = this.api.progress.get('waifus') || {};
           const waifus = currentWaifus && typeof currentWaifus === 'object' ? { ...currentWaifus } : {};
@@ -3479,26 +3516,33 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           tab.setAttribute('aria-pressed', String(active));
         }
 
+        const BESTIARY_META = {
+          slime: { icon: '◈', home: 'Cavernas de Slime', description: 'Uma gosma viva que habita as cavernas. Lenta, mas insistente: gruda em quem passa e dissolve tudo com seu corpo ácido.' },
+          monkey: { icon: '♟', home: 'Copas da Floresta', description: 'Um macaco travesso das copas. Rápido e esperto, ataca em bando e some entre as árvores antes de você reagir.' },
+          rat: { icon: '♧', home: 'Cavernas Roxas', description: 'Um rato das cavernas roxas. Pequeno e veloz, morde e some na escuridão antes do seu golpe chegar.' },
+          snake: { icon: '🐍', home: 'Cavernas Roxas', description: 'Uma cobra verde das cavernas. Silenciosa, ataca num bote e some antes que você pisque.' },
+          wolf: { icon: '🐺', home: 'Floresta Sombria', description: 'Um lobo cinzento que caça em matilha. Rápido e feroz, cerca a presa antes de morder.' },
+          eagle: { icon: '🦅', home: 'Picos da Montanha', description: 'Uma águia de penas brancas e marrons. Mergulha do céu com as garras abertas e some nas alturas.' },
+          spider: { icon: '🕷️', home: 'Cavernas Roxas', description: 'Uma aranha roxa e peluda. Tece teias nas cavernas e salta sobre quem passa distraído.' },
+          bear: { icon: '🐻', home: 'Floresta Profunda', description: 'Um urso pardo enorme. Lento, mas um golpe só dele derruba qualquer um.' },
+          goblin: { icon: '👺', home: 'Cavernas Roxas', description: 'Um goblin guerreiro de espada curta. Pequeno, esperto e sempre atacando em grupo.' },
+          orc: { icon: '👹', home: 'Terras Baldias', description: 'Um orc brutamontes de clava com espinhos. Forte, teimoso e adora esmagar.' },
+          ogre: { icon: '💀', home: 'Terras Baldias', description: 'Um ogro cinzento gigante. O monstro mais forte destas terras — fuja ou lute com tudo.' }
+        };
         const configs = {
           monsters: {
             heading: 'MONSTROS',
             entries: Object.values(this.api.data.MONSTERS || {}).map(monster => ({
               id: monster.id,
               name: monster.name,
-              icon: monster.id === 'slime' ? '◈' : monster.id === 'monkey' ? '♟' : '♧',
+              icon: (BESTIARY_META[monster.id] || {}).icon || '♧',
               image: (root.CONQUISTADOR_MONSTER_ART || {})[monster.id] || '',
               known: true,
               detail: true,
               type: 'Monstro',
               species: monster.name,
-              home: monster.id === 'slime' ? 'Cavernas de Slime' : monster.id === 'monkey' ? 'Copas da Floresta' : 'Cavernas Roxas',
-              description: monster.id === 'slime'
-                ? 'Uma gosma viva que habita as cavernas. Lenta, mas insistente: gruda em quem passa e dissolve tudo com seu corpo ácido.'
-                : monster.id === 'monkey'
-                  ? 'Um macaco travesso das copas. Rápido e esperto, ataca em bando e some entre as árvores antes de você reagir.'
-                  : monster.id === 'rat'
-                    ? 'Um rato das cavernas roxas. Pequeno e veloz, morde e some na escuridão antes do seu golpe chegar.'
-                    : 'Um monstro selvagem que habita este mundo.',
+              home: (BESTIARY_META[monster.id] || {}).home || 'Este mundo',
+              description: (BESTIARY_META[monster.id] || {}).description || 'Um monstro selvagem que habita este mundo.',
               stats: { hp: monster.hp || 0, damage: monster.damage || 0, defense: monster.defense || 0, xp: monster.xp || 0, speed: monster.speed || 0 },
               countLabel: `Derrotados: ${(this.killCounts[monster.id] || 0).toLocaleString('pt-BR')}`,
               skillNote: `Ataque — ${monster.damage || 0} de dano`
@@ -3715,7 +3759,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         }
 
         // V80: cada monstro derruba a carta da waifu correspondente (Slime, Macaca, Rata); mesma chance e qualidades.
-        if (['slime', 'monkey', 'rat'].includes(event.monsterId) && Math.random() < 0.20) {
+        // V145 — cada monstro derruba a carta da sua waifu (Orc: uma das 3 orcs, sorteio).
+        const WAIFU_DROPS = { slime: ['slime'], monkey: ['monkey'], rat: ['rat'], goblin: ['goblin'], snake: ['lamia'], wolf: ['loba'], eagle: ['harpia'], orc: ['orc', 'orc_carmesim', 'orc_palida'] };
+        const dropWaifus = WAIFU_DROPS[event.monsterId];
+        if (dropWaifus && Math.random() < 0.20) {
+          const waifuId = dropWaifus[Math.floor(Math.random() * dropWaifus.length)];
           const quality = this.rollQuality();
           const cardId = `waifu-drop-${Date.now()}-${this.sequence++}`;
           const cardSprite = this.scene.add.text(x - 8, y - 15, '♥', {
@@ -3726,8 +3774,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             targets: cardSprite, y: y - 24, duration: 520, yoyo: true, repeat: -1,
             ease: 'Sine.InOut'
           });
-          this.drops.set(cardId, { id: cardId, type: 'waifu-card', waifuId: event.monsterId, quality: quality.id, x: x - 8, y, sprite: cardSprite });
-          this.api.events.emit('waifu:card-dropped', { id: cardId, waifuId: event.monsterId, quality: quality.id });
+          this.drops.set(cardId, { id: cardId, type: 'waifu-card', waifuId: waifuId, quality: quality.id, x: x - 8, y, sprite: cardSprite });
+          this.api.events.emit('waifu:card-dropped', { id: cardId, waifuId: waifuId, quality: quality.id });
           dropped = true;
         }
         return dropped;
@@ -3991,7 +4039,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           stack.setAttribute('aria-label', `${speciesName}, nivel ${group.level}, qualidade ${quality.name}`);
           const art = this.document.createElement('img');
           art.className = 'cg-art';
-          art.src = group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+          art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[group.speciesId] || (group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
           art.alt = `Ilustracao de ${speciesName}`;
           const quantity = this.document.createElement('span');
           quantity.className = 'cg-count';
@@ -4094,7 +4142,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           borderRadius: '0', background: 'transparent',
           border: 'none'
         });
-        art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
           position: 'relative', flex: '0 0 auto', padding: '2px 4px',
@@ -7398,7 +7446,7 @@ class WorldScene extends Phaser.Scene {
                   art.style.minHeight = '0';
                   art.style.width = '100%';
                   art.style.objectFit = 'contain';
-                  art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
                   foot.className = 'cg-foot';
@@ -7487,7 +7535,7 @@ class WorldScene extends Phaser.Scene {
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
                 const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15', border: '3px solid ' + qinfo.color, outline: '1px solid ' + qinfo.color, outlineOffset: '-6px' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
-                art.src = speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''); art.alt = 'Carta de ' + name;
+                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '')); art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
                 const descLabel = el('div', { margin: '14px 0 6px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
                 descLabel.textContent = 'DESCRIÇÃO';
@@ -10247,9 +10295,22 @@ class WorldScene extends Phaser.Scene {
 <script id="conquistador-v52">(function () {
   'use strict';
   const SKILLS = Object.freeze({
-    slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, cooldownMs:5000, icon:'🫧' }),
+    slime: Object.freeze({ id:'acid_slime', name:'Gosma Ácida', damage:12, scalePerLevel:1.5, cooldownMs:5000, icon:'🫧' }),
     monkey: Object.freeze({ id:'monkey_ranged', name:'Chuva de Sinos', cooldownMs:10000, durationMs:5000, multiplier:1.1, icon:'🔔', buff:'monkey' }),
-    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'rat' })
+    rat: Object.freeze({ id:'rat_soap', name:'Ensaboado', cooldownMs:10000, durationMs:3000, icon:'🧼', buff:'rat' }),
+    goblin: Object.freeze({ id:'goblin_dagger', name:'Punhalada', damage:16, scalePerLevel:1.2, cooldownMs:8000, icon:'🗡️' }),
+    lamia: Object.freeze({ id:'lamia_bite', name:'Mordida Venenosa', damage:10, scalePerLevel:1.0, cooldownMs:6000, icon:'🐍' }),
+    loba: Object.freeze({ id:'loba_howl', name:'Uivo da Matilha', cooldownMs:12000, durationMs:4000, multiplier:1.15, icon:'🌕', buff:'monkey' }),
+    harpia: Object.freeze({ id:'harpia_dive', name:'Rasante', damage:20, scalePerLevel:1.2, cooldownMs:10000, icon:'🦅' }),
+    orc: Object.freeze({ id:'orc_smash', name:'Esmagamento', damage:24, scalePerLevel:1.5, cooldownMs:12000, icon:'🔨' }),
+    orc_carmesim: Object.freeze({ id:'orc_fury', name:'Fúria Carmesim', cooldownMs:12000, durationMs:5000, multiplier:1.25, icon:'💥', buff:'monkey' }),
+    orc_palida: Object.freeze({ id:'orc_veil', name:'Véu de Ossos', cooldownMs:14000, durationMs:4000, icon:'💀', buff:'rat' })
+  });
+  // V145 — passivos por waifu equipada (tabela única; antes eram 3 ifs fixos).
+  const PASSIVES = Object.freeze({
+    slime: { defense:1, maxHp:10 }, monkey: { attackSpeed:0.2, penetration:0.5 }, rat: { moveSpeed:0.1, maxHp:10 },
+    goblin: { attackSpeed:0.15, penetration:0.5 }, lamia: { defense:1, moveSpeed:0.1 }, loba: { attackSpeed:0.2, maxHp:5 },
+    harpia: { moveSpeed:0.15, penetration:0.5 }, orc: { defense:1, maxHp:10 }, orc_carmesim: { attackSpeed:0.2, maxHp:5 }, orc_palida: { defense:1, maxHp:15 }
   });
   // V80: buffs lidos pelo sistema de combate (alcance da Macaca, imunidade da Rata).
   window.CONQUISTADOR_WAIFU_BUFFS = window.CONQUISTADOR_WAIFU_BUFFS || { monkeyRangedUntil:0, ratImmuneUntil:0 };
@@ -10271,13 +10332,12 @@ class WorldScene extends Phaser.Scene {
     if(!runtime?.status||!runtime?.progress)return false;
     const data=runtime.progress.get('waifus')||{}, cards=Array.isArray(data.cards)?data.cards:[], house=Array.isArray(data.house)?data.house:[], pool=[...cards,...house], equipped=Array.isArray(data.equipped)?data.equipped:[];
     const has=id=>equipped.some(eid=>{const c=pool.find(x=>x&&x.instanceId===eid);return !!c&&String(c.waifuId||c.waifuType||c.id||'')===id;});
-    // V80: passivos por waifu equipada — Slime, Macaca (+0,2 vel. ataque, +0,5 penetração), Rata (+0,1 mov., +10 HP).
-    if(has('slime')) runtime.status.addModifier('player',{id:PASSIVE_ID,stats:{defense:1,maxHp:10}});
-    else runtime.status.removeModifier('player',PASSIVE_ID);
-    if(has('monkey')) runtime.status.addModifier('player',{id:PASSIVE_MONKEY,stats:{attackSpeed:0.2,penetration:0.5}});
-    else runtime.status.removeModifier('player',PASSIVE_MONKEY);
-    if(has('rat')) runtime.status.addModifier('player',{id:PASSIVE_RAT,stats:{moveSpeed:0.1,maxHp:10}});
-    else runtime.status.removeModifier('player',PASSIVE_RAT);
+    // V145 — passivos por waifu equipada, via tabela PASSIVES (todas as 10 waifus).
+    for (const id of Object.keys(PASSIVES)) {
+      const pid = 'waifu:' + id + ':intimacy';
+      if (has(id)) runtime.status.addModifier('player', { id: pid, stats: PASSIVES[id] });
+      else runtime.status.removeModifier('player', pid);
+    }
     return true;
   }
   function notify(msg){if(!toast)return;toast.textContent=msg;toast.style.opacity='1';if(toast._timer)clearTimeout(toast._timer);toast._timer=setTimeout(()=>toast.style.opacity='0',1400);}
@@ -10343,15 +10403,15 @@ class WorldScene extends Phaser.Scene {
     // V80: habilidades de buff (Macaca / Rata) não precisam de alvo — ativam na hora.
     if(skill.buff){
       nextCastAt[slot]=Date.now()+skill.cooldownMs;
-      if(skill.buff==='monkey'){ window.CONQUISTADOR_WAIFU_BUFFS.monkeyRangedUntil=Date.now()+skill.durationMs; notify('🔔 Chuva de Sinos! Ataque à distância por 5s.'); }
-      if(skill.buff==='rat'){ window.CONQUISTADOR_WAIFU_BUFFS.ratImmuneUntil=Date.now()+skill.durationMs; notify('🧼 Ensaboado! Imune a dano por 3s.'); }
+      if(skill.buff==='monkey'){ window.CONQUISTADOR_WAIFU_BUFFS.monkeyRangedUntil=Date.now()+skill.durationMs; notify((skill.icon||'🔔')+' '+skill.name+'! Ataque à distância por '+(skill.durationMs/1000)+'s.'); }
+      if(skill.buff==='rat'){ window.CONQUISTADOR_WAIFU_BUFFS.ratImmuneUntil=Date.now()+skill.durationMs; notify((skill.icon||'🧼')+' '+skill.name+'! Imune a dano por '+(skill.durationMs/1000)+'s.'); }
       runtime.events.emit('waifu:skill-cast',{waifuId:waifu,skillId:skill.id,skillName:skill.name});
       render(); return true;
     }
     const dungeonScene=dungeonSceneActive();
     // V110: Gosma Acida escala com o nivel do jogador (12 + 1,5/nivel).
     const playerLevel=runtime.levels?.snapshot?.('player')?.level||1;
-    const skillDamage=skill.id==='acid_slime'?skill.damage+1.5*playerLevel:skill.damage;
+    const skillDamage=skill.damage+(skill.scalePerLevel||0)*playerLevel;
     const target=dungeonScene?dungeonTargetInRange(dungeonScene):targetInRange();if(!target){if(manual)notify('Nenhum adversário ao alcance.');return false;}
     pendingCast[slot]=true;pendingSince[slot]=Date.now();
     const launched=launchAcid(target,()=>{
@@ -10557,5 +10617,5 @@ class WorldScene extends Phaser.Scene {
 })();
 </script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
-<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
+</body>
 </html>
