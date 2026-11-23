@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- V148 — CombatSystem centraliza dano e aplicação de HP no mundo aberto e na dungeon; StatusSystem permanece como fonte dos atributos. Save V4 e worldId preservados. -->
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
@@ -8,7 +9,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V147</title>
+<title>CONQUISTADOR DE WAIFU'S — V148</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +28,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V147</div>
+  <div id="version-badge">V148</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -360,6 +361,42 @@
       emitChanged(entityId, reason) { this.eventBus.emit('status:changed', { entityId, reason, status: this.snapshot(entityId) }); }
     }
 
+
+    // CombatSystem V148: fachada única de resolução de dano.
+    // StatusSystem continua sendo a autoridade dos atributos, mitigação e HP.
+    class CombatSystem {
+      constructor(statusSystem, eventBus) {
+        if (!statusSystem || !eventBus) throw new TypeError('CombatSystem exige StatusSystem e EventBus.');
+        this.status = statusSystem;
+        this.events = eventBus;
+      }
+      calculateDamage(attackerId, targetId) {
+        return this.status.calculateDamage(attackerId, targetId);
+      }
+      attack(attackerId, targetId, options = {}) {
+        if (!attackerId || !targetId) return null;
+        const damage = Number.isFinite(options.damage)
+          ? Math.max(0, Math.floor(options.damage))
+          : this.calculateDamage(attackerId, targetId);
+        if (!Number.isFinite(damage)) return null;
+        const result = this.status.applyDamage(targetId, damage, attackerId);
+        if (!result) return null;
+        const payload = {
+          attackerId, targetId, damage: result.damage,
+          hp: result.hp, remainingHp: result.hp, defeated: result.defeated,
+          kind: options.kind || 'basic'
+        };
+        this.events.emit('combat:hit', payload);
+        if (result.defeated) this.events.emit('combat:defeated', payload);
+        return payload;
+      }
+      applyFixedDamage(attackerId, targetId, amount, kind = 'skill') {
+        const damage = Number(amount);
+        if (!Number.isFinite(damage) || damage < 0) return null;
+        return this.attack(attackerId, targetId, { damage, kind });
+      }
+    }
+
     class LevelSystem {
       constructor(eventBus, options = {}) {
         this.eventBus = eventBus;
@@ -623,6 +660,10 @@
         this.events = api.events;
         this.entities = api.entities;
         this.status = api.status;
+        this.combat = api.combat;
+        if (!this.combat || typeof this.combat.attack !== 'function') {
+          throw new TypeError('MonsterSystem exige a API pública de combate.');
+        }
         this.world = api.world;
         this.progress = api.progress;
         this.monsters = new Map();
@@ -1595,23 +1636,17 @@
         const distance = Math.hypot(record.sprite.x - playerPoint.x, record.sprite.y - playerPoint.y);
         if (distance > this.effectiveAttackRange() + 8) return false;
 
-        const baseDamage = this.status.calculateDamage('player', record.id);
+        const baseDamage = this.combat.calculateDamage('player', record.id);
         if (baseDamage === null) return false;
         // V80: Chuva de Sinos ativa — ataque básico causa 1,1x do dano.
         const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
         const ranged = buffs && Date.now() < (buffs.monkeyRangedUntil || 0);
         const damage = Math.max(1, Math.floor(baseDamage * (ranged ? 1.1 : 1)));
-        const result = this.status.applyDamage(record.id, damage, 'player');
-        if (!result) return false;
+        const hit = this.combat.attack('player', record.id, { damage, kind: 'overworld-basic' });
+        if (!hit) return false;
 
         this.showMonsterHitEffect(record);
-        this.events.emit('combat:hit', {
-          attackerId: 'player',
-          targetId: record.id,
-          damage,
-          remainingHp: result.hp
-        });
-        if (result.defeated) this.killMonster(record, 'player');
+        if (hit.defeated) this.killMonster(record, 'player');
         this.refreshUI();
         return true;
       }
@@ -1878,12 +1913,11 @@
             const ratBuffs = window.CONQUISTADOR_WAIFU_BUFFS;
         const ratImmune = ratBuffs && Date.now() < (ratBuffs.ratImmuneUntil || 0);
         // V80: Ensaboado ativo — jogador imune a dano.
-        const damage = ratImmune ? 0 : this.status.calculateDamage(record.id, 'player');
-            const result = damage === null ? null : this.status.applyDamage('player', damage, record.id);
-            if (result) {
+        const hit = ratImmune ? null : this.combat.attack(record.id, 'player', { kind: 'overworld-monster' });
+            if (hit) {
               this.events.emit('monster:attack', {
-                entityId: record.id, targetId: 'player', damage: result.damage,
-                remainingHp: result.hp
+                entityId: record.id, targetId: 'player', damage: hit.damage,
+                remainingHp: hit.hp
               });
             }
           }
@@ -2086,7 +2120,7 @@
     });
 
     root.CONQUISTADOR_V13_SYSTEMS = Object.freeze({
-      EventBus, EntityManager, StatusSystem, LevelSystem, SaveSystem, MonsterSystem, GameData,
+      EventBus, EntityManager, StatusSystem, CombatSystem, LevelSystem, SaveSystem, MonsterSystem, GameData,
       schemaVersion: 4
     });
   })(window);
@@ -2522,7 +2556,7 @@
       openWaifuGiftPicker() {
         if (this.giftPicker) this.giftPicker.remove();
         const data = this.api.progress.get('waifus') || {};
-        // V147 — sem desbloqueio: toda carta na casa pode receber presente.
+        // V148 — sem desbloqueio: toda carta na casa pode receber presente.
         const cards = Array.isArray(data.house) ? data.house : [];
         const owned = cards.filter(card => card && (card.waifuId || card.waifuType || card.id));
         if (!owned.length) {
@@ -5781,6 +5815,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       const entityManager = new systems.EntityManager(eventBus);
       const statusSystem = new systems.StatusSystem(eventBus);
       statusSystem.register('player', INITIAL_PLAYER_STATUS);
+      const combatSystem = new systems.CombatSystem(statusSystem, eventBus);
       const levelSystem = new systems.LevelSystem(eventBus, {
         playerEntityId: 'player', curve: systems.GameData.LEVEL_CURVE
       });
@@ -5790,7 +5825,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         previousBackupKey: PLAYER_POSITION_PREVIOUS_BACKUP_KEY,
         worldId: PLAYER_POSITION_WORLD_ID
       }, eventBus);
-      return Object.freeze({ eventBus, entityManager, statusSystem, levelSystem, saveSystem, data: systems.GameData });
+      return Object.freeze({ eventBus, entityManager, statusSystem, combatSystem, levelSystem, saveSystem, data: systems.GameData });
     })();
     const loading = document.getElementById('loading');
     const errorPanel = document.getElementById('error');
@@ -6122,10 +6157,16 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         this.toastText = null;
         this.eventBus = GAME_RUNTIME.eventBus;
         this.statusSystem = GAME_RUNTIME.statusSystem;
+        this.combatSystem = GAME_RUNTIME.combatSystem;
         this.saveSystem = GAME_RUNTIME.saveSystem;
+        this._combatStatusIds = new Set();
         this.layout = buildDungeonLayout();
         this.hideOverworldHud();
-        this.events.once('shutdown', () => this.restoreOverworldHud());
+        this.events.once('shutdown', () => {
+          for (const id of this._combatStatusIds || []) this.statusSystem.unregister(id);
+          if (this._combatStatusIds) this._combatStatusIds.clear();
+          this.restoreOverworldHud();
+        });
         this.cameras.main.setBackgroundColor('#1d2416');
         this.physics.world.setBounds(0, 0, this.layout.width * TILE_SIZE, this.layout.height * TILE_SIZE);
         this.input.mouse.disableContextMenu();
@@ -6340,7 +6381,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         let counter = 0;
         const spawnMonster = (tile, roomKey, stats, display, isBoss, textureKey = key) => {
           counter += 1;
-          const id = 'dungeon-monster-' + counter;
+          const id = 'dungeon-monster-' + Date.now().toString(36) + '-' + counter;
           const pos = { x: (tile.x + 0.5) * TILE_SIZE, y: (tile.y + 0.5) * TILE_SIZE };
           const sprite = this.physics.add.sprite(pos.x, pos.y, textureKey, 0);
           sprite.setDisplaySize(display.width, display.height);
@@ -6379,6 +6420,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             sprite, label, hpBarBg, hpBarFill, hpBarWidth, alive: true, nextAttackAt: 0, hasAggro: false
           };
           this.monsters.push(record);
+          this.statusSystem.register(id, {
+            hp: stats.hp, maxHp: stats.hp, attack: stats.attack,
+            defense: stats.defense, penetration: 0,
+            attackSpeed: stats.attackSpeed || 1, moveSpeed: stats.speed || 50
+          });
+          this._combatStatusIds.add(id);
           if (isBoss) this.bossRecord = record;
           return record;
         };
@@ -6562,10 +6609,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
         const ranged = buffs && Date.now() < (buffs.monkeyRangedUntil || 0);
         if (!nearest || nearestDist > (ranged ? 120 : 52)) return;
-        const attack = this.statusSystem.getStat('player', 'attack') ?? 1;
-        const penetration = this.statusSystem.getStat('player', 'penetration') ?? 0;
-        const damage = Math.max(1, Math.round(attack - Math.max(0, nearest.defense - penetration)));
-        nearest.hp = Math.max(0, nearest.hp - damage);
+        const hit = this.combatSystem.attack('player', nearest.id, { kind: 'dungeon-basic' });
+        if (!hit) return;
+        const damage = hit.damage;
+        nearest.hp = Math.max(0, hit.hp);
         this.damageNumber(nearest, damage);
         nearest.sprite.setTintFill(0xffffff);
         this.time.delayedCall(80, () => { if (nearest.sprite.active) nearest.sprite.clearTint(); });
@@ -6656,9 +6703,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           // V109: Ensaboado (Rata) bloqueia o dano dos monstros da dungeon.
           const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
           const immune = buffs && Date.now() < (buffs.ratImmuneUntil || 0);
-          const damage = immune ? 0 : Math.max(1, Math.round(monster.attack - Math.max(0, playerDef - 0)));
-          if (damage > 0) {
-            this.statusSystem.applyDamage('player', damage, monster.id);
+          const hit = immune ? null : this.combatSystem.attack(monster.id, 'player', { kind: 'dungeon-monster' });
+          if (hit && hit.damage > 0) {
             this.cameras.main.shake(80, 0.006);
           }
           monster.nextAttackAt = now + 1000 / Math.max(0.1, monster.attackSpeed);
@@ -6695,7 +6741,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             // V109: Ensaboado tambem bloqueia a Pancada Sismica.
             const buffs = window.CONQUISTADOR_WAIFU_BUFFS;
             const immune = buffs && Date.now() < (buffs.ratImmuneUntil || 0);
-            if (!immune) this.statusSystem.applyDamage('player', slam.damage, boss.id);
+            if (!immune) this.combatSystem.applyFixedDamage(boss.id, 'player', slam.damage, 'dungeon-boss-slam');
             this.cameras.main.shake(160, 0.02);
             this.showToast('💥 PANCADA SÍSMICA!', 1400);
           }
@@ -6718,6 +6764,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         if (!monster || !monster.alive) return;
         monster.alive = false;
         monster.sprite.body.setVelocity(0, 0);
+        this.statusSystem.unregister(monster.id);
+        this._combatStatusIds.delete(monster.id);
         const tile = {
           x: Math.floor(monster.sprite.x / TILE_SIZE),
           y: Math.floor(monster.sprite.y / TILE_SIZE)
@@ -7102,6 +7150,7 @@ class WorldScene extends Phaser.Scene {
           events: this.eventBus,
           entities: this.entityManager,
           status: this.statusSystem,
+          combat: GAME_RUNTIME.combatSystem,
           levels: this.levelSystem,
           save: Object.freeze({ request: reason => this.eventBus.emit('save:request', { reason: reason || 'extension' }) }),
           progress: Object.freeze({
@@ -10446,7 +10495,7 @@ class WorldScene extends Phaser.Scene {
         if(target.hp<=0)dungeonScene.killMonster?.(target);
         render(); return;
       }
-      const result=runtime.status.applyDamage(target.id,skillDamage,'player');if(!result)return;
+      const result=runtime.combat?.applyFixedDamage('player',target.id,skillDamage,'waifu-skill');if(!result)return;
       nextCastAt[slot]=Date.now()+skill.cooldownMs;
       runtime.events.emit('combat:hit',{attackerId:'player',targetId:target.id,damage:skillDamage,remainingHp:result.hp,skillId:skill.id,skillName:skill.name});
       if(result.defeated)monsterSystem.killMonster(target,'player');
@@ -10492,7 +10541,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V147'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V148'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
