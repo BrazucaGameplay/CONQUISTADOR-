@@ -1,6 +1,10 @@
 <!DOCTYPE html>
-<!-- V153 — WaifuSystem integra galeria e drops; corrigido carregamento do mapa de arte por espécie (BY_ID), evitando fallback indevido para Slime. -->
-<!-- V152 — Recompensas de rosas/cartas aguardam save:written; DropSystem oferece commitProgress; recompensas da dungeon usam ProgressSystem. -->
+<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
+<!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
+<!-- V160 — Checkpoint seguro antes da entrada na dungeon: flush dos monstros e save V4 da posição do mundo. -->
+<!-- V159 — Restaurada a fachada WaifuSystem e o resolvedor de espécies; corrigido carregamento do mapa de arte por espécie; auditoria e diagnóstico do EventBus. -->
+<!-- V151 — WaifuDropSystem e recompensas de dungeon passam a confirmar progresso pelo ProgressSystem/DropSystem; rosas e cartas só desaparecem após save:written. -->
+<!-- V151 — Recompensas de rosas/cartas aguardam save:written; DropSystem oferece commitProgress; recompensas da dungeon usam ProgressSystem. -->
 <!-- V150 — DropSystem separa criação, coleta e confirmação de drops materiais; ProgressSystem/SaveSystem V4 preservados. -->
 <!-- V148 — CombatSystem centraliza dano e aplicação de HP no mundo aberto e na dungeon; StatusSystem permanece como fonte dos atributos. Save V4 e worldId preservados. -->
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
@@ -12,7 +16,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V153</title>
+<title>CONQUISTADOR DE WAIFU'S — V160</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -31,7 +35,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V153</div>
+  <div id="version-badge">V159</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -109,6 +113,20 @@
         return delivered;
       }
       clear() { for (const entries of this.listeners.values()) for (const entry of entries) entry.active = false; this.listeners.clear(); }
+      // Diagnostico somente leitura: ajuda a identificar listeners duplicados
+      // apos entrar/sair de cenas, sem alterar o despacho dos eventos.
+      listenerCount(eventName) {
+        const entries = this.listeners.get(eventName);
+        return entries ? Array.from(entries).filter(entry => entry.active).length : 0;
+      }
+      listenerSnapshot() {
+        const snapshot = {};
+        for (const [eventName, entries] of this.listeners.entries()) {
+          const count = Array.from(entries).filter(entry => entry.active).length;
+          if (count) snapshot[eventName] = count;
+        }
+        return Object.freeze(snapshot);
+      }
     }
 
     class EntityManager {
@@ -160,7 +178,14 @@
         this.eventBus.emit('entity:removed', cloneData(entity));
         return true;
       }
-      clear() { this.entities.clear(); }
+      clear() {
+        // Nunca apagar o Map em silêncio: StatusSystem e outros listeners
+        // dependem de entity:removed para liberar estado associado.
+        const ids = Array.from(this.entities.keys());
+        let removed = 0;
+        for (const id of ids) if (this.remove(id)) removed += 1;
+        return removed;
+      }
     }
 
     // Esquema único de atributos para jogador e monstros. Os aliases legados
@@ -234,6 +259,14 @@
         // here would apply buffs twice after restore.
         const stats = {};
         for (const key of STATUS_KEYS) stats[key] = record[key];
+        stats.modifiers = cloneData(record.modifiers);
+        return stats;
+      }
+      getEffectiveSnapshot(entityId) {
+        const record = this.records.get(entityId);
+        if (!record) return null;
+        const stats = {};
+        for (const key of STATUS_KEYS) stats[key] = this.getStat(entityId, key);
         stats.modifiers = cloneData(record.modifiers);
         return stats;
       }
@@ -430,9 +463,7 @@
       }
     }
 
-    // DungeonSystem V152: regras de progresso e recompensas persistentes das dungeons.
-    // A cena continua dona de física, inimigos, portões, câmera e apresentação.
-    // Toda persistência passa pela API ProgressSystem e, portanto, pelo SaveSystem V4.
+    // DungeonSystem: regras e progresso persistente; não controla a cena Phaser.
     class DungeonSystem {
       constructor(api) {
         if (!api || !api.progress || !api.data) {
@@ -446,10 +477,10 @@
         return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
       }
       grantItem(itemId, quantity = 1) {
-        if (typeof itemId !== 'string' || !itemId || !this.data.ITEMS[itemId]) return false;
+        if (typeof itemId !== 'string' || !itemId || !this.data.ITEMS || !this.data.ITEMS[itemId]) return false;
         const amount = Math.max(1, Math.floor(Number(quantity) || 1));
-        const currentItems = this.progress.get('items');
-        const items = Array.isArray(currentItems) ? currentItems.map(item => ({ ...item })) : [];
+        const current = this.progress.get('items');
+        const items = Array.isArray(current) ? current.map(item => item && typeof item === 'object' ? { ...item } : item) : [];
         const existing = items.find(item => item && item.id === itemId);
         if (existing) existing.quantity = Math.max(0, Number(existing.quantity) || 0) + amount;
         else items.push({ id: itemId, quantity: amount });
@@ -457,11 +488,10 @@
         if (result !== 'pending' && result !== true) return false;
         return { ok: true, result, itemId, quantity: amount, name: this.data.ITEMS[itemId].name || itemId };
       }
-      recordBossKill(dungeonId = 'cidade-abandonada') {
+      recordBossKill(dungeonId) {
         if (typeof dungeonId !== 'string' || !dungeonId) return false;
         const dungeons = { ...this.getProgress() };
-        const previous = dungeons[dungeonId] && typeof dungeons[dungeonId] === 'object'
-          ? dungeons[dungeonId] : {};
+        const previous = dungeons[dungeonId] && typeof dungeons[dungeonId] === 'object' ? dungeons[dungeonId] : {};
         dungeons[dungeonId] = {
           ...previous,
           cleared: true,
@@ -510,15 +540,19 @@
         return { level: value.level, xp: value.xp, xpToNext: this.xpToNext(value.level) };
       }
       addExperience(entityId, amount) {
+        if (!entityId) return false;
+        const gained = Number(amount);
+        if (!Number.isFinite(gained) || gained <= 0) return false;
         const current = this.progress.get(entityId) || { level: 1, xp: 0 };
         const previousLevel = current.level;
         let level = current.level;
-        let xp = current.xp + amount;
+        let xp = current.xp + gained;
         let needed = this.xpToNext(level);
         while (xp >= needed) { xp -= needed; level += 1; needed = this.xpToNext(level); }
         this.progress.set(entityId, { level, xp });
-        this.eventBus.emit('level:changed', { entityId, ...this.snapshot(entityId), gainedXp: amount });
+        this.eventBus.emit('level:changed', { entityId, ...this.snapshot(entityId), gainedXp: gained });
         if (level > previousLevel) this.eventBus.emit('level:up', { entityId, previousLevel, level, ...this.snapshot(entityId) });
+        return this.snapshot(entityId);
       }
       destroy() { if (this.unsubscribeDeath) this.unsubscribeDeath(); }
     }
@@ -833,6 +867,49 @@
     // MonsterSystem is an extension module: it can query the public world API,
     // use EntityManager/StatusSystem, and communicate through EventBus. It never
     // receives the collision grids, the SaveSystem, or mutable world internals.
+    // MonsterAI: decisões e cálculos de perseguição, sem dependência de Phaser.
+    // MonsterSystem continua responsável por sprites, animações, HUD e efeitos.
+    class MonsterAI {
+      constructor(options = {}) {
+        this.aggroRange = Math.max(0, Number(options.aggroRange) || 260);
+        this.attackRange = Math.max(0, Number(options.attackRange) || 24);
+        this.pathRefreshMs = Math.max(50, Number(options.pathRefreshMs) || 650);
+        this.tileSize = Math.max(1, Number(options.tileSize) || 16);
+        this.maxDeltaMs = Math.max(1, Number(options.maxDeltaMs) || 100);
+        this.arriveDistance = Math.max(0.1, Number(options.arriveDistance) || 2);
+      }
+      distance(a, b) {
+        if (!a || !b) return Infinity;
+        return Math.hypot((Number(b.x) || 0) - (Number(a.x) || 0), (Number(b.y) || 0) - (Number(a.y) || 0));
+      }
+      shouldAggro(distance) { return Number.isFinite(distance) && distance <= this.aggroRange; }
+      canAttack(distance) { return Number.isFinite(distance) && distance <= this.attackRange; }
+      needsPath(targetKey, currentTargetKey, time, nextPathAt) {
+        return targetKey !== currentTargetKey || time >= nextPathAt;
+      }
+      findPath(world, start, goal) {
+        if (!world || typeof world.findPath !== 'function' || !start || !goal) return [];
+        const route = world.findPath(start, goal, { profile: 'player' });
+        return Array.isArray(route) ? route.map(tile => ({ x: tile.x, y: tile.y })) : [];
+      }
+      movementStep(position, target, speed, deltaMs) {
+        const dx = target.x - position.x;
+        const dy = target.y - position.y;
+        const distance = Math.hypot(dx, dy);
+        if (!Number.isFinite(distance) || distance <= this.arriveDistance) {
+          return { arrived: true, x: position.x, y: position.y, dx, dy, distance };
+        }
+        const seconds = Math.max(0, Math.min(Number(deltaMs) || 0, this.maxDeltaMs)) / 1000;
+        const travel = Math.min(distance, Math.max(0, Number(speed) || 0) * seconds);
+        return {
+          arrived: false,
+          x: position.x + dx / distance * travel,
+          y: position.y + dy / distance * travel,
+          dx, dy, distance
+        };
+      }
+    }
+
     class MonsterSystem {
       constructor(api, options = {}) {
         if (!api || !api.events || !api.entities || !api.status || !api.world || !api.progress) {
@@ -909,6 +986,14 @@
         this.monsterAttackRange = 24;
         this.monsterAttackCooldownMs = 1000;
         this.tileSize = Number.isFinite(options.tileSize) ? options.tileSize : 16;
+        this.ai = new MonsterAI({
+          aggroRange: this.aggroRange,
+          attackRange: this.monsterAttackRange,
+          pathRefreshMs: 650,
+          tileSize: this.tileSize,
+          maxDeltaMs: 100,
+          arriveDistance: 2
+        });
         this.active = true;
         this.message = '';
         this.messageUntil = 0;
@@ -951,7 +1036,7 @@
           this.events.on('status:changed', event => { if (event && event.entityId && event.entityId !== 'player' && this.monsters.has(event.entityId)) { this.updateMonsterHpBar(this.monsters.get(event.entityId)); this.scheduleMonsterSave(); } })
         );
         if (typeof window !== 'undefined' && window.addEventListener) {
-          this.monsterFlushOnHide = () => { try { if (this.monsterSaveTimer) { clearTimeout(this.monsterSaveTimer); this.monsterSaveTimer = null; } if (this.progress && this.progress.update) this.progress.update('monsters', this.snapshotMonsters()); } catch (e) {} };
+          this.monsterFlushOnHide = () => this.flushMonsterSnapshot('pagehide');
           window.addEventListener('pagehide', this.monsterFlushOnHide);
           this.unsubscribers.push(() => window.removeEventListener('pagehide', this.monsterFlushOnHide));
         }
@@ -1407,9 +1492,17 @@
         if (this.getAliveCountForChunk(chunkId, monsterId) >= ((this.maxPerType && this.maxPerType[monsterId]) || this.maxPerMonsterType)) return false;
 
         // V76: se veio do save, reusa tile/nivel/HP salvos; senao rola novo.
-        const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y) ? { x: saved.tile.x, y: saved.tile.y } : null;
+        const savedTile = saved && saved.tile && Number.isInteger(saved.tile.x) && Number.isInteger(saved.tile.y)
+          ? { x: saved.tile.x, y: saved.tile.y } : null;
         const candidates = this.getSpawnCandidates(chunkX, chunkY);
-        const tile = savedTile || candidates[0];
+        // V162 — a posição persistida só é reutilizada se continuar sendo
+        // um ponto de spawn válido no chunk atual (navegável, sem sobreposição,
+        // longe do jogador/entrada e dentro das regras de região). Se o mundo
+        // mudou ou o tile ficou ocupado, restaura o monstro no próximo ponto
+        // seguro do mesmo chunk, em vez de criar sprite dentro de colisão.
+        const tile = savedTile
+          ? (candidates.find(candidate => candidate.x === savedTile.x && candidate.y === savedTile.y) || candidates[0])
+          : candidates[0];
         if (!tile) return false;
 
         const sequence = this.nextMonsterSequence++;
@@ -1529,12 +1622,30 @@
         }
         return { list, respawns };
       }
+      flushMonsterSnapshot(reason = 'manual') {
+        // Um único caminho atende debounce, pagehide e shutdown. Limpar o timer
+        // antes da escrita evita flush duplicado em transições rápidas.
+        if (this.monsterSaveTimer) {
+          clearTimeout(this.monsterSaveTimer);
+          this.monsterSaveTimer = null;
+        }
+        if (!this.progress || typeof this.progress.update !== 'function') return false;
+        try {
+          const snapshot = this.snapshotMonsters();
+          const result = this.progress.update('monsters', snapshot);
+          this.lastMonsterFlushReason = reason;
+          this.lastMonsterFlushAt = Date.now();
+          return result === 'pending' || result === true;
+        } catch (error) {
+          return false;
+        }
+      }
       scheduleMonsterSave() {
-        if (!this.active) return;
-        if (this.monsterSaveTimer) return;
+        if (!this.active || this.monsterSaveTimer) return;
         this.monsterSaveTimer = setTimeout(() => {
           this.monsterSaveTimer = null;
-          try { if (this.progress && this.progress.update) this.progress.update('monsters', this.snapshotMonsters()); } catch (e) { /* save de monstro nao pode quebrar o jogo */ }
+          if (!this.active) return;
+          this.flushMonsterSnapshot('debounce');
         }, 800);
       }
       restoreOrPopulate() {
@@ -2027,14 +2138,14 @@
         if (!record.alive || !record.sprite || !record.sprite.active) return;
         const dxToPlayer = playerPoint.x - record.sprite.x;
         const dyToPlayer = playerPoint.y - record.sprite.y;
-        const distance = Math.hypot(dxToPlayer, dyToPlayer);
-        if (distance > this.aggroRange) {
+        const distance = this.ai.distance(record.sprite, playerPoint);
+        if (!this.ai.shouldAggro(distance)) {
           record.path = [];
           record.targetKey = null;
           this.setMonsterAnimation(record, 'idle');
           return;
         }
-        if (distance <= this.monsterAttackRange) {
+        if (this.ai.canAttack(distance)) {
           record.path = [];
           if (record.animation && record.animation.state !== 'attack') {
             this.setMonsterAnimation(record, 'idle');
@@ -2058,35 +2169,31 @@
         }
 
         const targetKey = `${playerPoint.tile.x},${playerPoint.tile.y}`;
-        if (record.targetKey !== targetKey || time >= record.nextPathAt) {
+        if (this.ai.needsPath(targetKey, record.targetKey, time, record.nextPathAt)) {
           const start = {
             x: Math.floor(record.sprite.x / this.tileSize),
             y: Math.floor(record.sprite.y / this.tileSize)
           };
-          const route = this.world.findPath(start, playerPoint.tile, { profile: 'player' });
-          record.path = Array.isArray(route) ? route.map(tile => ({ x: tile.x, y: tile.y })) : [];
+          record.path = this.ai.findPath(this.world, start, playerPoint.tile);
           record.targetKey = targetKey;
-          record.nextPathAt = time + 650;
+          record.nextPathAt = time + this.ai.pathRefreshMs;
         }
-        const stepSeconds = Math.max(0, Math.min(delta, 100)) / 1000;
         let target = record.path[0];
         while (target) {
           const targetX = (target.x + 0.5) * this.tileSize;
           const targetY = (target.y + 0.5) * this.tileSize;
-          const dx = targetX - record.sprite.x;
-          const dy = targetY - record.sprite.y;
-          const distanceToWaypoint = Math.hypot(dx, dy);
-          if (distanceToWaypoint <= 2) {
+          const step = this.ai.movementStep(
+            { x: record.sprite.x, y: record.sprite.y },
+            { x: targetX, y: targetY },
+            this.status.getStat(record.id, 'speed') ?? record.definition.speed,
+            delta
+          );
+          if (step.arrived) {
             record.path.shift();
             target = record.path[0];
             continue;
           }
-          const monsterSpeed = this.status.getStat(record.id, 'speed') ?? record.definition.speed;
-          const travel = Math.min(distanceToWaypoint, monsterSpeed * stepSeconds);
-          record.sprite.setPosition(
-            record.sprite.x + dx / distanceToWaypoint * travel,
-            record.sprite.y + dy / distanceToWaypoint * travel
-          );
+          record.sprite.setPosition(step.x, step.y);
           this.setMonsterAnimation(record, 'walk', dxToPlayer, dyToPlayer);
           record.sprite.setDepth(record.sprite.y + 10);
           break;
@@ -2178,8 +2285,10 @@
 
       destroy() {
         if (!this.active) return;
+        // Último snapshot antes de remover entidades e seus registros de status.
+        // Sem isso, um spawn/dano ocorrido nos últimos 800 ms poderia sumir.
+        this.flushMonsterSnapshot('scene-shutdown');
         this.active = false;
-        if (this.monsterSaveTimer) { clearTimeout(this.monsterSaveTimer); this.monsterSaveTimer = null; }
         for (const unsubscribe of this.unsubscribers || []) unsubscribe();
         this.unsubscribers = [];
         if (this.scene && this.scene.events) {
@@ -2252,7 +2361,7 @@
     });
 
     root.CONQUISTADOR_V13_SYSTEMS = Object.freeze({
-      EventBus, EntityManager, StatusSystem, CombatSystem, ProgressSystem, DropSystem, DungeonSystem, LevelSystem, SaveSystem, MonsterSystem, GameData,
+      EventBus, EntityManager, StatusSystem, CombatSystem, ProgressSystem, DropSystem, DungeonSystem, LevelSystem, SaveSystem, MonsterAI, MonsterSystem, GameData,
       schemaVersion: 4
     });
   })(window);
@@ -2783,13 +2892,11 @@
       }
 
       getItems() {
-        const items = this.api.progress.get('items');
-        return Array.isArray(items) ? items : [];
+        return this.api.inventory.getItems();
       }
 
       getItemDefinition(itemId) {
-        const definitions = this.api.data.ITEMS || {};
-        return definitions[itemId] || { id: itemId, name: itemId, category: 'material' };
+        return this.api.inventory.getDefinition(itemId);
       }
 
       getIcon(item) {
@@ -3014,7 +3121,7 @@
           this.refresh();
           return false;
         }
-        const result = this.api.progress.update('items', remaining);
+        const result = this.api.inventory.replaceItems(remaining);
         if (result === 'pending' || result === true) {
           this.closeQuantityDialog();
           this.selectedItemId = null;
@@ -3109,10 +3216,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       var m;
       var text = el.textContent || '';
       while ((m = re.exec(text)) !== null) values[m[1]] = m[2];
-
-      // V153 — o mapa BY_ID é um objeto, não uma string simples. A versão
-      // anterior ignorava esse bloco e todas as espécies sem getter próprio
-      // caíam no fallback da arte da Slime.
+      // O mapa por espécie é um objeto literal no bloco text/plain, não uma
+      // string. Extraí-lo explicitamente evita que todas as cartas caiam na
+      // imagem genérica da Slime.
       var mapMatch = text.match(/window\.CONQUISTADOR_WAIFU_ART_BY_ID\s*=\s*\{([^}]*)\}/);
       if (mapMatch) {
         var map = {};
@@ -3161,32 +3267,17 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       }
 
       readKillCounts() {
-        const flags = this.api.progress.get('flags');
-        const bestiary = flags && typeof flags === 'object' ? flags.bestiary : null;
-        const counts = bestiary && typeof bestiary.monsters === 'object' ? bestiary.monsters : {};
-        const result = {};
-        for (const [id, count] of Object.entries(counts)) {
-          result[id] = Math.max(0, Math.floor(Number(count) || 0));
-        }
-        return result;
+        return this.api.bestiary.getKillCounts();
       }
 
       recordKill(event) {
         if (!this.active || !event || event.killerId !== 'player' ||
             typeof event.monsterId !== 'string') return;
-        this.killCounts[event.monsterId] = (this.killCounts[event.monsterId] || 0) + 1;
-        const currentFlags = this.api.progress.get('flags');
-        const flags = currentFlags && typeof currentFlags === 'object' ? { ...currentFlags } : {};
-        const oldBestiary = flags.bestiary && typeof flags.bestiary === 'object'
-          ? flags.bestiary : {};
-        flags.bestiary = {
-          ...oldBestiary,
-          monsters: { ...(oldBestiary.monsters || {}), [event.monsterId]: this.killCounts[event.monsterId] }
-        };
-        // V147 — sem mecânica de desbloqueio por abates: cartas de waifu são
-        // só por drop, cada uma do monstro da sua espécie. Matar monstros só
-        // alimenta o contador do bestiário.
-        this.api.progress.update('flags', flags);
+        // Abates alimentam somente o contador do bestiário; cartas continuam
+        // sendo obtidas exclusivamente pelo fluxo de drops por espécie.
+        const savedCount = this.api.bestiary.recordKill(event.monsterId);
+        if (savedCount === false) return;
+        this.killCounts[event.monsterId] = savedCount;
         this.refresh();
       }
 
@@ -3714,7 +3805,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const WAIFU_DEFS = (root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {};
         const waifusProgress = this.api.progress.get('waifus') || {};
         const ownedWaifuIds = new Set([...(waifusProgress.cards || []), ...(waifusProgress.house || [])].map(c => String(c && (c.waifuId || c.waifuType || c.id))));
-        const waifuArt = id => (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[id] || '';
+        const waifuArt = id => (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[id] || (id === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : id === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
         const waifuEntries = WAIFU_ORDER.map(waifuId => {
           const def = WAIFU_DEFS[waifuId] || {};
           const skill = def.activeSkill || null;
@@ -3861,8 +3952,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const value = card[field];
         if (typeof value === 'string' && WAIFU_IDS.has(value)) return value;
       }
-      // Compatibilidade com saves antigos em que id guardava a espécie.
-      // IDs de instância (ex.: waifu-drop-...) nunca são tratados como espécie.
+      // Saves antigos podem usar id como espécie; IDs de instância não contam.
       return typeof card.id === 'string' && WAIFU_IDS.has(card.id) ? card.id : null;
     }
 
@@ -4223,12 +4313,11 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         const grouped = new Map();
         for (const card of cards) {
           const qualityId = QUALITY.some(q => q.id === (card && card.quality)) ? card.quality : 'plebeia';
-          const speciesId = resolveWaifuId(card);
-          const groupSpeciesId = speciesId || 'unknown';
-          const legacyLevel = speciesId && data.intimacy && data.intimacy[speciesId] ? data.intimacy[speciesId].level : 1;
+          const speciesId = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
+          const legacyLevel = data.intimacy && data.intimacy[speciesId] ? data.intimacy[speciesId].level : 1;
           const level = Math.max(1, Math.min(100, Math.floor(Number(card && card.intimacy && card.intimacy.level) || Number(legacyLevel) || 1)));
-          const key = `${groupSpeciesId}|${level}|${qualityId}`;
-          if (!grouped.has(key)) grouped.set(key, { key, speciesId: groupSpeciesId, level, qualityId, cards: [] });
+          const key = `${speciesId}|${level}|${qualityId}`;
+          if (!grouped.has(key)) grouped.set(key, { key, speciesId, level, qualityId, cards: [] });
           grouped.get(key).cards.push(card);
         }
 
@@ -4240,7 +4329,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           ((SPECIES_ORDER[a.speciesId] ?? 0) - (SPECIES_ORDER[b.speciesId] ?? 0)));
         for (const group of sortedGroups) {
           const quality = QUALITY.find(item => item.id === group.qualityId) || QUALITY[0];
-          const speciesName = (WAIFU_DEFINITIONS[group.speciesId] || {}).name || (group.speciesId === 'unknown' ? 'Carta sem identificação' : group.speciesId);
+          const speciesName = (WAIFU_DEFINITIONS[group.speciesId] || {}).name || group.speciesId;
           // V88: carta pequena e plana. Tres filhos, zero estilo inline:
           // arte, selo de quantidade e rodape. A qualidade viaja em --q.
           const stack = this.document.createElement('button');
@@ -4250,7 +4339,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           stack.setAttribute('aria-label', `${speciesName}, nivel ${group.level}, qualidade ${quality.name}`);
           const art = this.document.createElement('img');
           art.className = 'cg-art';
-          art.src = group.speciesId === 'unknown' ? '' : ((root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[group.speciesId] || '');
+          art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[group.speciesId] || (group.speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : group.speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
           art.alt = `Ilustracao de ${speciesName}`;
           const quantity = this.document.createElement('span');
           quantity.className = 'cg-count';
@@ -4265,25 +4354,22 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           meta.textContent = `${'★'.repeat(QUALITY.indexOf(quality) + 1)} · Nv. ${group.level}`;
           foot.append(name, meta);
           stack.append(art, quantity, foot);
-          stack.disabled = group.speciesId === 'unknown';
-          if (stack.disabled) stack.title = 'Esta carta não possui identificação de espécie no save.';
-          else stack.addEventListener('click', () => this.showFullCard(group.key));
+          stack.addEventListener('click', () => this.showFullCard(group.key));
           this.content.appendChild(stack);
         }
       }
 
-      showFullCard(stackKey) {
+      showFullCard(stackKey = 'slime|1|plebeia') {
         if (this.cardOverlay) this.cardOverlay.remove();
-        const parts = String(stackKey || '').split('|');
-        const speciesId = parts[0] || '';
-        if (!WAIFU_IDS.has(speciesId)) return false;
+        const parts = String(stackKey).split('|');
+        const speciesId = parts[0] || 'slime';
         const level = Math.max(1, Math.floor(Number(parts[1]) || 1));
         const quality = QUALITY.find(item => item.id === parts[2]) || QUALITY[0];
         const speciesName = (WAIFU_DEFINITIONS[speciesId] || {}).name || speciesId;
         const cardsData = this.api.progress.get('waifus') || {};
         const cards = Array.isArray(cardsData.cards) ? cardsData.cards : [];
         const matchingCards = cards.filter(card => {
-          const cardSpecies = resolveWaifuId(card);
+          const cardSpecies = String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
           const cardQuality = QUALITY.some(q => q.id === (card && card.quality)) ? card.quality : 'plebeia';
           const legacyLevel = cardsData.intimacy && cardsData.intimacy[cardSpecies]
             ? cardsData.intimacy[cardSpecies].level : 1;
@@ -4363,7 +4449,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           borderRadius: '0', background: 'transparent',
           border: 'none'
         });
-        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
           position: 'relative', flex: '0 0 auto', padding: '2px 4px',
@@ -4543,6 +4629,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 
     class WaifuSystem {
       constructor(api, options = {}) {
+        if (!api || !api.events || !api.progress || !api.data) {
+          throw new TypeError('WaifuSystem exige a API pública completa.');
+        }
         this.api = api;
         this.definitions = WAIFU_DEFINITIONS;
         this.dropSystem = new WaifuDropSystem(api, {
@@ -4554,12 +4643,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         });
         this.active = true;
       }
-      getDefinition(waifuId) {
-        return this.definitions[waifuId] || null;
-      }
-      resolveCardSpecies(card) {
-        return resolveWaifuId(card);
-      }
+      getDefinition(waifuId) { return this.definitions[waifuId] || null; }
+      resolveCardSpecies(card) { return resolveWaifuId(card); }
       destroy() {
         if (!this.active) return;
         this.active = false;
@@ -6038,9 +6123,60 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
         worldId: PLAYER_POSITION_WORLD_ID
       }, eventBus);
       const progressSystem = new systems.ProgressSystem(saveSystem, eventBus);
-      const dungeonSystem = new systems.DungeonSystem({ events: eventBus, progress: progressSystem, data: systems.GameData });
+      const dungeonSystem = new systems.DungeonSystem({
+        events: eventBus,
+        progress: progressSystem,
+        data: systems.GameData
+      });
       return Object.freeze({ eventBus, entityManager, statusSystem, combatSystem, progressSystem, dungeonSystem, levelSystem, saveSystem, data: systems.GameData });
     })();
+
+    // V159 — flush final do snapshot de monstros em pagehide/shutdown; debounce centralizado.
+    // Não altera save, mundo, entidades ou estado de combate.
+    function runIntegrityCheck() {
+      const checks = [];
+      const add = (name, ok, detail) => checks.push({ name, ok: !!ok, detail: detail || '' });
+      const requiredRuntime = ['eventBus', 'entityManager', 'statusSystem', 'combatSystem',
+        'progressSystem', 'dungeonSystem', 'levelSystem', 'saveSystem'];
+      requiredRuntime.forEach(key => add('runtime.' + key, !!GAME_RUNTIME[key], 'Sistema global disponível'));
+      const systems = window.CONQUISTADOR_V13_SYSTEMS || {};
+      add('DropSystem', typeof systems.DropSystem === 'function', 'Classe exportada');
+      add('DungeonSystem', typeof systems.DungeonSystem === 'function' && !!GAME_RUNTIME.dungeonSystem, 'Classe exportada e instância ativa no runtime');
+      add('MonsterSystem', typeof systems.MonsterSystem === 'function', 'Classe exportada');
+      add('MonsterAI', typeof systems.MonsterAI === 'function', 'Decisões de IA isoladas da apresentação Phaser');
+      const inventory = window.CONQUISTADOR_V15_SYSTEMS || {};
+      add('InventorySystem', typeof inventory.InventorySystem === 'function', 'Classe exportada');
+      const bestiary = window.CONQUISTADOR_BESTIARY_SYSTEMS || {};
+      add('BestiarySystem', typeof bestiary.BestiarySystem === 'function', 'Classe exportada');
+      const waifuSystems = window.CONQUISTADOR_WAIFU_SYSTEMS || {};
+      const definitions = waifuSystems.WAIFU_DEFINITIONS || {};
+      const art = window.CONQUISTADOR_WAIFU_ART_BY_ID || {};
+      const speciesIds = Object.keys(definitions);
+      add('WaifuSystem', typeof waifuSystems.WaifuSystem === 'function', 'Fachada exportada');
+      add('WaifuCatalog', speciesIds.length === 10, speciesIds.length + ' espécies encontradas');
+      const missingArt = speciesIds.filter(id => typeof art[id] !== 'string' || !art[id].trim());
+      add('WaifuArtCoverage', missingArt.length === 0,
+        missingArt.length ? 'Sem arte: ' + missingArt.join(', ') : 'Todas as espécies possuem caminho de arte');
+      const artPaths = speciesIds.map(id => art[id]).filter(Boolean);
+      add('WaifuArtUniqueness', new Set(artPaths).size === artPaths.length,
+        artPaths.length + ' caminhos distintos para ' + speciesIds.length + ' espécies');
+      add('WorldId', PLAYER_POSITION_WORLD_ID === 'overworld-180x180-v115',
+        'Identificador do mundo preservado');
+      const failed = checks.filter(check => !check.ok);
+      return Object.freeze({
+        version: 'V159',
+        ok: failed.length === 0,
+        checks: Object.freeze(checks.map(check => Object.freeze(check))),
+        failures: Object.freeze(failed.map(check => check.name)),
+        eventListeners: GAME_RUNTIME.eventBus.listenerSnapshot()
+      });
+    }
+    window.CONQUISTADOR_DIAGNOSTICS = Object.freeze({
+      runIntegrityCheck,
+      getEventListeners: () => GAME_RUNTIME.eventBus.listenerSnapshot(),
+      getListenerCount: eventName => GAME_RUNTIME.eventBus.listenerCount(eventName)
+    });
+
     const loading = document.getElementById('loading');
     const errorPanel = document.getElementById('error');
     const errorDetail = document.getElementById('error-detail');
@@ -7327,7 +7463,17 @@ class WorldScene extends Phaser.Scene {
             this.scheduleExtensionSave();
           })
         ];
+        // V161 — ao retornar de uma cena sobreposta (DungeonScene), grava
+        // novamente atributos/progresso compartilhados usando a posição segura
+        // que continua pertencendo ao mundo aberto. Nunca lê posição da dungeon.
+        this._worldResumeSaveHandler = () => {
+          if (!this.player || !this.saveSystem) return;
+          this._lastWorldResumeSaveResult = this.savePlayerPositionSafely(true);
+        };
+        this.events.on('resume', this._worldResumeSaveHandler);
         this.events.once('shutdown', () => {
+          this.events.off('resume', this._worldResumeSaveHandler);
+          this._worldResumeSaveHandler = null;
           for (const unsubscribe of this._systemSaveUnsubs || []) unsubscribe();
           this._systemSaveUnsubs = [];
           for (const unsubscribe of this._combatUnsubs || []) unsubscribe();
@@ -7348,22 +7494,78 @@ class WorldScene extends Phaser.Scene {
           this._combatStopUnsub,
           this._combatAttackAnimationUnsub
         ];
+        const statusAPI = Object.freeze({
+          // Operações necessárias ao ciclo de vida das entidades.
+          register: (entityId, stats) => this.statusSystem.register(entityId, stats),
+          ensure: (entityId, stats) => this.statusSystem.ensure(entityId, stats),
+          unregister: entityId => this.statusSystem.unregister(entityId),
+          // Consultas e snapshots.
+          snapshot: entityId => this.statusSystem.snapshot(entityId),
+          getEffectiveSnapshot: entityId => this.statusSystem.getEffectiveSnapshot(entityId),
+          getStat: (entityId, stat) => this.statusSystem.getStat(entityId, stat),
+          getAttackCooldown: entityId => this.statusSystem.getAttackCooldown(entityId),
+          // Alterações controladas e regeneração.
+          heal: (entityId, amount) => this.statusSystem.heal(entityId, amount),
+          restoreResource: (entityId, resource, amount) => this.statusSystem.restoreResource(entityId, resource, amount),
+          updateRegeneration: (deltaMs, now) => this.statusSystem.updateRegeneration(deltaMs, now),
+          addModifier: (entityId, modifier) => this.statusSystem.addModifier(entityId, modifier),
+          removeModifier: (entityId, modifierId) => this.statusSystem.removeModifier(entityId, modifierId)
+        });
+        const levelsAPI = Object.freeze({
+          snapshot: entityId => this.levelSystem.snapshot(entityId),
+          xpToNext: level => this.levelSystem.xpToNext(level)
+        });
+        const entitiesAPI = Object.freeze({
+          create: definition => this.entityManager.create(definition),
+          get: id => this.entityManager.get(id),
+          getAll: kind => this.entityManager.getAll(kind),
+          updateTile: (id, tile) => this.entityManager.updateTile(id, tile),
+          remove: id => this.entityManager.remove(id),
+          clear: () => this.entityManager.clear()
+        });
         this.extensionAPI = Object.freeze({
           events: this.eventBus,
-          entities: this.entityManager,
-          status: this.statusSystem,
+          entities: entitiesAPI,
+          status: statusAPI,
           combat: GAME_RUNTIME.combatSystem,
-          dungeons: GAME_RUNTIME.dungeonSystem,
-          waifus: Object.freeze({
-            getDefinition: id => (window.CONQUISTADOR_WAIFU_SYSTEMS.WAIFU_DEFINITIONS || {})[id] || null,
-            resolveCardSpecies: card => window.CONQUISTADOR_WAIFU_SYSTEMS.resolveWaifuId(card)
-          }),
-          levels: this.levelSystem,
+          levels: levelsAPI,
           save: Object.freeze({ request: reason => this.eventBus.emit('save:request', { reason: reason || 'extension' }) }),
           progress: Object.freeze({
             get: section => GAME_RUNTIME.progressSystem.get(section),
             update: (section, data) => GAME_RUNTIME.progressSystem.update(section, data),
             updateBatch: data => GAME_RUNTIME.progressSystem.updateBatch(data)
+          }),
+          // Contratos públicos de domínio: os módulos de UI não manipulam
+          // diretamente o formato persistido de items/flags.
+          inventory: Object.freeze({
+            getItems: () => {
+              const items = GAME_RUNTIME.progressSystem.get('items');
+              return Array.isArray(items) ? items : [];
+            },
+            getDefinition: itemId => GAME_RUNTIME.data.ITEMS[itemId] || { id: itemId, name: itemId, category: 'material' },
+            replaceItems: items => GAME_RUNTIME.progressSystem.update('items', Array.isArray(items) ? items : [])
+          }),
+          bestiary: Object.freeze({
+            getKillCounts: () => {
+              const flags = GAME_RUNTIME.progressSystem.get('flags');
+              const counts = flags && flags.bestiary && flags.bestiary.monsters;
+              const result = {};
+              if (counts && typeof counts === 'object') {
+                for (const [id, count] of Object.entries(counts)) result[id] = Math.max(0, Math.floor(Number(count) || 0));
+              }
+              return result;
+            },
+            recordKill: monsterId => {
+              if (typeof monsterId !== 'string' || !monsterId) return false;
+              const current = GAME_RUNTIME.progressSystem.get('flags');
+              const flags = current && typeof current === 'object' ? { ...current } : {};
+              const oldBestiary = flags.bestiary && typeof flags.bestiary === 'object' ? flags.bestiary : {};
+              const counts = oldBestiary.monsters && typeof oldBestiary.monsters === 'object' ? oldBestiary.monsters : {};
+              const nextCount = Math.max(0, Math.floor(Number(counts[monsterId]) || 0)) + 1;
+              flags.bestiary = { ...oldBestiary, monsters: { ...counts, [monsterId]: nextCount } };
+              const result = GAME_RUNTIME.progressSystem.update('flags', flags);
+              return result === 'pending' || result === true ? nextCount : false;
+            }
           }),
           // Resolvido sob demanda porque MonsterSystem é criado após a API.
           drops: Object.freeze({
@@ -7540,8 +7742,7 @@ class WorldScene extends Phaser.Scene {
           this.waifuSystem = new window.CONQUISTADOR_WAIFU_SYSTEMS.WaifuSystem(this.extensionAPI, {
             scene: this, tileSize: TILE_SIZE, document: window.document
           });
-          // Aliases de compatibilidade: menus e listeners antigos continuam
-          // usando os mesmos objetos, agora orquestrados pela fachada.
+          // Aliases legados mantêm os pontos de integração da UI e dos drops.
           this.waifuDropSystem = this.waifuSystem.dropSystem;
           this.waifuGallerySystem = this.waifuSystem.gallerySystem;
 
@@ -7588,7 +7789,7 @@ class WorldScene extends Phaser.Scene {
             // V147: nomes das 10 waifus vindos de data/waifus.json (antes só 3
             // fixas e o resto caía no id cru, ex. 'harpia').
             for (const [id, def] of Object.entries((root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus) || {})) { if (def && def.name) SPECIES[id] = def.name; };
-            const ART = id => (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[id] || '';
+            const ART = id => id === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : id === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
 
     
             const WAIFU_META = {
@@ -7716,7 +7917,7 @@ class WorldScene extends Phaser.Scene {
                   art.style.minHeight = '0';
                   art.style.width = '100%';
                   art.style.objectFit = 'contain';
-                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || ''));
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
                   foot.className = 'cg-foot';
@@ -7805,7 +8006,7 @@ class WorldScene extends Phaser.Scene {
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
                 const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15', border: '3px solid ' + qinfo.color, outline: '1px solid ' + qinfo.color, outlineOffset: '-6px' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
-                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || ''; art.alt = 'Carta de ' + name;
+                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || (speciesId === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : speciesId === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '')); art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
                 const descLabel = el('div', { margin: '14px 0 6px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
                 descLabel.textContent = 'DESCRIÇÃO';
@@ -8190,7 +8391,7 @@ class WorldScene extends Phaser.Scene {
             const data = readWaifuData();
             return pickerPool(data).find(card => card && card.instanceId === id) || null;
           };
-          const waifuTypeOf = card => window.CONQUISTADOR_WAIFU_SYSTEMS.resolveWaifuId(card) || 'unknown';
+          const waifuTypeOf = card => String(card && (card.waifuId || card.waifuType || card.id) || 'slime');
           const removeEquippedWaifu = async slotIndex => {
             const latest = readWaifuData();
             const equippedNow = Array.isArray(latest.equipped) ? latest.equipped.slice(0,3) : [];
@@ -8223,9 +8424,8 @@ class WorldScene extends Phaser.Scene {
                 const quality = qualityInfo[card.quality] || qualityInfo.plebeia;
                 const art = statusDoc.createElement('img');
                 const slotSpecies = waifuTypeOf(card);
-                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[slotSpecies] || '';
-                const slotDefinition = ((root.CONQUISTADOR_DATA || {}).waifus || {}).waifus || {};
-                art.alt = (slotDefinition[slotSpecies] && slotDefinition[slotSpecies].name) || 'Carta de waifu';
+                art.src = slotSpecies === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : slotSpecies === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+                art.alt = 'Donzela ' + (slotSpecies === 'monkey' ? 'Macaca' : slotSpecies === 'rat' ? 'Rata' : 'Slime');
                 Object.assign(art.style, {
                   position: 'absolute', left: '7%', top: '19%', width: '86%', height: '62%',
                   display: 'block', objectFit: 'contain', objectPosition: 'center',
@@ -8383,9 +8583,8 @@ class WorldScene extends Phaser.Scene {
               }
               const art = statusDoc.createElement('img');
               const pickerSpecies = waifuTypeOf(card);
-              art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[pickerSpecies] || '';
-              const pickerDefinitions = ((root.CONQUISTADOR_DATA || {}).waifus || {}).waifus || {};
-              art.alt = (pickerDefinitions[pickerSpecies] && pickerDefinitions[pickerSpecies].name) || 'Carta de waifu';
+              art.src = pickerSpecies === 'monkey' ? (root.CONQUISTADOR_WAIFU_ART_MONKEY || '') : pickerSpecies === 'rat' ? (root.CONQUISTADOR_WAIFU_ART_RAT || '') : (root.CONQUISTADOR_WAIFU_ART || '');
+              art.alt = 'Carta completa da Donzela ' + (pickerSpecies === 'monkey' ? 'Macaca' : pickerSpecies === 'rat' ? 'Rata' : 'Slime');
               Object.assign(art.style, {
                 display: 'block', width: '100%', aspectRatio: '2 / 3', objectFit: 'contain',
                 background: '#100d17', borderRadius: '0'
@@ -8815,7 +9014,6 @@ class WorldScene extends Phaser.Scene {
             if (this.inventorySystem) this.inventorySystem.destroy();
             if (this.bestiarySystem) this.bestiarySystem.destroy();
             if (this.waifuSystem) this.waifuSystem.destroy();
-            this.waifuSystem = null;
             if (this.houseSystem) this.houseSystem.destroy();
             if (this.playerStatusUI) this.playerStatusUI.destroy();
             this.playerStatusUI = null;
@@ -8824,6 +9022,7 @@ class WorldScene extends Phaser.Scene {
             this.monsterSystem = null;
             this.inventorySystem = null;
             this.bestiarySystem = null;
+            this.waifuSystem = null;
             this.waifuDropSystem = null;
             this.waifuGallerySystem = null;
             this.houseSystem = null;
@@ -9886,13 +10085,23 @@ class WorldScene extends Phaser.Scene {
       }
 
       enterDungeon() {
+        // V160 — checkpoint de transição: descarrega o snapshot pendente dos
+        // monstros e grava a posição/estado do MUNDO antes de pausar a cena.
+        // O save continua sendo produzido pelo SaveSystem V4 e pelo gate seguro
+        // de posição; a posição interna da DungeonScene nunca é persistida.
+        if (this.monsterSystem && typeof this.monsterSystem.flushMonsterSnapshot === 'function') {
+          this.monsterSystem.flushMonsterSnapshot('dungeon-entry');
+        }
+        if (typeof this.savePlayerPositionSafely === 'function') {
+          this._lastDungeonEntrySaveResult = this.savePlayerPositionSafely(true);
+        }
+
         // Esconde o HUD do mundo aberto (minimapa do mundo nao faz sentido aqui).
         const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
         hide('conquistador-main-menu');
         hide('conquistador-minimap');
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
-        // Troca de cena: o WorldScene pausa (sem update, sem auto-save),
-        // a DungeonScene assume. O save nunca grava a posicao da dungeon.
+        // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
         this.scene.launch('DungeonScene');
         this.scene.pause();
@@ -10744,7 +10953,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V153'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V159'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
