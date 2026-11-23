@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<!-- V175 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
-<!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->\n<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
+<!-- V176 — rio em curva para a montanha, transição segura da Dungeon, visibilidade dos monstros e limpeza do topo. -->
+<!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
+<!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
 <!-- V160 — Checkpoint seguro antes da entrada na dungeon: flush dos monstros e save V4 da posição do mundo. -->
 <!-- V159 — Restaurada a fachada WaifuSystem e o resolvedor de espécies; corrigido carregamento do mapa de arte por espécie; auditoria e diagnóstico do EventBus. -->
@@ -36,7 +37,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V175</div>
+  <div id="version-badge">V176</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -464,7 +465,7 @@
       }
     }
 
-    // DungeonSystem V175: catálogo validado, execução idempotente e progresso protegido.
+    // DungeonSystem V176: catálogo validado, execução idempotente e progresso protegido.
     class DungeonSystem {
       constructor(api) {
         if (!api || !api.progress || !api.data) throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
@@ -1937,13 +1938,25 @@
       }
 
       scheduleChunkRespawn(record) {
-        if (!record || !record.originChunkId || !this.monsterTypes.includes(record.monsterId)) return false;
-        const chunkId = record.originChunkId;
+        if (!record || !this.monsterTypes.includes(record.monsterId)) return false;
+        // V176 — compatibilidade com entidades antigas sem originChunkId:
+        // recupera o chunk a partir do tile atual em vez de descartar o respawn.
+        let owner = null;
+        if (record.originChunkId) {
+          const parts = String(record.originChunkId).split(':').map(Number);
+          owner = {
+            id: String(record.originChunkId),
+            chunkX: Number.isInteger(Number(record.originChunkX)) ? Number(record.originChunkX) : parts[0],
+            chunkY: Number.isInteger(Number(record.originChunkY)) ? Number(record.originChunkY) : parts[1]
+          };
+        } else owner = this.getChunkForTile(record.tile);
+        if (!owner || !Number.isInteger(owner.chunkX) || !Number.isInteger(owner.chunkY)) return false;
+        const chunkId = owner.id || this.getChunkId(owner.chunkX, owner.chunkY);
         let queue = this.chunkRespawns.get(chunkId);
         if (!queue) {
           queue = {
-            chunkX: record.originChunkX,
-            chunkY: record.originChunkY,
+            chunkX: owner.chunkX,
+            chunkY: owner.chunkY,
             pending: 0,
             pendingByMonster: { slime: 0, monkey: 0, rat: 0 },
             nextAt: this.now + this.respawnDelayMs
@@ -1979,9 +1992,15 @@
             continue;
           }
 
-          const monsterId = this.monsterTypes.find(type =>
+          let monsterId = this.monsterTypes.find(type =>
             queue.pendingByMonster && queue.pendingByMonster[type] > 0
           );
+          if (!monsterId && queue.pending > 0) {
+            // Saves antigos guardavam apenas pending total; nao descarta a fila.
+            monsterId = 'slime';
+            queue.pendingByMonster = queue.pendingByMonster || {};
+            queue.pendingByMonster.slime = Math.max(1, Number(queue.pendingByMonster.slime) || 0);
+          }
           if (!monsterId) {
             this.chunkRespawns.delete(chunkId);
             continue;
@@ -5222,14 +5241,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // V115 — Banco de gelo: 2 tiles ao SUL do rio.
     // É terra (andável), pintado de neve, sem árvores nem estruturas.
     function isSouthernIceBankCell(generator, x, y) {
-      if (x < 0 || x >= generator.worldTiles || y < 0 || y >= generator.worldHeight) return false;
-      if (isBridgeCell(generator, x, y)) return false;
-      const distance = getRiverDistance(x + 0.5, y + 0.5);
-      const half = getRiverHalfWidth(x);
-      return distance > half && distance <= half + 2;
+      // V176 — o rio nao recebe mais faixa branca/neve na margem.
+      // A agua azul clara chega ate a margem; a faixa central e mais escura.
+      return false;
     }
 
-    // V175 — curso do rio em polilinha: segue para leste, curva para dentro
+    // V176 — curso do rio em polilinha: segue para leste, curva para dentro
     // da montanha e depois sobe em eixo vertical. A distância é calculada
     // até cada segmento, mantendo largura contínua e margens sem ruído.
     const RIVER_CENTERLINE = Object.freeze([
@@ -5271,12 +5288,13 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     }
 
     function getOceanTileId(generator, x, y) {
-      const shorelineTile = getShorelineTileId(generator, x, y);
-      if (shorelineTile) return shorelineTile;
       const depth = getRiverDistance(x + 0.5, y + 0.5);
+      const halfWidth = getRiverHalfWidth(x);
       const variation = stableNoise(x, y, 751);
-      if (depth <= 1) return variation < 0.045 ? 298 : 311;
-      return variation < 0.24 ? 311 : 316;
+      // Borda/margem: azul atual. Centro: azul profundo e uniforme.
+      const edgeBand = Math.max(1, halfWidth * 0.38);
+      if (depth >= halfWidth - edgeBand) return variation < 0.12 ? 311 : 316;
+      return variation < 0.72 ? 316 : 311;
     }
 
     // Detalhes procedurais ficam fora do rio, das margens e das pontes.
@@ -6403,7 +6421,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V175',
+        version: 'V176',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6515,6 +6533,15 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       ])
 
     });
+
+    // V176 — tabelas de GIDs que faltavam na versão anterior.
+    // A ausência destas constantes interrompia buildDungeonLayout() antes
+    // da cena terminar o create(), causando a entrada travada na Dungeon.
+    const GRASS_GIDS = Object.freeze([1, 2, 3, 4]);
+    const DIRT_BY_MASK = Object.freeze({ 0: 5, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12, 8: 13, 9: 14, 10: 15, 11: 16, 12: 17, 13: 18, 14: 19, 15: 20 });
+    const CLIFF_BY_MASK = Object.freeze({ 0: 137, 1: 137, 2: 137, 3: 137, 4: 137, 5: 137, 6: 137, 7: 137, 8: 137, 9: 137, 10: 137, 11: 137, 12: 137, 13: 137, 14: 137, 15: 137 });
+    const TREE_GIDS = Object.freeze([1, 2, 3, 4]);
+    const CLIFF_GIDS = Object.freeze([137, 138, 139, 140]);
 
     function dungeonHash(x, y, salt) {
       const v = Math.sin((x + salt * 17.17) * 127.1 + (y - salt * 9.31) * 311.7) * 43758.5453123;
@@ -6783,7 +6810,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         // com launch(). Força também a visibilidade caso tenha sido reutilizada.
         this.scene.setVisible(true);
         this.scene.bringToTop();
-        // V175: pausa o mundo somente depois de a Dungeon estar pronta.
+        // V176: pausa o mundo somente depois de a Dungeon estar pronta.
         // O sinal é emitido após visuais, colisões, jogador, monstros e HUD.
         this.scene.sleep('WorldScene');
         this.game.events.emit('dungeon:ready', { floor: this.currentFloor });
@@ -6815,9 +6842,14 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           const ctx = tex.getContext();
           for (let y = 0; y < gh; y += 1) for (let x = 0; x < gw; x += 1) {
             const gid = this.layout.ground[y][x]; if (!gid) continue;
-            const tk = groundTextureForDungeonTile(gid, x, y); // V140 — mesma regra da V134, agora numa unica funcao.
-            const img = this.textures.get(tk).getSourceImage();
-            ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            // Usa somente texturas carregadas pelo preload da cena. O helper
+            // groundTextureForDungeonTile nao existia e causava ReferenceError.
+            const tk = gid >= 100 ? 'v132-stone' : gid >= 5 ? 'v132-dirt' : 'v132-grass1';
+            const texture = this.textures.exists(tk) ? this.textures.get(tk) : this.textures.get('v132-grass1');
+            const img = texture && texture.getSourceImage ? texture.getSourceImage() : null;
+            if (img && img.width && img.height) {
+              ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
           }
           tex.refresh();
           this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0);
@@ -7924,7 +7956,7 @@ class WorldScene extends Phaser.Scene {
         this.load.image('v132-dirt', V132_ASSETS.groundDirt);
         this.load.image('v132-stone', V132_ASSETS.groundStone);
         this.load.image('v132-water', V132_ASSETS.groundWater);
-        // V175 — tile de água enviado ao repositório.
+        // V176 — tile de água enviado ao repositório.
         this.load.image('water-river', 'assets/ground/water-river.png');
         this.load.image('v132-tree-leaf', V132_ASSETS.treeLeaf);
         this.load.image('v132-tree-pine', V132_ASSETS.treePine);
@@ -10390,11 +10422,11 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V175 — transição de cena determinística. O mundo dorme (não atualiza
+        // V176 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
-        // V175: manter o mundo ativo até a DungeonScene concluir create().
+        // V176: manter o mundo ativo até a DungeonScene concluir create().
         // Se a inicialização falhar, o jogador não fica preso numa tela vazia.
         this.scene.launch('DungeonScene');
       }
@@ -11244,7 +11276,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V175'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V176'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
