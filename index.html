@@ -2,13 +2,34 @@
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
-<head>
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
+</style>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V142</title>
+<title>CONQUISTADOR DE WAIFU'S — V143</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,7 +48,8 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V142</div>
+  <div id="version-badge">V143</div>
+  <!-- V143 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
@@ -4364,29 +4386,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       { x: 24, y: 68, rx: 8, ry: 7, density: 0.12 },
       { x: 66, y: 68, rx: 8, ry: 7, density: 0.12 }
     ];
-    const ROAD_POLYLINES = [
-      { points: [{ x: -2, y: 45 }, { x: 10, y: 44 }, { x: 19, y: 48 }, { x: 29, y: 47 }], width: 2 },
-      { points: [{ x: 43, y: -2 }, { x: 45, y: 12 }, { x: 41, y: 22 }, { x: 46, y: 29 }], width: 2 },
-      { points: [{ x: 60, y: 47 }, { x: 70, y: 43 }, { x: 79, y: 48 }, { x: 91, y: 45 }], width: 2 },
-      // V115 — trilha sul até a ponte 1, atravessa o rio e entra no gelo.
-      { points: [{ x: 45, y: 60 }, { x: 43, y: 70 }, { x: 49, y: 80 }, { x: 39, y: 86 }, { x: 38, y: 100 }, { x: 45, y: 112 }], width: 2 },
-      // V115 — acesso à ponte 2 e ao gelo a leste dela.
-      { points: [{ x: 80, y: 62 }, { x: 82, y: 78 }, { x: 80, y: 90 }, { x: 80, y: 102 }, { x: 88, y: 115 }, { x: 95, y: 128 }], width: 2 },
-      // V115 — estrada da montanha: sai da floresta e termina na base do
-      // pico escalável (o pico fica 2 tiles ao norte do fim da estrada).
-      { points: [{ x: 91, y: 45 }, { x: 115, y: 40 }, { x: 130, y: 45 }, { x: 145, y: 38 }, { x: 148, y: 42 }], width: 2 },
-      // V115 — trilha da montanha: serpenteia entre os picos, sem atravessar
-      // a base de nenhum deles.
-      { points: [{ x: 130, y: 45 }, { x: 145, y: 55 }, { x: 155, y: 65 }, { x: 160, y: 62 }, { x: 175, y: 50 }, { x: 172, y: 40 }, { x: 165, y: 25 }, { x: 155, y: 35 }, { x: 145, y: 20 }, { x: 135, y: 30 }], width: 1 },
-      // V115 — trilha do gelo: liga as duas pontes pelo sul do rio e segue
-      // para o leste do gelo.
-      { points: [{ x: 45, y: 112 }, { x: 60, y: 120 }, { x: 80, y: 125 }, { x: 95, y: 128 }, { x: 110, y: 130 }, { x: 130, y: 135 }, { x: 150, y: 130 }], width: 2 },
-      // V115 — trilha funda do gelo: desce até o sul do mundo.
-      { points: [{ x: 60, y: 120 }, { x: 55, y: 140 }, { x: 70, y: 160 }, { x: 90, y: 170 }, { x: 120, y: 165 }, { x: 150, y: 170 }], width: 1 },
-      { points: [{ x: 5, y: 75 }, { x: 17, y: 77 }, { x: 25, y: 72 }, { x: 31, y: 65 }], width: 1 },
-      { points: [{ x: 60, y: 38 }, { x: 68, y: 29 }, { x: 78, y: 25 }, { x: 90, y: 27 }], width: 1 },
-      { points: [{ x: 59, y: 59 }, { x: 70, y: 65 }, { x: 80, y: 72 }, { x: 91, y: 72 }], width: 1 }
-    ];
+    // V143 — SEM ESTRADA: o jogador pediu para tirar a estrada de chão.
+    // roadCells fica vazio; todo o código que testava isRoadCell() passa
+    // a ver chão de bioma. O rio continua bloqueado fora das pontes.
+    const ROAD_POLYLINES = [];
     // V115 — PICOS SOLTOS da montanha (leste). Cada pico é um asset de
     // montanha de verdade, ancorado num tile; a base (3x2) bloqueia.
     // O pico escalável é o primeiro: a estrada da montanha termina na base.
@@ -4464,6 +4467,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const SNOW_GROUND_GID_6 = 10009;
     const SNOW_GROUND_GID_7 = 10010;
     const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
+    const BRIDGE_GROUND_GID = 10012; // V143 — deck de madeira da ponte
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
@@ -4482,14 +4486,17 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     // (501) por tile: o mesmo tile sempre cai no mesmo GID.
     function iceGroundGidFor(x, y) {
       const n = stableNoise(x, y, 501);
+      // V143 — branca continua 40%, mas as escuras ficaram raras:
+      // gelo rachado 12% -> 8%, geada escura 12% -> 6%; o resto foi
+      // para as claras (azulada e neve antiga). Menos xadrez escuro.
       if (n < 0.40) return SNOW_GROUND_GID_8; // branca — 40%
-      if (n < 0.52) return SNOW_GROUND_GID_4;
-      if (n < 0.64) return SNOW_GROUND_GID_5;
-      if (n < 0.76) return SNOW_GROUND_GID_6;
-      if (n < 0.88) return SNOW_GROUND_GID_7;
-      if (n < 0.94) return SNOW_GROUND_GID;   // snow-1 antiga
-      if (n < 0.97) return SNOW_GROUND_GID_2; // snow-2 antiga
-      return SNOW_GROUND_GID_3;               // snow-3 antiga
+      if (n < 0.56) return SNOW_GROUND_GID_4; // azulada — 16%
+      if (n < 0.64) return SNOW_GROUND_GID_5; // rachado — 8%
+      if (n < 0.70) return SNOW_GROUND_GID_6; // geada escura — 6%
+      if (n < 0.80) return SNOW_GROUND_GID_7; // poças — 10%
+      if (n < 0.88) return SNOW_GROUND_GID;   // snow-1 antiga — 8%
+      if (n < 0.94) return SNOW_GROUND_GID_2; // snow-2 antiga — 6%
+      return SNOW_GROUND_GID_3;               // snow-3 antiga — 6%
     }
     const CUSTOM_ASSET_CODES = Object.freeze({
       mountain: 91001,
@@ -4524,23 +4531,40 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     }
 
     // V115 — O RIO. O antigo "mar" perdeu a identidade de mar: agora é um
-    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 5 ou 7
+    // rio que corta o mundo de leste a oeste em y ~= 90. A água tem 15 ou 21
     // tiles de largura (centro +-2 ou +-3); a margem norte é grama alta e
     // a margem sul é banco de gelo. Duas pontes de pedra
     // (x=38 e x=80) atravessam o rio e ligam floresta e montanhas.
     function getSouthernCoastlineY(generator, x) {
       const cx = Math.max(0, Math.min(generator.worldTiles - 1, x));
-      const broadBend = Math.sin(cx * 0.09 + 0.5) * 2;
-      const smallBend = Math.sin(cx * 0.21 + 1.3) * 1.2;
-      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 1.5;
+      // V143 — margem mais lisa: curva larga mais lenta e mais rasa,
+      // ondulação curta quase zerada e ruído de +-0.75 -> +-0.25.
+      // Balanço total cai de ~+-4.5 para ~+-2.25 tiles.
+      const broadBend = Math.sin(cx * 0.05 + 0.5) * 1.5;
+      const smallBend = Math.sin(cx * 0.11 + 1.3) * 0.5;
+      const roughness = (stableNoise(cx, 0, 997) - 0.5) * 0.5;
       return Math.round(RIVER_BASELINE_Y + broadBend + smallBend + roughness);
     }
 
     // V132 — rio mais grosso: meia-largura 2 ou 3 (rio de 5 ou 7 tiles,
     // antes 3 ou 5). Ponte, banco de gelo e região já usam a meia-largura
     // local, então se ajustam sozinhos.
+    // V143 — rio 3x mais grosso: meia-largura 2/3 -> 7/10 (rio de
+    // 5/7 tiles -> 15/21 tiles). Ponte, banco de gelo e região usam
+    // esta função, então se ajustam sozinhos. A largura é suavizada
+    // com a média do ruído dos 3 vizinhos para não dar degrau de
+    // 3 tiles entre uma coluna e a outra.
+    // EXCEÇÃO — entrada da dungeon (x=23): o rio triplo cobriria a
+    // ruína (x 21-25, y 83-87) e a entrada (23,88). Ali o rio mantém
+    // a largura antiga, com rampa de 6 tiles em cada lado.
     function getRiverHalfWidth(x) {
-      return stableNoise(x, 0, 1234) < 0.6 ? 2 : 3;
+      const smoothed = (stableNoise(x - 1, 0, 1234) + stableNoise(x, 0, 1234) + stableNoise(x + 1, 0, 1234)) / 3;
+      const wide = smoothed < 0.6 ? 7 : 10;
+      const narrow = smoothed < 0.6 ? 2 : 3;
+      const d = Math.abs(x - 23);
+      if (d <= 4) return narrow;
+      if (d >= 10) return wide;
+      return Math.round(narrow + (wide - narrow) * ((d - 4) / 6));
     }
 
     // V115 — Borda leste da floresta: a partir daqui começa a transição.
@@ -5242,7 +5266,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
             upperObjects[ly][lx] = 0;
           }
           if (isBridgeCell(generator, x, y)) {
-            ground[ly][lx] = 33;
+            // V143 — ponte de madeira: deck próprio, não pedra.
+            ground[ly][lx] = BRIDGE_GROUND_GID;
             structures[ly][lx] = 0;
             upperObjects[ly][lx] = 0;
           }
@@ -5488,6 +5513,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       SNOW_GROUND_GID_6,
       SNOW_GROUND_GID_7,
       SNOW_GROUND_GID_8,
+      BRIDGE_GROUND_GID,
       MOUNTAIN_GROUND_GID,
       MOUNTAIN_GROUND_GID_2,
       MOUNTAIN_GROUND_GID_3,
@@ -5525,7 +5551,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       // V122 — chave do cache do mundo renderizado (IndexedDB). NÃO é o
       // worldId do save: o save valida por worldId e mudar apagaria os saves.
       // O cache muda quando as regras de geração mudam.
-      renderCacheKey: 'overworld-180x180-v132'
+      renderCacheKey: 'overworld-180x180-v143'
       // V133 — geração igual à V132: chave mantida para mundos V132 em
       // cache continuarem válidos e não forçarem nova busca do mapa-base.
     });
@@ -5577,6 +5603,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       iceRock: 'assets/world/ice-rock.png',
       snowBush: 'assets/world/snow-bush.png',
       frozenStump: 'assets/world/frozen-stump.png',
+      bridgeDeck: 'assets/world/bridge.png',
       mountainGround: 'assets/ground/mountain-1.png',
       mountainGround2: 'assets/ground/mountain-2.png',
       mountainGround3: 'assets/ground/mountain-3.png',
@@ -5619,6 +5646,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const SNOW_GROUND_GID_6 = 10009;
     const SNOW_GROUND_GID_7 = 10010;
     const SNOW_GROUND_GID_8 = 10011; // branca — 40% do gelo
+    const BRIDGE_GROUND_GID = 10012; // V143 — deck de madeira da ponte
     const MOUNTAIN_GROUND_GID = 10002;
     const MOUNTAIN_GROUND_GID_2 = 10005;
     const MOUNTAIN_GROUND_GID_3 = 10006;
@@ -5636,12 +5664,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
       [CUSTOM_ASSET_CODES.icePeak]: { texture: 'asset-icepeak', rows: 2 },
       [CUSTOM_ASSET_CODES.pine]: { texture: 'asset-pine', rows: 1, scale: 0.25 },
       [CUSTOM_ASSET_CODES.frozenTree]: { texture: 'asset-frozentree', rows: 1, scale: 0.3 },
-      [CUSTOM_ASSET_CODES.icePeak2]: { texture: 'asset-icepeak2', rows: 2 },
-      [CUSTOM_ASSET_CODES.frozenPine2]: { texture: 'asset-frozenpine2', rows: 1, scale: 0.3 },
-      [CUSTOM_ASSET_CODES.iceCrystal]: { texture: 'asset-icecrystal', rows: 1, scale: 0.25 },
-      [CUSTOM_ASSET_CODES.iceRock]: { texture: 'asset-icerock', rows: 1, scale: 0.25 },
-      [CUSTOM_ASSET_CODES.snowBush]: { texture: 'asset-snowbush', rows: 1, scale: 0.25 },
-      [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.25 }
+      [CUSTOM_ASSET_CODES.icePeak2]: { texture: 'asset-icepeak2', rows: 2, scale: 0.06 },
+      [CUSTOM_ASSET_CODES.frozenPine2]: { texture: 'asset-frozenpine2', rows: 1, scale: 0.05 },
+      [CUSTOM_ASSET_CODES.iceCrystal]: { texture: 'asset-icecrystal', rows: 1, scale: 0.04 },
+      [CUSTOM_ASSET_CODES.iceRock]: { texture: 'asset-icerock', rows: 1, scale: 0.03 },
+      [CUSTOM_ASSET_CODES.snowBush]: { texture: 'asset-snowbush', rows: 1, scale: 0.025 },
+      [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.025 }
     });
     
     const DISPLAY_CONFIG = Object.freeze({
@@ -7134,6 +7162,7 @@ class WorldScene extends Phaser.Scene {
         this.load.image('asset-icerock', CUSTOM_ASSETS.iceRock);
         this.load.image('asset-snowbush', CUSTOM_ASSETS.snowBush);
         this.load.image('asset-frozenstump', CUSTOM_ASSETS.frozenStump);
+        this.load.image('bridge-tile', CUSTOM_ASSETS.bridgeDeck);
         this.load.image('mountain-tile-2', CUSTOM_ASSETS.mountainGround2);
         this.load.image('mountain-tile-3', CUSTOM_ASSETS.mountainGround3);
         this.load.image('asset-ruin', CUSTOM_ASSETS.ruin);
@@ -8717,6 +8746,7 @@ class WorldScene extends Phaser.Scene {
         if (gid === SNOW_GROUND_GID_6) return 'snow-tile-6';
         if (gid === SNOW_GROUND_GID_7) return 'snow-tile-7';
         if (gid === SNOW_GROUND_GID_8) return 'snow-tile-8';
+        if (gid === BRIDGE_GROUND_GID) return 'bridge-tile';
         if (gid === MOUNTAIN_GROUND_GID) return 'mountain-tile';
         if (gid === MOUNTAIN_GROUND_GID_2) return 'mountain-tile-2';
         if (gid === MOUNTAIN_GROUND_GID_3) return 'mountain-tile-3';
@@ -10531,5 +10561,5 @@ class WorldScene extends Phaser.Scene {
 })();
 </script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
-</body>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
