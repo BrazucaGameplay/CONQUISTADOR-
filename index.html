@@ -35,7 +35,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V171</div>
+  <div id="version-badge">V174</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -463,14 +463,86 @@
       }
     }
 
-    // DungeonSystem: regras e progresso persistente; não controla a cena Phaser.
+    // DungeonSystem V174: catálogo validado, execução idempotente e progresso protegido.
     class DungeonSystem {
       constructor(api) {
-        if (!api || !api.progress || !api.data) {
-          throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
-        }
+        if (!api || !api.progress || !api.data) throw new TypeError('DungeonSystem exige ProgressSystem e GameData.');
         this.progress = api.progress;
         this.data = api.data;
+        this.definitions = new Map();
+        this.activeRun = null;
+        this.finishedRuns = new Set();
+      }
+      register(definition) {
+        if (!definition || typeof definition.id !== 'string' || !definition.id.trim()) return false;
+        const id = definition.id.trim();
+        const floors = Math.max(1, Math.floor(Number(definition.floors) || 1));
+        const rewards = {};
+        for (const [itemId, quantity] of Object.entries(definition.rewards || {})) {
+          const amount = Math.floor(Number(quantity));
+          if (this.data.ITEMS && this.data.ITEMS[itemId] && Number.isFinite(amount) && amount > 0) rewards[itemId] = amount;
+        }
+        const normalized = Object.freeze({ ...definition, id, floors, rewards: Object.freeze(rewards) });
+        this.definitions.set(id, normalized);
+        return normalized;
+      }
+      getDefinition(dungeonId) { return this.definitions.get(String(dungeonId || '')) || null; }
+      getCatalog() { return [...this.definitions.values()]; }
+      startRun(dungeonId, options = {}) {
+        const definition = this.getDefinition(dungeonId);
+        if (!definition) return false;
+        if (this.activeRun) return this.activeRun.dungeonId === definition.id ? { ...this.activeRun } : false;
+        const requestedFloor = Math.floor(Number(options.floor) || 1);
+        const floor = Math.min(definition.floors, Math.max(1, requestedFloor));
+        const runId = String(options.runId || (Date.now() + '-' + Math.random().toString(36).slice(2, 8)));
+        if (this.finishedRuns.has(runId)) return false;
+        this.activeRun = { dungeonId: definition.id, runId, floor, startedAt: Date.now(), bossDefeated: false, rewardGranted: false, finished: false };
+        return { ...this.activeRun };
+      }
+      recordFloor(dungeonId, floor, extra = {}) {
+        const id = String(dungeonId || '');
+        const definition = this.getDefinition(id);
+        const n = Math.floor(Number(floor));
+        if (!definition || !Number.isFinite(n) || n < 1 || n > definition.floors) return false;
+        const dungeons = { ...this.getProgress() };
+        const previous = dungeons[id] && typeof dungeons[id] === 'object' ? dungeons[id] : {};
+        const safeExtra = extra && typeof extra === 'object' ? { ...extra } : {};
+        for (const key of ['highestFloor', 'lastFloor', 'lastPlayedAt', 'attempts', 'completions', 'cleared', 'bossKills']) delete safeExtra[key];
+        dungeons[id] = { ...previous, ...safeExtra, highestFloor: Math.max(Number(previous.highestFloor) || 0, n), lastFloor: n, lastPlayedAt: Date.now() };
+        const result = this.progress.update('dungeons', dungeons);
+        if (this.activeRun && this.activeRun.dungeonId === id) this.activeRun.floor = n;
+        return result === 'pending' || result === true;
+      }
+      finishRun(completed = false, extra = {}) {
+        const run = this.activeRun;
+        if (!run || run.finished || this.finishedRuns.has(run.runId)) return false;
+        const dungeons = { ...this.getProgress() };
+        const previous = dungeons[run.dungeonId] && typeof dungeons[run.dungeonId] === 'object' ? dungeons[run.dungeonId] : {};
+        const safeExtra = extra && typeof extra === 'object' ? { ...extra } : {};
+        for (const key of ['attempts', 'completions', 'cleared', 'lastPlayedAt', 'bossKills']) delete safeExtra[key];
+        const didComplete = !!completed && !!run.bossDefeated;
+        dungeons[run.dungeonId] = { ...previous, ...safeExtra, attempts: (Number(previous.attempts) || 0) + 1, completions: (Number(previous.completions) || 0) + (didComplete ? 1 : 0), cleared: !!(previous.cleared || didComplete), lastPlayedAt: Date.now() };
+        const result = this.progress.update('dungeons', dungeons);
+        if (result !== 'pending' && result !== true) return false;
+        run.finished = true;
+        this.finishedRuns.add(run.runId);
+        this.activeRun = null;
+        if (this.finishedRuns.size > 100) this.finishedRuns.delete(this.finishedRuns.values().next().value);
+        return true;
+      }
+      advanceFloor(dungeonId) {
+        const run = this.activeRun;
+        const definition = this.getDefinition(dungeonId);
+        if (!run || !definition || run.dungeonId !== definition.id || !run.bossDefeated || run.floor >= definition.floors) return false;
+        const nextFloor = run.floor + 1;
+        const dungeons = { ...this.getProgress() };
+        const previous = dungeons[run.dungeonId] && typeof dungeons[run.dungeonId] === 'object' ? dungeons[run.dungeonId] : {};
+        dungeons[run.dungeonId] = { ...previous, highestFloor: Math.max(Number(previous.highestFloor) || 0, run.floor), lastFloor: nextFloor, lastPlayedAt: Date.now() };
+        const result = this.progress.update('dungeons', dungeons);
+        if (result !== 'pending' && result !== true) return false;
+        run.floor = nextFloor;
+        run.bossDefeated = false;
+        return { ...run };
       }
       getProgress() {
         const value = this.progress.get('dungeons');
@@ -488,17 +560,28 @@
         if (result !== 'pending' && result !== true) return false;
         return { ok: true, result, itemId, quantity: amount, name: this.data.ITEMS[itemId].name || itemId };
       }
+      grantRunRewards() {
+        const run = this.activeRun;
+        const definition = run && this.getDefinition(run.dungeonId);
+        if (!run || !definition || run.rewardGranted || !run.bossDefeated) return [];
+        const granted = [];
+        for (const [itemId, quantity] of Object.entries(definition.rewards)) {
+          const result = this.grantItem(itemId, quantity);
+          if (result && result.ok) granted.push(result);
+        }
+        run.rewardGranted = true;
+        return granted;
+      }
       recordBossKill(dungeonId) {
-        if (typeof dungeonId !== 'string' || !dungeonId) return false;
+        const id = String(dungeonId || '');
+        if (!this.getDefinition(id) || !this.activeRun || this.activeRun.dungeonId !== id || this.activeRun.bossDefeated) return false;
         const dungeons = { ...this.getProgress() };
-        const previous = dungeons[dungeonId] && typeof dungeons[dungeonId] === 'object' ? dungeons[dungeonId] : {};
-        dungeons[dungeonId] = {
-          ...previous,
-          cleared: true,
-          bossKills: (Number(previous.bossKills) || 0) + 1
-        };
+        const previous = dungeons[id] && typeof dungeons[id] === 'object' ? dungeons[id] : {};
+        dungeons[id] = { ...previous, cleared: !!(previous.cleared || this.activeRun.floor >= this.getDefinition(id).floors), bossKills: (Number(previous.bossKills) || 0) + 1, bossDefeatedAt: Date.now() };
         const result = this.progress.update('dungeons', dungeons);
-        return result === 'pending' || result === true;
+        if (result !== 'pending' && result !== true) return false;
+        this.activeRun.bossDefeated = true;
+        return true;
       }
     }
 
@@ -1044,14 +1127,7 @@
         this.boundDestroy = () => this.destroy();
         this.boundWake = () => {
           if (!this.active) return;
-          for (const record of this.monsters.values()) {
-            if (!record || !record.alive || !record.sprite || !record.sprite.active) continue;
-            record.sprite.setVisible(true).setAlpha(1);
-            record.sprite.setDepth(record.sprite.y + 10);
-            if (record.levelLabel && record.levelLabel.active) record.levelLabel.setVisible(true);
-            if (record.hpBarBg && record.hpBarBg.active) record.hpBarBg.setVisible(true);
-            if (record.hpBarFill && record.hpBarFill.active) record.hpBarFill.setVisible(true);
-          }
+          this.syncMonsterChunkVisibility();
           this.refreshUI();
         };
         this.scene.events.on('wake', this.boundWake);
@@ -2188,7 +2264,7 @@
             deathSprite.setDisplaySize(Math.max(1, Math.round(bodyLen)), Math.max(1, Math.round(bodyLen / deathAspect)));
           }
           this.scene.tweens.killTweensOf(deathSprite);
-          // V171: não animar scale no sprite de morte. O fade/rotação mantém
+          // V172: não animar scale no sprite de morte. O fade/rotação mantém
           // o tamanho lógico da folha e impede crescimento por escala herdada.
           this.scene.tweens.add({
             targets: deathSprite,
@@ -4080,12 +4156,22 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     const WAIFU_IDS = new Set(Object.keys(WAIFU_DEFINITIONS));
     function resolveWaifuId(card) {
       if (!card || typeof card !== 'object') return null;
-      for (const field of ['waifuId', 'waifuType', 'speciesId']) {
-        const value = card[field];
-        if (typeof value === 'string' && WAIFU_IDS.has(value)) return value;
+      const aliases = Object.freeze({ goblina: 'goblin', lamia: 'snake', loba: 'wolf', harpia: 'eagle', ciclopesa: 'cyclops', ogra: 'ogre', ursa: 'bear' });
+      for (const field of ['waifuId', 'waifuType', 'speciesId', 'monsterId', 'species', 'type']) {
+        const raw = card[field];
+        if (typeof raw !== 'string' || !raw.trim()) continue;
+        const value = raw.trim().toLowerCase();
+        const normalized = aliases[value] || value;
+        if (WAIFU_IDS.has(normalized)) return normalized;
       }
-      // Saves antigos podem usar id como espécie; IDs de instância não contam.
-      return typeof card.id === 'string' && WAIFU_IDS.has(card.id) ? card.id : null;
+      // IDs de instância nunca são interpretados como espécie, salvo saves antigos
+      // nos quais o próprio id era exatamente um ID válido de waifu.
+      if (typeof card.id === 'string') {
+        const value = card.id.trim().toLowerCase();
+        const normalized = aliases[value] || value;
+        if (WAIFU_IDS.has(normalized)) return normalized;
+      }
+      return null;
     }
 
     class WaifuDropSystem {
@@ -4581,7 +4667,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           borderRadius: '0', background: 'transparent',
           border: 'none'
         });
-        art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+        art.src = speciesId !== 'unknown' ? ((root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '') : '';
                   art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; };
         art.alt = `Carta de ${speciesName}`;
         const topPlate = this.el('div', {
@@ -5078,7 +5164,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     // esta função, então se ajustam sozinhos. A largura é suavizada
     // com a média do ruído dos 3 vizinhos para não dar degrau de
     // 3 tiles entre uma coluna e a outra.
-    // V171 — exceção do rio na entrada central da dungeon (x=90):
+    // V172 — exceção do rio na entrada central da dungeon (x=90):
     // mantém uma faixa estreita para a ruína (x 88-92, y 77-81) e o acesso
     // (90,82), com rampa de 6 tiles em cada lado.
     function getRiverHalfWidth(x) {
@@ -5241,7 +5327,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     function getGeneratedTreeId(generator, x, y, cliff, checkSeal = true) {
       if (!isWithinGeneratedArea(generator, x, y) || isOriginalTile(x, y, generator) ||
           isRoadCell(generator, x, y) || cliff || isSpawnClearance(generator, x, y)) return 0;
-      // V171 — clareira central da entrada (90,82): ruína em x 88-92,
+      // V172 — clareira central da entrada (90,82): ruína em x 88-92,
       // y 77-81; mantém livre a aproximação e o tile de acesso.
       if (x >= 87 && x <= 93 && y >= 76 && y <= 85) return 0;
       // V115 — árvore de folha só nasce na floresta. Na montanha nascem
@@ -6253,11 +6339,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         worldId: PLAYER_POSITION_WORLD_ID
       }, eventBus);
       const progressSystem = new systems.ProgressSystem(saveSystem, eventBus);
-      const dungeonSystem = new systems.DungeonSystem({
-        events: eventBus,
-        progress: progressSystem,
-        data: systems.GameData
-      });
+      const dungeonSystem = new systems.DungeonSystem({ events: eventBus, progress: progressSystem, data: systems.GameData });
+      dungeonSystem.register({ id: 'cidade-abandonada', name: 'Ruínas da Mata', floors: 3, rooms: 3, recommendedLevel: 5, boss: 'Macaco Brutamonte', rewards: { monkey_fur: 1 } });
       return Object.freeze({ eventBus, entityManager, statusSystem, combatSystem, progressSystem, dungeonSystem, levelSystem, saveSystem, data: systems.GameData });
     })();
 
@@ -6294,7 +6377,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V171',
+        version: 'V174',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -6350,6 +6433,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     const DUNGEON_SCENE_CONFIG = Object.freeze({
       id: 'cidade-abandonada', // chave do save — nao mudar (progresso do chefe).
       name: 'Ruínas da Mata',
+      floors: 3, rooms: 3,
       recommendedLevel: 5,
       width: 36,
       height: 30,
@@ -6639,6 +6723,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         this.statusSystem = GAME_RUNTIME.statusSystem;
         this.combatSystem = GAME_RUNTIME.combatSystem;
         this.dungeonSystem = GAME_RUNTIME.dungeonSystem;
+        this.dungeonRun = this.dungeonSystem && this.dungeonSystem.startRun(DUNGEON_SCENE_CONFIG.id, { floor: data && data.floor || 1 });
+        this.currentFloor = this.dungeonRun && this.dungeonRun.floor || 1;
         this.saveSystem = GAME_RUNTIME.saveSystem;
         this._combatStatusIds = new Set();
         this.layout = buildDungeonLayout();
@@ -6648,7 +6734,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
           if (this._combatStatusIds) this._combatStatusIds.clear();
           this.restoreOverworldHud();
         });
-        this.cameras.main.setBackgroundColor('#1d2416');
+        const floorBackgrounds = ['#1d2416', '#201a2a', '#2a1917'];
+        this.cameras.main.setBackgroundColor(floorBackgrounds[this.currentFloor - 1] || '#1d2416');
         this.physics.world.setBounds(0, 0, this.layout.width * TILE_SIZE, this.layout.height * TILE_SIZE);
         this.input.mouse.disableContextMenu();
         this.buildDungeonVisuals();
@@ -6778,7 +6865,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       }
 
       buildLabels() {
-        // V106: sem nome flutuante nas salas (SALA 1/2/3). So SAIDA e TRONCO CAIDO.
+        const floorNames = ['ANDAR 1 — RUÍNAS EXTERNAS', 'ANDAR 2 — BOSQUE TOMADO', 'ANDAR 3 — COVIL DO BRUTAMONTE'];
+        this.floorLabel = this.add.text(8, 8, floorNames[this.currentFloor - 1] || ('ANDAR ' + this.currentFloor), {
+          fontFamily: 'system-ui, sans-serif', fontSize: '10px', fontStyle: 'bold', color: '#f4e6c8',
+          backgroundColor: 'rgba(20,14,8,.78)', padding: { x: 7, y: 4 }
+        }).setScrollFactor(0).setDepth(1000);
+        // Cada andar e uma instância jogável independente; as três salas são o percurso interno do andar.
         const exit = DUNGEON_SCENE_CONFIG.exitTile;
         const exitText = this.add.text(
           (exit.x + 0.5) * TILE_SIZE, (exit.y + 0.5) * TILE_SIZE - 14, '🚪 SAÍDA', {
@@ -6916,17 +7008,20 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         };
         for (const room of DUNGEON_SCENE_CONFIG.rooms) {
           for (const m of room.monkeys) {
-            const stats = monkeyStats(m.level);
+            const baseStats = monkeyStats(m.level);
+            const floorScale = 1 + (this.currentFloor - 1) * 0.32;
+            const stats = { hp: Math.round(baseStats.hp * floorScale), attack: Math.round(baseStats.attack * (1 + (this.currentFloor - 1) * 0.18)), defense: baseStats.defense + this.currentFloor - 1, xp: Math.round(baseStats.xp * floorScale) };
             spawnMonster({ x: m.x, y: m.y }, room.key, {
-              ...stats, level: m.level, speed: Number(base.speed) || 50,
+              ...stats, level: m.level + this.currentFloor - 1, speed: Number(base.speed) || 50,
               attackSpeed: Number(base.attackSpeed) || 1
             }, { width: 30, height: 24 }, false);
           }
         }
         const bossCfg = DUNGEON_SCENE_CONFIG.boss;
+        const bossScale = 1 + (this.currentFloor - 1) * 0.65;
         spawnMonster(DUNGEON_SCENE_CONFIG.bossTile, 'room3', {
-          hp: bossCfg.hp, attack: bossCfg.attack, defense: bossCfg.defense,
-          xp: bossCfg.xp, level: bossCfg.level, speed: bossCfg.speed,
+          hp: Math.round(bossCfg.hp * bossScale), attack: Math.round(bossCfg.attack * (1 + (this.currentFloor - 1) * 0.22)), defense: bossCfg.defense + this.currentFloor - 1,
+          xp: Math.round(bossCfg.xp * bossScale), level: bossCfg.level + this.currentFloor - 1, speed: bossCfg.speed + (this.currentFloor - 1) * 4,
           attackSpeed: bossCfg.attackSpeed
         }, { width: bossCfg.displayWidth, height: bossCfg.displayHeight }, true, this.bossTextureKey());
       }
@@ -6939,7 +7034,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         this.bossBarBg.setStrokeStyle(1, 0x000000, 0.85);
         this.bossBarFill = this.add.rectangle(this.cameras.main.width / 2 - 63, 9, 126, 10, 0xd43a3a, 1);
         this.bossBarFill.setOrigin(0, 0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
-        this.bossBarLabel = this.add.text(this.cameras.main.width / 2, 8, 'BRUTAMONTE', {
+        this.bossBarLabel = this.add.text(this.cameras.main.width / 2, 8, 'BRUTAMONTE · ANDAR ' + this.currentFloor, {
           fontFamily: 'system-ui, sans-serif', fontSize: '9px', fontStyle: 'bold', color: '#ffffff', align: 'center'
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1002).setVisible(false);
         const exitBtn = this.add.text(this.cameras.main.width - 8, 8, '🚪 SAIR', {
@@ -7293,7 +7388,24 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
 
       recordBossKill() {
         try {
-          return !!(this.dungeonSystem && this.dungeonSystem.recordBossKill('cidade-abandonada'));
+          if (!this.dungeonSystem || !this.dungeonRun) return false;
+          const recorded = this.dungeonSystem.recordBossKill(DUNGEON_SCENE_CONFIG.id);
+          if (!recorded) return false;
+          this.dungeonSystem.recordFloor(DUNGEON_SCENE_CONFIG.id, this.currentFloor, { bossDefeatedAt: Date.now() });
+          if (this.currentFloor < DUNGEON_SCENE_CONFIG.floors) {
+            const nextRun = this.dungeonSystem.advanceFloor(DUNGEON_SCENE_CONFIG.id);
+            if (!nextRun) return false;
+            this.showToast('ANDAR ' + this.currentFloor + ' CONCLUÍDO! Preparando andar ' + nextRun.floor + '...', 2200);
+            this.time.delayedCall(1100, () => {
+              if (!this.exiting && this.scene.isActive('DungeonScene')) this.scene.restart({ floor: nextRun.floor });
+            });
+            return true;
+          }
+          const rewards = this.dungeonSystem.grantRunRewards();
+          for (const reward of rewards) this.showToast(reward.name + ' +' + reward.quantity, 2200);
+          this.showToast('🏆 TODOS OS ANDARES CONCLUÍDOS!', 3200);
+          this.time.delayedCall(1800, () => { if (!this.exiting) this.exitDungeon(false); });
+          return true;
         } catch (error) { /* O progresso nunca pode quebrar a dungeon. */ return false; }
       }
 
@@ -7382,10 +7494,10 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         if (this.exiting) return;
         this.exiting = true;
         if (defeated) {
-          // Morreu na dungeon: volta para a entrada com HP cheio.
           this.statusSystem.heal('player', 999999);
           this.showToast('Você caiu... voltou para a entrada.', 2000);
         }
+        if (this.dungeonSystem && this.dungeonSystem.activeRun) this.dungeonSystem.finishRun(!!(defeated === false && this.dungeonSystem.activeRun.bossDefeated));
         this.restoreOverworldHud();
         // Encerra a instância atual antes de acordar o mundo. O WorldScene
         // preservado volta a renderizar no mesmo estado/posição, sem restart.
@@ -8030,8 +8142,10 @@ class WorldScene extends Phaser.Scene {
                 }
                 const equippedIds = new Set((Array.isArray(data.equipped) ? data.equipped : []).map(v => String(v)));
                 for (const card of house) {
-                  const rawSpecies = String(card.waifuId || card.waifuType || card.speciesId || card.monsterId || '');
-                  const speciesId = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[rawSpecies] ? rawSpecies : (Object.prototype.hasOwnProperty.call(SPECIES, rawSpecies) ? rawSpecies : 'unknown');
+                  const rawSpecies = String(card.waifuId || card.waifuType || card.speciesId || card.monsterId || card.species || '');
+                  const speciesAliases = { goblin: 'goblina', snake: 'lamia', wolf: 'loba', eagle: 'harpia', cyclops: 'ciclopesa', ogre: 'ogra', bear: 'ursa' };
+                  const normalizedSpecies = speciesAliases[rawSpecies] || rawSpecies;
+                  const speciesId = Object.prototype.hasOwnProperty.call(root.CONQUISTADOR_WAIFU_ART_BY_ID || {}, normalizedSpecies) ? normalizedSpecies : (Object.prototype.hasOwnProperty.call(SPECIES, normalizedSpecies) ? normalizedSpecies : 'unknown');
                   const quality = QUALITY_MAP[card.quality] ? card.quality : 'plebeia';
                   const qinfo = QUALITY_MAP[quality];
                   const level = cardLevel(card, data);
@@ -8055,7 +8169,7 @@ class WorldScene extends Phaser.Scene {
                   art.style.minHeight = '0';
                   art.style.width = '100%';
                   art.style.objectFit = 'contain';
-                  art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                  art.src = speciesId !== 'unknown' ? ((root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '') : '';
                   art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; };
                   art.alt = 'Carta de ' + name;
                   const foot = doc.createElement('span');
@@ -8146,7 +8260,7 @@ class WorldScene extends Phaser.Scene {
                 sub.textContent = qinfo.name + ' · ' + '★'.repeat({ plebeia: 1, dama: 2, condessa: 3, duquesa: 4, rainha: 5 }[quality] || 1);
                 const artWrap = el('div', { margin: '12px auto', width: 'min(100%, 240px)', aspectRatio: '2 / 3', borderRadius: '0', overflow: 'hidden', background: '#080c15', border: '3px solid ' + qinfo.color, outline: '1px solid ' + qinfo.color, outlineOffset: '-6px' });
                 const art = el('img', { display: 'block', width: '100%', height: '100%', objectFit: 'contain' });
-                art.src = (root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '';
+                art.src = speciesId !== 'unknown' ? ((root.CONQUISTADOR_WAIFU_ART_BY_ID || {})[speciesId] || '') : '';
                   art.onerror = () => { art.removeAttribute('src'); art.alt = 'Arte indisponível: ' + name; }; art.alt = 'Carta de ' + name;
                 artWrap.appendChild(art);
                 const descLabel = el('div', { margin: '14px 0 6px', color: '#e7c987', font: 'bold 13px Georgia,serif', letterSpacing: '.08em' });
@@ -10105,7 +10219,7 @@ class WorldScene extends Phaser.Scene {
       // 3 cones com brasa pulsante e erupções periódicas de partículas.
       // Os rios de lava são só desenho sobre o chão: dá para atravessar a
       // lava andando — ela nunca bloqueia um lugar, como pedido.
-      // ===== V171 — DUNGEON: entrada no interior da floresta (100,62) =====
+      // ===== V172 — DUNGEON: entrada no interior da floresta (100,62) =====
       // A entrada e so um texto clicavel + painel. Nenhuma regra do mundo
       // aberto muda: a dungeon vive na DungeonScene, cena separada.
       createDungeonEntrance() {
@@ -10122,12 +10236,12 @@ class WorldScene extends Phaser.Scene {
         this.createDungeonRuin();
       }
 
-      // ===== V171 — RUÍNA no interior da floresta (100,62), no mundo =====
+      // ===== V172 — RUÍNA no interior da floresta (100,62), no mundo =====
       // Salao em ruinas ao redor da entrada: muros quebrados, pilares
       // caidos, entulho e mata invadindo. A entrada (23,88) fica livre
       // no meio — o jogador pisa nela e o texto/painel funcionam igual.
 
-      // ===== V171 — RUÍNA NOVA na entrada da floresta (100,62) =====
+      // ===== V172 — RUÍNA NOVA na entrada da floresta (100,62) =====
       // O asset aprovado (portal de pedra grandioso, musgo e trepadeiras)
       // substitui a fortaleza da V114, que renderizava quebrada no print
       // (quadrados laranja + quadrado preto). O sprite tem 5x5 tiles,
@@ -10244,7 +10358,7 @@ class WorldScene extends Phaser.Scene {
         // V106: a silhueta do status FICA visivel na dungeon (abre o status).
         // O WorldScene pausa; o SaveSystem conserva a última posição válida do mundo.
         // V112: returnTile removido (codigo morto — a volta usa o resume do WorldScene).
-        // V171 — transição de cena determinística. O mundo dorme (não atualiza
+        // V174 — transição de cena determinística. O mundo dorme (não atualiza
         // nem renderiza, mas mantém seus objetos) antes de iniciar a Dungeon.
         // A Dungeon só assume a tela em seu próprio create(), quando já existe.
         // Isso evita esconder o mundo antes de a nova cena estar pronta.
@@ -11097,7 +11211,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V171'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V174'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
