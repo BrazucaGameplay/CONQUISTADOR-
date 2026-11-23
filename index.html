@@ -8,7 +8,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V138</title>
+<title>CONQUISTADOR DE WAIFU'S — V139</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -27,11 +27,22 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V138</div>
+  <div id="version-badge">V139</div>
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
-\n  <script id="conquistador-systems-v44">
+\n  <script id="conquistador-data-v139">
+  (function (root) { 'use strict';
+    // V139 — dados canônicos de data/monsters.json + data/waifus.json,
+    // embutidos no build para o jogo não depender de fetch. Edite os JSONs
+    // em data/ e regenere — nunca edite este bloco à mão.
+    root.CONQUISTADOR_DATA = Object.freeze({
+      monsters: {"version":1,"source":"V139 GameData.MONSTERS + GameData.ITEMS + GameData.LEVEL_CURVE","monsters":{"slime":{"id":"slime","name":"Slime","hp":30,"damage":5,"defense":0,"xp":12,"speed":50,"dropId":"slime_gel","displayWidth":30,"displayHeight":24,"sprite":"assets/monsters/slime.png","textureKey":"conquistador-monster-slime-v2"},"monkey":{"id":"monkey","name":"Macaco","hp":45,"damage":5,"defense":1,"xp":25,"speed":65,"attackSpeed":0.8,"dropId":"monkey_fur","displayWidth":30,"displayHeight":32,"sprite":"assets/monsters/monkey.png","textureKey":"conquistador-monster-monkey-v2"},"rat":{"id":"rat","name":"Rato","hp":20,"damage":4,"defense":0,"xp":8,"speed":75,"dropId":"rat_tail","displayWidth":32,"displayHeight":22,"sprite":"assets/monsters/rat.png","textureKey":"conquistador-monster-rat-v2"}},"items":{"slime_gel":{"id":"slime_gel","name":"Gel de Slime","category":"material"},"monkey_fur":{"id":"monkey_fur","name":"Pelo de Macaco","category":"material"},"rat_tail":{"id":"rat_tail","name":"Cauda de Rato","category":"material"},"rose":{"id":"rose","name":"Rosa","category":"presente"}},"levelCurve":{"baseXp":60,"exponent":1.25}},
+      waifus: {"version":1,"source":"V139 WAIFU_DEFINITIONS + WAIFU_META + WAIFU_SKILLS + QUALITY","qualities":[{"id":"plebeia","name":"Plebeia","chance":0.9,"color":"#a9a9a9"},{"id":"dama","name":"Dama","chance":0.04,"color":"#55a8e8"},{"id":"condessa","name":"Condessa","chance":0.03,"color":"#b16ce2"},{"id":"duquesa","name":"Duquesa","chance":0.02,"color":"#e6b84f"},{"id":"rainha","name":"Rainha","chance":0.01,"color":"#ff2e88"}],"waifus":{"slime":{"id":"slime","name":"Donzela Slime","gift":"rose","xpPerGift":10,"description":"Uma criatura gelatinosa que assumiu forma humana. Seu jeito brincalhão esconde uma natureza misteriosa e uma ligação especial com as cavernas de slime.","bonuses":["Pele de Gosma — +1 Defesa","Corpo de Slime — +10 HP máximo"],"activeSkill":{"id":"acid_slime","name":"Gosma Ácida","damage":12,"description":"Causa 12 + 1,5 de dano por nível do jogador.","icon":"🫧","meta":"12 de dano  ·  Recarga 5s","desc":"Causa 12 de dano fixo."},"passives":[{"id":"slime_skin","name":"Pele de Gosma","description":"+1 Defesa","stats":{"defense":1}},{"id":"slime_body","name":"Corpo de Slime","description":"+10 HP máximo","stats":{"maxHp":10}}]},"monkey":{"id":"monkey","name":"Donzela Macaca","gift":"rose","xpPerGift":10,"description":"Uma macaca travessa que desceu das copas para brincar — e brigar — ao seu lado. Seus sinos anunciam cada golpe antes dele chegar.","bonuses":["Agilidade da Macaca — +0,2 Velocidade de ataque","Sino Perfurante — +0,5 Penetração"],"activeSkill":{"id":"monkey_ranged","name":"Chuva de Sinos","durationMs":5000,"cooldownMs":10000,"multiplier":1.1,"description":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.","icon":"🔔","meta":"Recarga 10s","desc":"Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque."},"passives":[{"id":"monkey_swift","name":"Agilidade da Macaca","description":"+0,2 Velocidade de ataque","stats":{"attackSpeed":0.2}},{"id":"monkey_pierce","name":"Sino Perfurante","description":"+0,5 Penetração","stats":{"penetration":0.5}}]},"rat":{"id":"rat","name":"Donzela Rata","gift":"rose","xpPerGift":10,"description":"Uma rata curiosa das cavernas roxas, sempre com um queijo na mão e um truque na manga. Escorregadia demais para ser atingida.","bonuses":["Patas Ligeiras — +0,1 Velocidade de movimento","Corpo de Rata — +10 HP máximo"],"activeSkill":{"id":"rat_soap","name":"Ensaboado","durationMs":3000,"cooldownMs":10000,"description":"Imune a dano por 3 segundos.","icon":"🧼","meta":"Recarga 10s","desc":"Imune a dano por 3 segundos."},"passives":[{"id":"rat_quick","name":"Patas Ligeiras","description":"+0,1 Velocidade de movimento","stats":{"moveSpeed":0.1}},{"id":"rat_body","name":"Corpo de Rata","description":"+10 HP máximo","stats":{"maxHp":10}}]}}}
+    });
+  })(window);
+  </script>
+<script id="conquistador-systems-v44">
   (function (root) {
     'use strict';
 
@@ -1855,32 +1866,40 @@
     }
 
     const GameData = Object.freeze({
-      MONSTERS: Object.freeze({
-        // First end-to-end proof entity. Balance values are intentionally exact
-        // to the approved test specification: 30 HP, 5 damage, 10 XP, speed 50.
-        slime: Object.freeze({
-          id: 'slime', name: 'Slime', hp: 30, damage: 5, defense: 0,
-          xp: 12, speed: 50, dropId: 'slime_gel', displayWidth: 30, displayHeight: 24
-        }),
-        monkey: Object.freeze({
-          id: 'monkey', name: 'Macaco', hp: 45, damage: 5, defense: 1,
-          xp: 25, speed: 65, attackSpeed: 0.8, dropId: 'monkey_fur', displayWidth: 30, displayHeight: 32
-        }),
-        rat: Object.freeze({
-          id: 'rat', name: 'Rato', hp: 20, damage: 4, defense: 0,
-          xp: 8, speed: 75, dropId: 'rat_tail', displayWidth: 32, displayHeight: 22
-        })
-      }),
+      // V139 — MONSTERS vem de data/monsters.json (window.CONQUISTADOR_DATA).
+      // A cópia embutida abaixo é fallback: se data/ ainda não foi subida,
+      // o jogo usa estes valores idênticos aos da V139 e continua igual.
+      MONSTERS: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.monsters;
+        const src = fromData || {
+          slime: { id: 'slime', name: 'Slime', hp: 30, damage: 5, defense: 0, xp: 12, speed: 50, dropId: 'slime_gel', displayWidth: 30, displayHeight: 24 },
+          monkey: { id: 'monkey', name: 'Macaco', hp: 45, damage: 5, defense: 1, xp: 25, speed: 65, attackSpeed: 0.8, dropId: 'monkey_fur', displayWidth: 30, displayHeight: 32 },
+          rat: { id: 'rat', name: 'Rato', hp: 20, damage: 4, defense: 0, xp: 8, speed: 75, dropId: 'rat_tail', displayWidth: 32, displayHeight: 22 }
+        };
+        const out = {};
+        for (const k of Object.keys(src)) out[k] = Object.freeze({ ...src[k] });
+        return out;
+      })()),
       PETS: Object.freeze({}),
       WAIFUS: Object.freeze({}),
       DUNGEONS: Object.freeze({}),
-      ITEMS: Object.freeze({
-        slime_gel: Object.freeze({ id: 'slime_gel', name: 'Gel de Slime', category: 'material' }),
-        monkey_fur: Object.freeze({ id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' }),
-        rat_tail: Object.freeze({ id: 'rat_tail', name: 'Cauda de Rato', category: 'material' }),
-        rose: Object.freeze({ id: 'rose', name: 'Rosa', category: 'presente' })
-      }),
-      LEVEL_CURVE: Object.freeze({ baseXp: 60, exponent: 1.25 })
+      // V139 — ITEMS / LEVEL_CURVE também vêm de data/monsters.json, mesmo fallback V139.
+      ITEMS: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.items;
+        const src = fromData || {
+          slime_gel: { id: 'slime_gel', name: 'Gel de Slime', category: 'material' },
+          monkey_fur: { id: 'monkey_fur', name: 'Pelo de Macaco', category: 'material' },
+          rat_tail: { id: 'rat_tail', name: 'Cauda de Rato', category: 'material' },
+          rose: { id: 'rose', name: 'Rosa', category: 'presente' }
+        };
+        const out = {};
+        for (const k of Object.keys(src)) out[k] = Object.freeze({ ...src[k] });
+        return out;
+      })()),
+      LEVEL_CURVE: Object.freeze((function () {
+        const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.monsters && root.CONQUISTADOR_DATA.monsters.levelCurve;
+        return { ...(fromData || { baseXp: 60, exponent: 1.25 }) };
+      })())
     });
 
     root.CONQUISTADOR_V13_SYSTEMS = Object.freeze({
@@ -3436,7 +3455,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
 <script id="conquistador-waifu-collection-v2">
   (function (root) {
     'use strict';
-    const QUALITY = [
+    // V139 — QUALITY vem de data/waifus.json, fallback = V139.
+    const QUALITY = (root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.qualities) || [
       { id: 'plebeia', name: 'Plebeia', chance: 0.90, color: '#a9a9a9' },
       { id: 'dama', name: 'Dama', chance: 0.04, color: '#55a8e8' },
       { id: 'condessa', name: 'Condessa', chance: 0.03, color: '#b16ce2' },
@@ -3445,32 +3465,37 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     ];
 
     // Catálogo extensível: presentes, curva e habilidades ficam declarados por waifu.
-    const WAIFU_DEFINITIONS = Object.freeze({
-      slime: Object.freeze({
-        id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'acid_slime', name: 'Gosma Ácida', damage: 12, description: 'Causa 12 + 1,5 de dano por nível do jogador.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'slime_skin', name: 'Pele de Gosma', description: '+1 Defesa', stats: Object.freeze({ defense: 1 }) }),
-          Object.freeze({ id: 'slime_body', name: 'Corpo de Slime', description: '+10 HP máximo', stats: Object.freeze({ maxHp: 10 }) })
-        ])
-      }),
-      monkey: Object.freeze({
-        id: 'monkey', name: 'Donzela Macaca', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'monkey_ranged', name: 'Chuva de Sinos', durationMs: 5000, cooldownMs: 10000, multiplier: 1.1, description: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'monkey_swift', name: 'Agilidade da Macaca', description: '+0,2 Velocidade de ataque', stats: Object.freeze({ attackSpeed: 0.2 }) }),
-          Object.freeze({ id: 'monkey_pierce', name: 'Sino Perfurante', description: '+0,5 Penetração', stats: Object.freeze({ penetration: 0.5 }) })
-        ])
-      }),
-      rat: Object.freeze({
-        id: 'rat', name: 'Donzela Rata', gift: 'rose', xpPerGift: 10,
-        activeSkill: Object.freeze({ id: 'rat_soap', name: 'Ensaboado', durationMs: 3000, cooldownMs: 10000, description: 'Imune a dano por 3 segundos.' }),
-        passives: Object.freeze([
-          Object.freeze({ id: 'rat_quick', name: 'Patas Ligeiras', description: '+0,1 Velocidade de movimento', stats: Object.freeze({ moveSpeed: 0.1 }) }),
-          Object.freeze({ id: 'rat_body', name: 'Corpo de Rata', description: '+10 HP máximo', stats: Object.freeze({ maxHp: 10 }) })
-        ])
-      })
-    });
+    const WAIFU_DEFINITIONS = Object.freeze((function () {
+      // V139 — waifus vêm de data/waifus.json (window.CONQUISTADOR_DATA).
+      // Fallback embutido = valores idênticos aos da V139.
+      const fromData = root.CONQUISTADOR_DATA && root.CONQUISTADOR_DATA.waifus && root.CONQUISTADOR_DATA.waifus.waifus;
+      const src = fromData || {
+        slime: { id: 'slime', name: 'Donzela Slime', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'acid_slime', name: 'Gosma Ácida', damage: 12, description: 'Causa 12 + 1,5 de dano por nível do jogador.' },
+          passives: [
+            { id: 'slime_skin', name: 'Pele de Gosma', description: '+1 Defesa', stats: { defense: 1 } },
+            { id: 'slime_body', name: 'Corpo de Slime', description: '+10 HP máximo', stats: { maxHp: 10 } }
+          ] },
+        monkey: { id: 'monkey', name: 'Donzela Macaca', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'monkey_ranged', name: 'Chuva de Sinos', durationMs: 5000, cooldownMs: 10000, multiplier: 1.1, description: 'Por 5 segundos, o ataque básico vira à distância e causa 1,1x do dano de ataque.' },
+          passives: [
+            { id: 'monkey_swift', name: 'Agilidade da Macaca', description: '+0,2 Velocidade de ataque', stats: { attackSpeed: 0.2 } },
+            { id: 'monkey_pierce', name: 'Sino Perfurante', description: '+0,5 Penetração', stats: { penetration: 0.5 } }
+          ] },
+        rat: { id: 'rat', name: 'Donzela Rata', gift: 'rose', xpPerGift: 10,
+          activeSkill: { id: 'rat_soap', name: 'Ensaboado', durationMs: 3000, cooldownMs: 10000, description: 'Imune a dano por 3 segundos.' },
+          passives: [
+            { id: 'rat_quick', name: 'Patas Ligeiras', description: '+0,1 Velocidade de movimento', stats: { moveSpeed: 0.1 } },
+            { id: 'rat_body', name: 'Corpo de Rata', description: '+10 HP máximo', stats: { maxHp: 10 } }
+          ] }
+      };
+      const out = {};
+      for (const k of Object.keys(src)) {
+        const w = src[k];
+        out[k] = Object.freeze({ ...w, activeSkill: Object.freeze({ ...w.activeSkill }), passives: Object.freeze((w.passives || []).map(p => Object.freeze({ ...p, stats: Object.freeze({ ...(p.stats || {}) }) }))) });
+      }
+      return out;
+    })());
 
     class WaifuDropSystem {
       constructor(api, options = {}) {
@@ -5377,7 +5402,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     const MOUNTAIN_GROUND_GID_3 = 10006;
     const TALL_GRASS_GID = 1001;
     const TALL_GRASS_GID_2 = 1002;
-    // V138 — GROUND_*_GIDS no mesmo escopo da cena (antes só dentro do núcleo):
+    // V139 — GROUND_*_GIDS no mesmo escopo da cena (antes só dentro do núcleo):
     // groundTextureForGid() usa aqui fora. Valores idênticos aos da V134.
     const GROUND_DIRT_GIDS = new Set([58, 86, 59, 4, 31, 5, 32, 88, 61, 87, 60, 7, 34, 6, 33]);
     const GROUND_WATER_GIDS = new Set([272, 274, 298, 326, 328, 354, 311, 316]);
@@ -5567,7 +5592,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
     function buildDungeonLayout() {
       const W = DUNGEON_SCENE_CONFIG.width;
       const H = DUNGEON_SCENE_CONFIG.height;
-      // V138 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
+      // V139 — tabelas no bloco de fonte unica acima de buildDungeonLayout (mesmos valores da V134).
       const rooms = DUNGEON_SCENE_CONFIG.rooms;
       const corridors = DUNGEON_SCENE_CONFIG.corridors;
       const inRect = (x, y, r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
@@ -5838,7 +5863,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/boss/sprite.png";
           const ctx = tex.getContext();
           for (let y = 0; y < gh; y += 1) for (let x = 0; x < gw; x += 1) {
             const gid = this.layout.ground[y][x]; if (!gid) continue;
-            const tk = groundTextureForDungeonTile(gid, x, y); // V138 — mesma regra da V134, agora numa unica funcao.
+            const tk = groundTextureForDungeonTile(gid, x, y); // V139 — mesma regra da V134, agora numa unica funcao.
             const img = this.textures.get(tk).getSourceImage();
             ctx.drawImage(img, (x * TILE_SIZE) % img.width, (y * TILE_SIZE) % img.height, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
@@ -10092,7 +10117,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V138';</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V139';</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
