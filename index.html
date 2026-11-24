@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V184 — chip mostra números crus (diag/cand/spawn) e captura o erro do povoamento; chip movido para o centro superior para não ficar atrás do selo de versão.. Base visual/mundo V178 preservada. -->
+<!-- V186 — causa raiz do spawn: DUNGEON_SCENE_CONFIG é const do bloco da DungeonScene, invisível no escopo do MonsterSystem; getSpawnCandidates lê o config com guarda try/catch + fallback entranceTile {x:100, y:62}, mantendo o raio de segurança da entrada.. Base visual/mundo V178 preservada. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -12,13 +12,34 @@
 <!-- V132 — CAUSA RAIZ das pedrinhas: o círculo de pedras do mapa-base estava DESENHADO NO CHÃO, não na camada de estruturas. A V122 limpou estruturas/objetos (lista branca) mas nunca tocou no chão, por isso as pedrinhas sobreviveram à V120, V121 e V122. Agora o chão do mapa-base também tem lista branca: só ficam grama, terra, penhasco, água, ponte; o resto vira grama. Cache do mundo em v132 (força regenerar). O worldId do save continua v115 (mudar apagaria os saves). Sem manifest novo (manifest é fixo). -->
 
 <html lang="pt-BR">
-<head>
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
+</style>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0d0b10">
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V184</title>
+<title>CONQUISTADOR DE WAIFU'S — V186</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -37,7 +58,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V184</div>
+  <div id="version-badge">V186</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -1307,18 +1328,19 @@
         // o indicador circular de ataque automático.
         root.remove();
         document.body.appendChild(autoAttackBadge);
-        // V184 — chip de diagnóstico permanente do spawn. NÃO é o painel
+        // V186 — chip de diagnóstico permanente do spawn. NÃO é o painel
         // textual removido a pedido: é um selo pequeno no canto, sempre
         // visível, para ver no celular se os assets carregaram e se os
         // monstros nasceram, sem precisar de console.
         const diagChip = document.createElement('div');
         diagChip.setAttribute('aria-label', 'Diagnóstico de monstros');
         diagChip.style.position = 'fixed';
-        diagChip.style.top = 'max(8px, env(safe-area-inset-top))';
+        diagChip.style.bottom = 'max(64px, calc(env(safe-area-inset-bottom) + 64px))';
         diagChip.style.left = '50%';
         diagChip.style.transform = 'translateX(-50%)';
-        diagChip.style.whiteSpace = 'nowrap';
-        diagChip.style.maxWidth = '96vw';
+        diagChip.style.whiteSpace = 'normal';
+        diagChip.style.maxWidth = '94vw';
+        diagChip.style.textAlign = 'center';
         diagChip.style.overflow = 'hidden';
         diagChip.style.textOverflow = 'ellipsis';
         diagChip.style.zIndex = '45';
@@ -1329,7 +1351,7 @@
         diagChip.style.font = '700 10px/1.4 system-ui, sans-serif';
         diagChip.style.pointerEvents = 'none';
         diagChip.style.textShadow = '0 1px 2px #000';
-        diagChip.textContent = 'V184 • carregando...';
+        diagChip.textContent = 'V186 • carregando...';
         document.body.appendChild(diagChip);
         this.diagChip = diagChip;
         this.uiRoot = null;
@@ -1359,7 +1381,7 @@
           else if (diags.some(d => d && d.status === 'no-monster-created')) status = 'spawn falhou';
           else status = 'povoando...';
         }
-        const text = `V184 • assets ${avail}/${total} • vivos ${alive} • diag ${diags.length}/${totalChunks} • cand ${cand} • spawn ${spawned} • ${status}`;
+        const text = `V186 • assets ${avail}/${total} • vivos ${alive} • diag ${diags.length}/${totalChunks} • cand ${cand} • spawn ${spawned} • ${status}`;
         if (this.diagChip.textContent !== text) this.diagChip.textContent = text;
       }
 
@@ -1428,6 +1450,16 @@
         const playerTile = this.world.getPlayerBodyTile();
         const candidates = [];
         const rejected = { unwalkable:0, bridge:0, river:0, dungeonSafety:0, region:0, playerProximity:0, occupied:0 };
+        // V186 — DUNGEON_SCENE_CONFIG é const do bloco da DungeonScene e não
+        // existe no escopo do MonsterSystem: a referência pelada lançava
+        // ReferenceError no primeiro chunk e matava o povoamento inteiro.
+        // Guarda com try/catch cobre escopo ausente e TDZ; o fallback é o
+        // valor real do config, então o raio de segurança fica idêntico.
+        let dungeonEntrance = { x: 100, y: 62 };
+        try {
+          const cfg = (typeof DUNGEON_SCENE_CONFIG !== 'undefined') ? DUNGEON_SCENE_CONFIG : null;
+          if (cfg && cfg.entranceTile) dungeonEntrance = cfg.entranceTile;
+        } catch (_) { /* config fora do escopo: usa o fallback */ }
 
         // Keep a one-tile margin inside chunk/world borders; the player-footprint
         // walkability API remains authoritative for every candidate.
@@ -1440,7 +1472,7 @@
             // Nunca nasce no rio, na ponte, nem no raio de segurança da entrada da dungeon.
             if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) { rejected.bridge++; continue; }
             if (this.world.isRiverCell && this.world.isRiverCell(x, y)) { rejected.river++; continue; }
-            if (Math.max(Math.abs(x - DUNGEON_SCENE_CONFIG.entranceTile.x), Math.abs(y - DUNGEON_SCENE_CONFIG.entranceTile.y)) <= 4) { rejected.dungeonSafety++; continue; }
+            if (Math.max(Math.abs(x - dungeonEntrance.x), Math.abs(y - dungeonEntrance.y)) <= 4) { rejected.dungeonSafety++; continue; }
             if (this.world.getRegionAt) {
               const region = this.world.getRegionAt(x, y);
               if (region !== 'forest' && region !== 'transition' && region !== 'mountain' && region !== 'ice') { rejected.region++; continue; }
@@ -1766,7 +1798,8 @@
         this.setMonsterAnimation(record, 'idle');
         const population = this.getChunkPopulationState(chunkId);
         population.totalSpawned += 1;
-        this.events.emit('monster:spawned', {
+        try {
+          this.events.emit('monster:spawned', {
           entityId: id,
           monsterId,
           level,
@@ -1774,7 +1807,12 @@
           originChunkId: chunkId,
           originChunkX: chunkX,
           originChunkY: chunkY
-        });
+          });
+        } catch (listenerError) {
+          // V186 — um ouvinte do evento nunca pode matar o spawn nem o povoamento.
+          this.spawnListenerError = (listenerError && listenerError.message) ? listenerError.message : String(listenerError);
+          console.error('Ouvinte de monster:spawned lançou:', listenerError);
+        }
         return id;
       }
 
@@ -2450,6 +2488,7 @@
         // com textura-base confirmada podem virar entidades visiveis.
         this.populationDiagnostics = this.populationDiagnostics || Object.create(null);
         for (let y=0; y<this.chunkGrid.rows; y++) for (let x=0; x<this.chunkGrid.columns; x++) {
+          try {
           const chunkId=this.getChunkId(x,y);
           let state=this.chunkPopulation.get(chunkId);
           if (!state) { state={ initialSpawnAttempted:false, initialFillPending:false, initialRetryAt:0 }; this.chunkPopulation.set(chunkId,state); }
@@ -2481,6 +2520,13 @@
             availableSpecies:Array.from(this.availableMonsterTypes || []),
             status:candidates.length===0?'no-valid-spawn-tiles':alive===0?'no-monster-created':'populated'
           };
+          } catch (chunkError) {
+            const message = (chunkError && chunkError.message) ? chunkError.message : String(chunkError);
+            if (!this.spawnError) this.spawnError = message;
+            const chunkId = this.getChunkId(x, y);
+            this.populationDiagnostics[chunkId] = { candidates: 0, spawned: 0, alive: 0, status: 'chunk-erro', error: message };
+            console.error('Falha ao povoar chunk ' + chunkId + ':', chunkError);
+          }
         }
         root.CONQUISTADOR_POPULATION_DIAGNOSTICS = Object.freeze({
           chunks:Object.freeze({ ...this.populationDiagnostics }),
@@ -6426,7 +6472,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         'Identificador do mundo preservado');
       const failed = checks.filter(check => !check.ok);
       return Object.freeze({
-        version: 'V184',
+        version: 'V186',
         ok: failed.length === 0,
         checks: Object.freeze(checks.map(check => Object.freeze(check))),
         failures: Object.freeze(failed.map(check => check.name)),
@@ -11332,7 +11378,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V184'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V186'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -11477,5 +11523,5 @@ class WorldScene extends Phaser.Scene {
 })();
 </script>
 <script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
-</body>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
