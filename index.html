@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V187 — MonsterSystem recebe dungeonEntranceTile pela WorldScene; elimina leitura indireta/global, try/catch e fallback duplicado. Base visual/mundo V178 preservada. -->
+<!-- V189 — renderização otimizada para ilustrações anime: filtro linear, sem pixelArt/roundPixels e escala visual dos monstros ampliada. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -39,14 +39,14 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V186</title>
+<title>CONQUISTADOR DE WAIFU'S — V189</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #17251b; }
     body { min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
     #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #1d2416; touch-action: none; }
-    #game-root canvas { display: block; background: #1d2416; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+    #game-root canvas { display: block; background: #1d2416; image-rendering: auto; touch-action: none; }
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
@@ -58,7 +58,7 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V186</div>
+  <div id="version-badge">V189</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
@@ -1028,14 +1028,26 @@
         if (!this.scene || !this.scene.add || !this.scene.events) {
           throw new TypeError('MonsterSystem exige uma cena Phaser ativa.');
         }
-        const entranceTile = options.dungeonEntranceTile;
-        if (!entranceTile || !Number.isInteger(entranceTile.x) || !Number.isInteger(entranceTile.y)) {
-          throw new TypeError('MonsterSystem exige dungeonEntranceTile válido, fornecido pela WorldScene.');
+        if (!Array.isArray(options.exclusionZones)) {
+          throw new TypeError('MonsterSystem exige exclusionZones como lista fornecida pela WorldScene.');
         }
-        // Dependência explícita e imutável: o sistema não conhece o config da cena.
+        const exclusionZoneIds = new Set();
+        const exclusionZones = options.exclusionZones.map((zone, index) => {
+          if (!zone || typeof zone.id !== 'string' || !zone.id.trim() || exclusionZoneIds.has(zone.id) ||
+              !Number.isInteger(zone.x) || !Number.isInteger(zone.y) ||
+              !Number.isInteger(zone.radius) || zone.radius < 0) {
+            throw new TypeError(`Zona de exclusão inválida no índice ${index}. Esperado { id, x, y, radius } com raio inteiro não negativo.`);
+          }
+          exclusionZoneIds.add(zone.id);
+          // O raio usa distância Chebyshev (quadrada), preservando a margem
+          // de quatro tiles que já protegia a entrada no V187.
+          return Object.freeze({ id: zone.id, x: zone.x, y: zone.y, radius: zone.radius });
+        });
+        // Configuração imutável e genérica: MonsterSystem recebe apenas zonas,
+        // sem conhecer dungeons, portais ou qualquer config de cena.
         this.options = Object.freeze({
           ...options,
-          dungeonEntranceTile: Object.freeze({ x: entranceTile.x, y: entranceTile.y })
+          exclusionZones: Object.freeze(exclusionZones)
         });
         this.data = api.data;
         this.events = api.events;
@@ -1205,7 +1217,13 @@
             clearTimeout(timer);
             image.onload = image.onerror = null;
             if (ok && this.active && !this.scene.textures.exists(key)) {
-              try { this.scene.textures.addImage(key, image); } catch (_) { ok = false; }
+              try {
+                this.scene.textures.addImage(key, image);
+                const texture = this.scene.textures.get(key);
+                if (texture && typeof texture.setFilter === 'function') {
+                  texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+                }
+              } catch (_) { ok = false; }
             }
             resolve(!!ok && this.scene.textures.exists(key));
           };
@@ -1233,6 +1251,10 @@
         })).then(() => {
           if (!this.active) return;
           this.texturesReady = true;
+          // Aplica filtragem linear também a texturas já existentes no cache.
+          for (const key of Object.values(versionedKeys)) {
+            if (this.scene.textures.exists(key)) this.scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
+          }
           const available = Array.from(this.availableMonsterTypes);
           root.CONQUISTADOR_MONSTER_ASSET_STATUS = Object.freeze({
             ready: available.length === entries.length,
@@ -1458,10 +1480,8 @@
         let endY = Math.min(startY + this.chunkGrid.chunkSize, this.chunkGrid.height);
         const playerTile = this.world.getPlayerBodyTile();
         const candidates = [];
-        const rejected = { unwalkable:0, bridge:0, river:0, dungeonSafety:0, region:0, playerProximity:0, occupied:0 };
-        // A entrada é injetada pela WorldScene no construtor; fonte única,
-        // sem dependência de escopo externo nem fallback duplicado.
-        const dungeonEntrance = this.options.dungeonEntranceTile;
+        const rejected = { unwalkable:0, bridge:0, river:0, exclusionZone:0, region:0, playerProximity:0, occupied:0 };
+        const exclusionZones = this.options.exclusionZones;
 
         // Keep a one-tile margin inside chunk/world borders; the player-footprint
         // walkability API remains authoritative for every candidate.
@@ -1471,10 +1491,13 @@
             // V132 — respawn por regiao: nasce em floresta, transicao,
             // montanha e gelo. Cada chunk povoa com a regiao dos proprios
             // tiles, em vez de so a floresta povoar o mundo inteiro.
-            // Nunca nasce no rio, na ponte, nem no raio de segurança da entrada da dungeon.
+            // Zonas de exclusão são genéricas: podem proteger portais, vilas,
+            // NPCs, eventos ou qualquer região definida pela WorldScene.
             if (this.world.isBridgeCell && this.world.isBridgeCell(x, y)) { rejected.bridge++; continue; }
             if (this.world.isRiverCell && this.world.isRiverCell(x, y)) { rejected.river++; continue; }
-            if (Math.max(Math.abs(x - dungeonEntrance.x), Math.abs(y - dungeonEntrance.y)) <= 4) { rejected.dungeonSafety++; continue; }
+            if (exclusionZones.some(zone =>
+              Math.max(Math.abs(x - zone.x), Math.abs(y - zone.y)) <= zone.radius
+            )) { rejected.exclusionZone++; continue; }
             if (this.world.getRegionAt) {
               const region = this.world.getRegionAt(x, y);
               if (region !== 'forest' && region !== 'transition' && region !== 'mountain' && region !== 'ice') { rejected.region++; continue; }
@@ -1757,8 +1780,9 @@
           energyRegen: definition.energyRegen || 0
         });
 
-        const displayWidth = definition.displayWidth || 30;
-        const displayHeight = definition.displayHeight || 24;
+        const displayWidth = Math.max(1, Math.round((definition.displayWidth || 30) * MONSTER_VISUAL_SCALE));
+        const displayHeight = Math.max(1, Math.round((definition.displayHeight || 24) * MONSTER_VISUAL_SCALE));
+        // Escala visual independente: não altera tile, colisão, alcance nem IA.
         // V140 — POOL: reusa sprite + rótulo + barra em vez de criar 4 novos.
         const _visual = this.acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight);
         const sprite = _visual.sprite;
@@ -6369,6 +6393,9 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.025 }
     });
     
+    // Ilustrações anime precisam ocupar mais pixels de tela do que sprites pixel-art.
+    // A escala afeta somente a representação visual; colisão e tiles permanecem intactos.
+    const MONSTER_VISUAL_SCALE = 1.75;
     const DISPLAY_CONFIG = Object.freeze({
       width: 360,
       height: 640,
@@ -8089,7 +8116,14 @@ class WorldScene extends Phaser.Scene {
           // MonsterSystem owns only its entity, visuals, combat loop and drops.
           this.monsterSystem = new systems.MonsterSystem(this.extensionAPI, {
             scene: this,
-            dungeonEntranceTile: DUNGEON_SCENE_CONFIG.entranceTile,
+            exclusionZones: [
+              {
+                id: 'dungeon-entrance',
+                x: DUNGEON_SCENE_CONFIG.entranceTile.x,
+                y: DUNGEON_SCENE_CONFIG.entranceTile.y,
+                radius: 4
+              }
+            ],
             tileSize: TILE_SIZE,
             chunkGrid: {
               chunkSize: this.chunkGrid.chunkSize,
@@ -10981,8 +11015,12 @@ class WorldScene extends Phaser.Scene {
         width: DISPLAY_CONFIG.width,
         height: DISPLAY_CONFIG.height,
         backgroundColor: DISPLAY_CONFIG.backgroundColor,
-        pixelArt: true,
-        roundPixels: true,
+        // Arte ilustrada/anime: suavização subpixel, sem quantização pixel-art.
+        antialias: true,
+        antialiasGL: true,
+        mipmapFilter: 'LINEAR_MIPMAP_LINEAR',
+        pixelArt: false,
+        roundPixels: false,
         scale: {
           mode: Phaser.Scale.FIT,
           autoCenter: Phaser.Scale.CENTER_BOTH,
