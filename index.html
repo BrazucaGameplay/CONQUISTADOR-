@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V189 — renderização otimizada para ilustrações anime: filtro linear, sem pixelArt/roundPixels e escala visual dos monstros ampliada. -->
+<!-- V190 — escala visual coerente com o protagonista e renderização HiDPI para arte ilustrada/anime. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -1780,8 +1780,9 @@
           energyRegen: definition.energyRegen || 0
         });
 
-        const displayWidth = Math.max(1, Math.round((definition.displayWidth || 30) * MONSTER_VISUAL_SCALE));
-        const displayHeight = Math.max(1, Math.round((definition.displayHeight || 24) * MONSTER_VISUAL_SCALE));
+        const speciesScale = MONSTER_VISUAL_SCALE_BY_ID[monsterId] || 1;
+        const displayWidth = Math.max(1, Math.round((definition.displayWidth || 30) * speciesScale));
+        const displayHeight = Math.max(1, Math.round((definition.displayHeight || 24) * speciesScale));
         // Escala visual independente: não altera tile, colisão, alcance nem IA.
         // V140 — POOL: reusa sprite + rótulo + barra em vez de criar 4 novos.
         const _visual = this.acquireMonsterVisual(monsterId, x, y, level, displayWidth, displayHeight);
@@ -6393,9 +6394,16 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
       [CUSTOM_ASSET_CODES.frozenStump]: { texture: 'asset-frozenstump', rows: 1, scale: 0.025 }
     });
     
-    // Ilustrações anime precisam ocupar mais pixels de tela do que sprites pixel-art.
-    // A escala afeta somente a representação visual; colisão e tiles permanecem intactos.
-    const MONSTER_VISUAL_SCALE = 1.75;
+    // Escala visual V190: o protagonista é a referência do mundo (35,84 px
+    // de altura exibida). Cada espécie recebe uma proporção própria; não há
+    // multiplicador global que faça criaturas pequenas parecerem gigantes.
+    // Estes fatores alteram somente a arte: hitboxes, tiles, velocidade e combate
+    // permanecem independentes. A escala pode ser refinada por espécie.
+    const MONSTER_VISUAL_SCALE_BY_ID = Object.freeze({
+      slime: 1.05, rat: 0.95, monkey: 1.00, snake: 1.10, wolf: 1.10,
+      eagle: 1.00, spider: 1.10, bear: 1.25, goblin: 1.00,
+      cyclops: 1.15, ogre: 1.25
+    });
     const DISPLAY_CONFIG = Object.freeze({
       width: 360,
       height: 640,
@@ -11016,6 +11024,9 @@ class WorldScene extends Phaser.Scene {
         height: DISPLAY_CONFIG.height,
         backgroundColor: DISPLAY_CONFIG.backgroundColor,
         // Arte ilustrada/anime: suavização subpixel, sem quantização pixel-art.
+        // Renderização HiDPI: mantém coordenadas lógicas 360x640 e aumenta
+        // a resolução do framebuffer em telas densas, sem alterar tiles/mundo.
+        resolution: Math.max(1, Math.min(2, Number(window.devicePixelRatio) || 1)),
         antialias: true,
         antialiasGL: true,
         mipmapFilter: 'LINEAR_MIPMAP_LINEAR',
