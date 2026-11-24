@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V190 — escala visual coerente com o protagonista e renderização HiDPI para arte ilustrada/anime. -->
+<!-- V191 — boot resiliente: assets decorativos ausentes não abortam o jogo; diagnóstico explícito de dependências críticas. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -39,7 +39,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V189</title>
+<title>CONQUISTADOR DE WAIFU'S — V191</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -58,12 +58,13 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V189</div>
+  <div id="version-badge">V191</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
-<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script>window.__CONQUISTADOR_PHASER_LOAD_FAILED = false;</script>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" onerror="window.__CONQUISTADOR_PHASER_LOAD_FAILED=true;var l=document.getElementById('loading'),e=document.getElementById('error'),d=document.getElementById('error-detail');if(l)l.style.display='none';if(e)e.style.display='grid';if(d)d.textContent='Não foi possível baixar o Phaser 3.90.0 do CDN. Verifique a conexão ou bloqueio do jsDelivr.';"></script>
 
   <script id="conquistador-data-v141">
   (function (root) { 'use strict';
@@ -6545,7 +6546,7 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     });
 
     if (!window.Phaser || !core) {
-      showError('O motor do jogo não foi carregado. Confira sua conexão e atualize a página.');
+      showError(window.__CONQUISTADOR_PHASER_LOAD_FAILED ? 'O Phaser 3.90.0 não foi baixado do jsDelivr. Verifique a conexão ou tente outra rede.' : (!window.Phaser ? 'A biblioteca Phaser não foi carregada. Verifique o acesso ao CDN jsDelivr.' : 'A camada central do jogo não foi carregada corretamente.'));
       return;
     }
 
@@ -8073,22 +8074,50 @@ class WorldScene extends Phaser.Scene {
         this.load.image('mountain-tile-2', CUSTOM_ASSETS.mountainGround2);
         this.load.image('mountain-tile-3', CUSTOM_ASSETS.mountainGround3);
         this.load.image('asset-ruin', CUSTOM_ASSETS.ruin);
+        this.missingOptionalAssets = new Set();
         this.load.on('loaderror', (file) => {
           const key = file && file.key;
+          // Apenas os dois recursos realmente indispensáveis impedem o boot:
+          // sprite base do herói e mapa-base quando não há mundo em cache.
           if (key && attempts[key] && this.assetAttempt[key] < attempts[key].length - 1) {
             this.assetAttempt[key] += 1;
             queueAsset(key);
             this.load.start();
             return;
           }
-          this.assetLoadFailed = true;
-          showError(`Falha ao carregar ${key || 'recurso'}. Verifique a conexão com os recursos do jogo.`);
+          if (key === 'hero' || key === 'sampleMap') {
+            this.assetLoadFailed = true;
+            showError(`Falha no recurso obrigatório "${key}" após todas as tentativas. Verifique a URL e a disponibilidade do arquivo.`);
+            return;
+          }
+          // Texturas de cenário são complementares. Uma imagem ausente não
+          // deve impedir a criação do mundo inteiro; será criada uma textura
+          // transparente substituta antes de buildWorld().
+          if (key) this.missingOptionalAssets.add(key);
+          console.warn('[Conquistador] Asset opcional indisponível:', key || file?.src || 'desconhecido');
         });
       }
 
       create() {
-        // If any external resource failed, keep its specific diagnostic on screen.
+        // If a critical external resource failed, keep its specific diagnostic on screen.
         if (this.assetLoadFailed) return;
+        // Substitutos transparentes para imagens decorativas ausentes: mantém
+        // o restante do mundo jogável e evita Texture key missing em runtime.
+        if (this.missingOptionalAssets && this.missingOptionalAssets.size) {
+          for (const key of this.missingOptionalAssets) {
+            if (key && !this.textures.exists(key)) {
+              try {
+                const texture = this.textures.createCanvas(key, 2, 2);
+                if (texture && texture.context) {
+                  texture.context.clearRect(0, 0, 2, 2);
+                  texture.refresh();
+                }
+              } catch (error) {
+                console.warn('[Conquistador] Não foi possível criar fallback transparente:', key, error);
+              }
+            }
+          }
+        }
         // V122 — mundo no cache = sem mapa-base. Sem cache = mapa-base obrigatório.
         const cachedWorld = isValidCachedWorld(window.__CONQUISTADOR_CACHED_WORLD) ? window.__CONQUISTADOR_CACHED_WORLD : null;
         const sample = cachedWorld ? null : this.cache.json.get('sampleMap');
@@ -11430,7 +11459,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V186'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V191'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -11574,6 +11603,6 @@ class WorldScene extends Phaser.Scene {
   window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
 })();
 </script>
-<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }</script>
+<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function (error) { console.warn("[Conquistador] Service Worker indisponível; jogo seguirá sem modo offline:", error); }); }); }</script>
 <script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
