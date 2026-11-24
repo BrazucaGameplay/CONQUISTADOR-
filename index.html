@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V186 — causa raiz do spawn: DUNGEON_SCENE_CONFIG é const do bloco da DungeonScene, invisível no escopo do MonsterSystem; getSpawnCandidates lê o config com guarda try/catch + fallback entranceTile {x:100, y:62}, mantendo o raio de segurança da entrada.. Base visual/mundo V178 preservada. -->
+<!-- V187 — MonsterSystem recebe dungeonEntranceTile pela WorldScene; elimina leitura indireta/global, try/catch e fallback duplicado. Base visual/mundo V178 preservada. -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -1028,6 +1028,15 @@
         if (!this.scene || !this.scene.add || !this.scene.events) {
           throw new TypeError('MonsterSystem exige uma cena Phaser ativa.');
         }
+        const entranceTile = options.dungeonEntranceTile;
+        if (!entranceTile || !Number.isInteger(entranceTile.x) || !Number.isInteger(entranceTile.y)) {
+          throw new TypeError('MonsterSystem exige dungeonEntranceTile válido, fornecido pela WorldScene.');
+        }
+        // Dependência explícita e imutável: o sistema não conhece o config da cena.
+        this.options = Object.freeze({
+          ...options,
+          dungeonEntranceTile: Object.freeze({ x: entranceTile.x, y: entranceTile.y })
+        });
         this.data = api.data;
         this.events = api.events;
         this.entities = api.entities;
@@ -1450,16 +1459,9 @@
         const playerTile = this.world.getPlayerBodyTile();
         const candidates = [];
         const rejected = { unwalkable:0, bridge:0, river:0, dungeonSafety:0, region:0, playerProximity:0, occupied:0 };
-        // V186 — DUNGEON_SCENE_CONFIG é const do bloco da DungeonScene e não
-        // existe no escopo do MonsterSystem: a referência pelada lançava
-        // ReferenceError no primeiro chunk e matava o povoamento inteiro.
-        // Guarda com try/catch cobre escopo ausente e TDZ; o fallback é o
-        // valor real do config, então o raio de segurança fica idêntico.
-        let dungeonEntrance = { x: 100, y: 62 };
-        try {
-          const cfg = (typeof DUNGEON_SCENE_CONFIG !== 'undefined') ? DUNGEON_SCENE_CONFIG : null;
-          if (cfg && cfg.entranceTile) dungeonEntrance = cfg.entranceTile;
-        } catch (_) { /* config fora do escopo: usa o fallback */ }
+        // A entrada é injetada pela WorldScene no construtor; fonte única,
+        // sem dependência de escopo externo nem fallback duplicado.
+        const dungeonEntrance = this.options.dungeonEntranceTile;
 
         // Keep a one-tile margin inside chunk/world borders; the player-footprint
         // walkability API remains authoritative for every candidate.
@@ -8087,6 +8089,7 @@ class WorldScene extends Phaser.Scene {
           // MonsterSystem owns only its entity, visuals, combat loop and drops.
           this.monsterSystem = new systems.MonsterSystem(this.extensionAPI, {
             scene: this,
+            dungeonEntranceTile: DUNGEON_SCENE_CONFIG.entranceTile,
             tileSize: TILE_SIZE,
             chunkGrid: {
               chunkSize: this.chunkGrid.chunkSize,
