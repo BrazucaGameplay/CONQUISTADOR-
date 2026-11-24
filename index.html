@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V192 — watchdog pré-CDN: se o download do Phaser travar sem erro, o loading infinito vira painel de erro com TENTAR DE NOVO; create() esconde o painel de erro ao montar o mundo (falso-positivo do watchdog não gruda o erro na tela). -->
+<!-- V194 — obrigatório: 1) erro no meio do jogo mostra aviso visível com ATUALIZAR (antes era silencioso); 2) botão ESTOU PRESO teleporta para ponto andável próximo (mundo) ou tile de chegada (dungeon); 3) Service Worker com tratamento de atualização (banner de nova versão, sem recarregar sozinho no meio do jogo). -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -39,7 +39,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V192</title>
+<title>CONQUISTADOR DE WAIFU'S — V194</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -48,6 +48,12 @@
     #game-root { width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; background: #1d2416; touch-action: none; }
     #game-root canvas { display: block; background: #1d2416; image-rendering: auto; touch-action: none; }
     #loading, #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 28px; text-align: center; background: #17251b; color: #e6e3c8; font: 15px/1.5 system-ui, sans-serif; z-index: 5; }
+    #loading-refresh { margin-top: 16px; padding: 10px 20px; border: 1px solid #e6e3c8; border-radius: 8px; background: transparent; color: #e6e3c8; font: inherit; font-weight: 700; cursor: pointer; }
+    #ingame-error, #update-banner { position: fixed; left: 12px; display: none; align-items: center; gap: 10px; max-width: calc(100vw - 24px); padding: 10px 12px; border-radius: 10px; font: bold 12px/1.4 system-ui, sans-serif; z-index: 60; }
+    #ingame-error { bottom: 64px; background: #4a1d1d; border: 1px solid #e66; color: #ffd9d9; }
+    #update-banner { bottom: 128px; background: #1d3a24; border: 1px solid #7dd87d; color: #d9ffd9; }
+    #ingame-error button, #update-banner button { flex: none; padding: 8px 14px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    #unstuck-btn { position: fixed; left: 12px; bottom: 12px; display: none; padding: 9px 14px; border: 1px solid rgba(230,227,200,.55); border-radius: 999px; background: rgba(0,0,0,.45); color: #e6e3c8; font: bold 11px/1.4 system-ui, sans-serif; letter-spacing: .04em; cursor: pointer; z-index: 40; opacity: .8; }
     #error { display: none; color: #ffe1d6; }
     #error strong { display: block; margin-bottom: 8px; }
     #error button { margin-top: 16px; min-height: 44px; padding: 10px 24px; border: 1px solid #b99a64; border-radius: 999px; background: linear-gradient(180deg,#493727,#17110e); color: #f4dfaa; font: bold 13px Georgia,serif; cursor: pointer; }
@@ -57,36 +63,96 @@
 <body>
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
-<div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V192</div>
+<div id="loading">Carregando o mundo…<button id="loading-refresh" type="button" onclick="window.location.reload()">↻ ATUALIZAR</button></div>
+  <div id="version-badge">V193</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
-<script>
-      window.__CONQUISTADOR_PHASER_LOAD_FAILED = false;
-      // V192 — watchdog pré-CDN: a tag do Phaser abaixo é um script
-      // bloqueante SEM timeout. Se a conexão com o jsDelivr emperrar
-      // (nem carrega, nem falha), o navegador para nela: o handler de
-      // erro, o watchdog de 45s e o boot nunca executam, e a tela fica
-      // em "Carregando o mundo…" para sempre. Este timer é agendado
-      // ANTES da tag bloqueante, então dispara mesmo com o CDN travado
-      // (download pendente não bloqueia o event loop).
-      // Se o Phaser chegar depois dos 30s, o create() esconde o painel
-      // de erro ao montar o mundo — falso-positivo não gruda na tela.
-      setTimeout(function () {
-        if (window.Phaser) return;
-        var l = document.getElementById('loading');
-        var e = document.getElementById('error');
-        var d = document.getElementById('error-detail');
-        if (!l || l.style.display === 'none') return;
-        window.__CONQUISTADOR_PHASER_LOAD_FAILED = true;
-        l.style.display = 'none';
-        if (e) e.style.display = 'grid';
-        if (d) d.textContent = 'O download do Phaser 3.90.0 travou: o CDN não respondeu em 30s. Verifique a conexão ou tente outra rede e toque em TENTAR DE NOVO.';
-      }, 30000);
+<div id="ingame-error"><span id="ingame-error-text">Algo deu errado no jogo.</span><button id="ingame-error-retry" type="button" onclick="window.location.reload()">ATUALIZAR</button></div>
+    <div id="update-banner"><span>Nova versão disponível.</span><button id="update-banner-btn" type="button" onclick="window.location.reload()">ATUALIZAR</button></div>
+    <button id="unstuck-btn" type="button" onclick="if(window.__CONQUISTADOR_UNSTUCK)window.__CONQUISTADOR_UNSTUCK()">⚠ ESTOU PRESO</button>
+    <script>
+      // V193 — SUPERVISOR DO BOOT: o único dono da tela de loading/erro.
+      // Substitui os remendos espalhados (watchdog de 45s da V133, onerror
+      // manual da V191, watchdog pré-CDN da V192): uma única máquina de
+      // estados, um único watchdog, um único botão de atualizar.
+      // Roda ANTES da tag bloqueante do Phaser, então sobrevive a CDN travado.
+      // O botão ATUALIZAR tem onclick inline no HTML: funciona mesmo que
+      // este script falhe, e funciona com o CDN travado, porque a trava
+      // é só no download do script — o loop de eventos continua livre.
+      (function () {
+        var state = 'loading';
+        var loadingEl = document.getElementById('loading');
+        var errorEl = document.getElementById('error');
+        var errorDetailEl = document.getElementById('error-detail');
+        function showErrorPanel(message) {
+          if (loadingEl) loadingEl.style.display = 'none';
+          if (errorEl) errorEl.style.display = 'grid';
+          if (errorDetailEl && message) errorDetailEl.textContent = message;
+        }
+        function hideAll() {
+          if (loadingEl) loadingEl.style.display = 'none';
+          if (errorEl) errorEl.style.display = 'none';
+        }
+        function refresh() { window.location.reload(); }
+        var refreshBtn = document.getElementById('loading-refresh');
+        if (refreshBtn) refreshBtn.onclick = refresh;
+        var retryBtn = document.getElementById('error-retry');
+        if (retryBtn) retryBtn.onclick = refresh;
+        var inGameErrorEl = document.getElementById('ingame-error');
+        var inGameErrorTextEl = document.getElementById('ingame-error-text');
+        var updateBannerEl = document.getElementById('update-banner');
+        var unstuckBtnEl = document.getElementById('unstuck-btn');
+        var updateBtnEl = document.getElementById('update-banner-btn');
+        var inGameRetryBtnEl = document.getElementById('ingame-error-retry');
+        if (inGameRetryBtnEl) inGameRetryBtnEl.onclick = refresh;
+        if (updateBtnEl) updateBtnEl.onclick = refresh;
+        if (unstuckBtnEl) unstuckBtnEl.onclick = function () {
+          try { if (typeof window.__CONQUISTADOR_UNSTUCK === 'function') window.__CONQUISTADOR_UNSTUCK(); } catch (_) {}
+        };
+        window.__CONQUISTADOR_PHASER_LOAD_FAILED = false;
+        window.__BOOT = {
+          // Jogo montado: esconde tudo, inclusive erro de falso-positivo.
+          ready: function () { if (state === 'ready') return; state = 'ready'; hideAll(); if (unstuckBtnEl) unstuckBtnEl.style.display = 'block'; },
+          // Qualquer falha de boot cai aqui: um único caminho para o erro.
+          fail: function (message) {
+            if (state === 'ready') return;
+            state = 'error';
+            window.__CONQUISTADOR_PHASER_LOAD_FAILED = true;
+            showErrorPanel(message || 'Falha ao iniciar o jogo. Toque em TENTAR DE NOVO.');
+          },
+          // V194 — erro no MEIO do jogo: antes, o handler global só mostrava
+          // erro durante o loading; depois do jogo montado, o erro era
+          // silencioso. Agora mostra um aviso visível com ATUALIZAR.
+          failInGame: function (message) {
+            if (inGameErrorEl) {
+              if (inGameErrorTextEl && message) inGameErrorTextEl.textContent = message;
+              inGameErrorEl.style.display = 'flex';
+            }
+            if (unstuckBtnEl) unstuckBtnEl.style.display = 'none';
+          },
+          // V194 — nova versão pronta no Service Worker: avisa sem recarregar
+          // sozinho no meio do jogo; o jogador escolhe quando atualizar.
+          notifyUpdate: function () {
+            if (updateBannerEl) updateBannerEl.style.display = 'flex';
+          },
+          getState: function () { return state; }
+        };
+        // Único watchdog: se em 30s o jogo não chamou ready(), vira erro
+        // com botão de atualizar — vale para CDN travado, loader travado,
+        // boot travado: qualquer trava assíncrona cai aqui.
+        setTimeout(function () {
+          if (state !== 'loading') return;
+          if (window.Phaser) {
+            window.__BOOT.fail('O jogo travou depois de baixar o motor (30s sem montar o mundo). Toque em TENTAR DE NOVO.');
+          } else {
+            window.__BOOT.fail('O download do Phaser 3.90.0 travou: o CDN não respondeu em 30s. Verifique a conexão ou tente outra rede e toque em TENTAR DE NOVO.');
+          }
+        }, 30000);
+      })();
     </script>
-<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" onerror="window.__CONQUISTADOR_PHASER_LOAD_FAILED=true;var l=document.getElementById('loading'),e=document.getElementById('error'),d=document.getElementById('error-detail');if(l)l.style.display='none';if(e)e.style.display='grid';if(d)d.textContent='Não foi possível baixar o Phaser 3.90.0 do CDN. Verifique a conexão ou bloqueio do jsDelivr.';"></script>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" onerror="if(window.__BOOT)window.__BOOT.fail('Não foi possível baixar o Phaser 3.90.0 do CDN. Verifique a conexão ou bloqueio do jsDelivr.')"></script>
 
   <script id="conquistador-data-v141">
   (function (root) { 'use strict';
@@ -6550,6 +6616,8 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     const errorDetail = document.getElementById('error-detail');
 
     function showError(message) {
+      // V193 — showError é só um atalho: o supervisor é o único dono da tela de erro.
+      if (window.__BOOT) { window.__BOOT.fail(message); return; }
       loading.style.display = 'none';
       errorPanel.style.display = 'grid';
       if (message) errorDetail.textContent = message;
@@ -6561,10 +6629,12 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
     window.addEventListener('error', (event) => {
       console.error('Erro global do CONQUISTADOR:', event.error || event.message);
       if (loading.style.display !== 'none') showError(event.message || 'Erro inesperado no navegador.');
+      else if (window.__BOOT) window.__BOOT.failInGame(event.message || 'Erro inesperado no jogo. Toque em ATUALIZAR.');
     });
     window.addEventListener('unhandledrejection', (event) => {
       console.error('Falha assíncrona do CONQUISTADOR:', event.reason);
       if (loading.style.display !== 'none') showError('Falha ao iniciar o jogo. Recarregue a página e tente novamente.');
+      else if (window.__BOOT) window.__BOOT.failInGame('Falha no jogo. Toque em ATUALIZAR para recarregar.');
     });
 
     if (!window.Phaser || !core) {
@@ -7078,7 +7148,18 @@ window.CONQUISTADOR_BOSS_SPRITE = "assets/Boss/sprite.png";
         return null;
       }
 
-      buildPlayer() {
+            // V194 — botão ESTOU PRESO na dungeon: volta para o tile de chegada.
+      unstuckPlayer() {
+        if (!this.player || !this.player.active || this.exiting) return false;
+        const spawn = this.tileToWorld(DUNGEON_SCENE_CONFIG.arrivalTile);
+        this.path = [];
+        this.player.setPosition(spawn.x, spawn.y);
+        try { if (this.player.body) this.player.body.setVelocity(0, 0); } catch (_) {}
+        try { if (this.cameras && this.cameras.main) this.cameras.main.centerOn(spawn.x, spawn.y); } catch (_) {}
+        return true;
+      }
+
+buildPlayer() {
         const spawn = this.tileToWorld(DUNGEON_SCENE_CONFIG.arrivalTile);
         this.player = this.physics.add.sprite(spawn.x, spawn.y, 'hero', 0);
         this.textures.get('hero').setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -8158,6 +8239,18 @@ class WorldScene extends Phaser.Scene {
           this.buildWorld(cachedWorld ? null : sample.layers, cachedWorld);
           this.createPlayerAnimations();
           this.createPlayer();
+          // V194 — botão ESTOU PRESO: registra o desencalhar global.
+          // Se a dungeon estiver ativa, o desencalhar é dela (volta para
+          // o tile de chegada); senão, é do mundo aberto.
+          window.__CONQUISTADOR_UNSTUCK = () => {
+            try {
+              if (this.scene.isActive('DungeonScene')) {
+                const dungeon = this.scene.get('DungeonScene');
+                if (dungeon && typeof dungeon.unstuckPlayer === 'function' && dungeon.unstuckPlayer()) return true;
+              }
+            } catch (_) {}
+            return this.unstuckPlayer();
+          };
           this.createDungeonEntrance();
           this.setupCamera();
           this.input.mouse.disableContextMenu();
@@ -9509,10 +9602,8 @@ class WorldScene extends Phaser.Scene {
             this.houseSystem = null;
           });
           loading.style.display = 'none';
-          // V192 — o watchdog pré-CDN pode ter mostrado o painel de erro
-          // se o Phaser demorou mais de 30s; com o mundo montado, o erro
-          // não vale mais e não pode ficar grudado sobre o jogo.
-          try { if (typeof errorPanel !== 'undefined' && errorPanel) errorPanel.style.display = 'none'; } catch (_) {}
+          // V193 — mundo montado: avisa o supervisor, que esconde loading e erro.
+          try { if (window.__BOOT) window.__BOOT.ready(); } catch (_) {}
         } catch (error) {
           console.error('Falha ao montar o mundo do CONQUISTADOR:', error);
           showError(error && error.message ? `Erro ao montar o mundo: ${error.message}` : 'Erro inesperado ao montar o mundo.');
@@ -10390,7 +10481,29 @@ class WorldScene extends Phaser.Scene {
       }
 
       // ===== SISTEMA DO JOGADOR E ANIMAÇÕES =====
-      createPlayer() {
+            // V194 — botão ESTOU PRESO: teleporta para o ponto andável mais
+      // próximo (raio 6), ou para o spawn seguro do mundo. Sem isso, um
+      // entalo entre objetos virava softlock: recarregar voltava para a
+      // mesma posição salva. Limpa o caminho para o jogador não voltar
+      // andando para o ponto onde travou.
+      unstuckPlayer() {
+        if (!this.player || !this.player.active) return false;
+        const tile = (typeof this.getPlayerBodyTile === 'function') ? this.getPlayerBodyTile() : null;
+        let target = null;
+        try { target = tile ? this.getSafeSpawnPosition(tile, 6) : null; } catch (_) { target = null; }
+        if (!target) {
+          try { target = this.getSafeSpawnPosition(); } catch (_) { target = null; }
+        }
+        if (!target) return false;
+        if (typeof this.clearPlayerPath === 'function') this.clearPlayerPath();
+        else { this.path = []; this.currentDestinationKey = null; this.manualDestinationActive = false; }
+        this.player.setPosition(target.x, target.y);
+        try { if (this.player.body) this.player.body.setVelocity(0, 0); } catch (_) {}
+        try { if (this.cameras && this.cameras.main) this.cameras.main.centerOn(target.x, target.y); } catch (_) {}
+        return true;
+      }
+
+createPlayer() {
         const spawn = this.initialPlayerPosition || this.getSafeSpawnPosition();
         if (spawn && spawn.degraded === true) this.spawnCollisionDegraded = true;
         const x = spawn.x;
@@ -11139,14 +11252,7 @@ class WorldScene extends Phaser.Scene {
       // V122 — lê o mundo em cache antes de criar o jogo (best-effort, com
       // timeout: se falhar, o jogo gera o mundo normalmente).
       window.__CONQUISTADOR_CACHED_WORLD = await readWorldCache(WORLD_CONFIG.renderCacheKey);
-      // V133 — watchdog do loading: se em 45s o jogo ainda não montou o
-      // mundo (rede travada, Phaser preso), mostra o painel de erro com
-      // o botão TENTAR DE NOVO em vez de deixar o loading infinito.
-      setTimeout(() => {
-        if (loading && loading.style.display !== 'none') {
-          showError('O carregamento demorou demais. Sua conexão pode estar lenta — toque em TENTAR DE NOVO.');
-        }
-      }, 45000);
+      // V193 — sem watchdog local: o supervisor do boot (antes da tag do Phaser) é o único watchdog (30s).
       // V133 — pré-busca do mapa-base (ver fetchJsonWithTimeout acima).
       window.__CONQUISTADOR_SAMPLE_MAP = await prefetchSampleMap();
     try {
@@ -11485,7 +11591,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V192'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V194'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
@@ -11629,6 +11735,47 @@ class WorldScene extends Phaser.Scene {
   window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
 })();
 </script>
-<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function (error) { console.warn("[Conquistador] Service Worker indisponível; jogo seguirá sem modo offline:", error); }); }); }</script>
+<script>
+      // V194 — Service Worker com tratamento de atualização: antes, o index
+      // só registrava o sw.js e nunca tratava versão nova — o navegador
+      // podia servir a versão velha em cache sem avisar.
+      // SW novo instalado + página já controlada = banner de aviso, sem
+      // recarregar sozinho no meio do jogo. Sem controlador ainda
+      // (primeiro carregamento) = recarrega para assumir a versão nova.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          var reloadedForUpdate = false;
+          function reloadForUpdate() {
+            if (reloadedForUpdate) return;
+            reloadedForUpdate = true;
+            window.location.reload();
+          }
+          navigator.serviceWorker.addEventListener("controllerchange", function () {
+            if (window.__BOOT && window.__BOOT.getState && window.__BOOT.getState() !== "loading") {
+              window.__BOOT.notifyUpdate();
+            } else {
+              reloadForUpdate();
+            }
+          });
+          navigator.serviceWorker.register("sw.js").then(function (registration) {
+            function checkUpdate() { try { var p = registration.update(); if (p && p.catch) p.catch(function () {}); } catch (_) {} }
+            if (registration.addEventListener) {
+              registration.addEventListener("updatefound", function () {
+                var newWorker = registration.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener("statechange", function () {
+                  if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                    // Pede para o SW novo assumir (se o sw.js escuta SKIP_WAITING;
+                    // se não escutar, ele assume quando as abas fecharem).
+                    try { newWorker.postMessage({ type: "SKIP_WAITING" }); } catch (_) {}
+                  }
+                });
+              });
+            }
+            document.addEventListener("visibilitychange", function () { if (!document.hidden) checkUpdate(); });
+          }).catch(function (error) { console.warn("[Conquistador] Service Worker indisponível; jogo seguirá sem modo offline:", error); });
+        });
+      }
+    </script>
 <script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
