@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- V191 — boot resiliente: assets decorativos ausentes não abortam o jogo; diagnóstico explícito de dependências críticas. -->
+<!-- V192 — watchdog pré-CDN: se o download do Phaser travar sem erro, o loading infinito vira painel de erro com TENTAR DE NOVO; create() esconde o painel de erro ao montar o mundo (falso-positivo do watchdog não gruda o erro na tela). -->
 <!-- V163 — Filas de respawn validadas por chunk/espécie e reconciliadas com limites de população. -->
 <!-- V162 — Restauração de monstros valida tile salvo contra os pontos de spawn seguros do chunk. -->
 <!-- V161 — Checkpoint seguro ao retomar WorldScene após dungeon, além do checkpoint de entrada. -->
@@ -39,7 +39,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" name="viewport"/>
 <meta content="#17251b" name="theme-color"/>
-<title>CONQUISTADOR DE WAIFU'S — V191</title>
+<title>CONQUISTADOR DE WAIFU'S — V192</title>
 <style>
     :root { color-scheme: dark; background: #17251b; }
     * { box-sizing: border-box; }
@@ -58,12 +58,34 @@
 <script>var root = window;</script>
 <div aria-label="Mundo explorável do CONQUISTADOR" id="game-root"></div>
 <div id="loading">Carregando o mundo…</div>
-  <div id="version-badge">V191</div>
+  <div id="version-badge">V192</div>
   <!-- V144 — sem margem verde (tiles de margem desligados); ponte 3->6 tiles; branca 40%->60%, sem a cor mais escura. -->
   <!-- V144 — gelo: escalas corrigidas (sprites 1600px), branca 40% com escuras raras; rio 3x com margem lisa e estreitamento na dungeon; estrada removida; ponte de madeira. -->
   <!-- V142 — gelo com assets novos: 40% do chão é snow-8 branca (iceGroundGidFor), resto dividido entre snow-4..7 + snow-1..3; objetos novos icePeak2/frozenPine2/cristal/rocha/arbusto/toco com colisão. -->
 <div id="error"><div><strong>Não foi possível carregar o mundo.</strong><span id="error-detail">Verifique a conexão com a internet e recarregue a página.</span><br><button id="error-retry" type="button">🔄 TENTAR DE NOVO</button></div></div>
-<script>window.__CONQUISTADOR_PHASER_LOAD_FAILED = false;</script>
+<script>
+      window.__CONQUISTADOR_PHASER_LOAD_FAILED = false;
+      // V192 — watchdog pré-CDN: a tag do Phaser abaixo é um script
+      // bloqueante SEM timeout. Se a conexão com o jsDelivr emperrar
+      // (nem carrega, nem falha), o navegador para nela: o handler de
+      // erro, o watchdog de 45s e o boot nunca executam, e a tela fica
+      // em "Carregando o mundo…" para sempre. Este timer é agendado
+      // ANTES da tag bloqueante, então dispara mesmo com o CDN travado
+      // (download pendente não bloqueia o event loop).
+      // Se o Phaser chegar depois dos 30s, o create() esconde o painel
+      // de erro ao montar o mundo — falso-positivo não gruda na tela.
+      setTimeout(function () {
+        if (window.Phaser) return;
+        var l = document.getElementById('loading');
+        var e = document.getElementById('error');
+        var d = document.getElementById('error-detail');
+        if (!l || l.style.display === 'none') return;
+        window.__CONQUISTADOR_PHASER_LOAD_FAILED = true;
+        l.style.display = 'none';
+        if (e) e.style.display = 'grid';
+        if (d) d.textContent = 'O download do Phaser 3.90.0 travou: o CDN não respondeu em 30s. Verifique a conexão ou tente outra rede e toque em TENTAR DE NOVO.';
+      }, 30000);
+    </script>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js" onerror="window.__CONQUISTADOR_PHASER_LOAD_FAILED=true;var l=document.getElementById('loading'),e=document.getElementById('error'),d=document.getElementById('error-detail');if(l)l.style.display='none';if(e)e.style.display='grid';if(d)d.textContent='Não foi possível baixar o Phaser 3.90.0 do CDN. Verifique a conexão ou bloqueio do jsDelivr.';"></script>
 
   <script id="conquistador-data-v141">
@@ -9487,6 +9509,10 @@ class WorldScene extends Phaser.Scene {
             this.houseSystem = null;
           });
           loading.style.display = 'none';
+          // V192 — o watchdog pré-CDN pode ter mostrado o painel de erro
+          // se o Phaser demorou mais de 30s; com o mundo montado, o erro
+          // não vale mais e não pode ficar grudado sobre o jogo.
+          try { if (typeof errorPanel !== 'undefined' && errorPanel) errorPanel.style.display = 'none'; } catch (_) {}
         } catch (error) {
           console.error('Falha ao montar o mundo do CONQUISTADOR:', error);
           showError(error && error.message ? `Erro ao montar o mundo: ${error.message}` : 'Erro inesperado ao montar o mundo.');
@@ -11459,7 +11485,7 @@ class WorldScene extends Phaser.Scene {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.CONQUISTADOR_V53_SKILLS=Object.freeze({version:53,refreshPassives,updateLevelScaling,castSkill:cast,cleanup});
 })();</script>
-<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V191'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
+<script id="conquistador-v52-metadata">window.CONQUISTADOR_VERSION = 'V192'; var _vb = document.getElementById('version-badge'); if (_vb) _vb.textContent = window.CONQUISTADOR_VERSION;</script>
 
 <script id="conquistador-v59-runtime-unfreeze">
 (function () {
